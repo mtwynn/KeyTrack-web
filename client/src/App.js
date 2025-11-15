@@ -246,7 +246,7 @@ class App extends React.Component {
           </div>
 
           <Grid container spacing={2}>
-            <Grid item xs={this.state.showPlaylists ? 4 : 12}>
+            <Grid item xs={12} sm={12} md={this.state.showPlaylists ? 4 : 12}>
               <div className='current-song m-div'>
                 <CurrentSong token={this.state.access_token} />
               </div>
@@ -255,6 +255,8 @@ class App extends React.Component {
                   variant='contained'
                   onClick={this.getUserPlaylists}
                   disabled={!this.state.spotify.loggedIn}
+                  fullWidth
+                  style={{ maxWidth: '300px' }}
                 >
                   {this.state.showPlaylists
                     ? 'Close Playlist Library'
@@ -263,14 +265,19 @@ class App extends React.Component {
               </div>
 
               <div className='m-div'>
-                <Button variant='contained' onClick={this.openKeyCalculator}>
+                <Button 
+                  variant='contained' 
+                  onClick={this.openKeyCalculator}
+                  fullWidth
+                  style={{ maxWidth: '300px' }}
+                >
                   Key Calculator
                 </Button>
               </div>
             </Grid>
 
             {this.state.showPlaylists ? (
-              <Grid item xs={8}>
+              <Grid item xs={12} sm={12} md={8}>
                 <FadeIn transitionDuration={1000}>
                   <PLLibrary
                     token={this.state.access_token}

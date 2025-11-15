@@ -135,12 +135,20 @@ const useStyles = makeStyles((theme) => ({
     marginBottom: theme.spacing(1),
     minWidth: 120,
     maxWidth: 300,
+    [theme.breakpoints.down('sm')]: {
+      marginLeft: theme.spacing(1),
+      minWidth: '100%',
+      maxWidth: '100%',
+    },
   },
   minFilter: {
     marginLeft: theme.spacing(5),
     marginBottom: theme.spacing(1),
     minWidth: 20,
     maxWidth: 50,
+    [theme.breakpoints.down('sm')]: {
+      marginLeft: theme.spacing(1),
+    },
   },
   toFilter: {
     marginLeft: theme.spacing(1),
@@ -202,6 +210,8 @@ let Playlist = (props) => {
   const classes = useStyles();
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("xl"));
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isTablet = useMediaQuery(theme.breakpoints.down("md"));
   const allItems = props.playlist;
 
   const [search, setSearch] = React.useState("");
@@ -448,12 +458,26 @@ let Playlist = (props) => {
               </IconButton>
             </FormControl>
           </Toolbar>
-          <Toolbar>
-            <Typography variant="overline" className={classes.title}>
+          <Toolbar 
+            style={{ 
+              flexWrap: 'wrap',
+              padding: theme.spacing(1, 2),
+            }}
+          >
+            <Typography 
+              variant="overline" 
+              className={classes.title}
+              style={{ width: '100%', marginBottom: theme.spacing(1) }}
+            >
               Filters
             </Typography>
 
-            <div>
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: theme.spacing(1),
+              width: '100%'
+            }}>
               <FormControl className={classes.filter}>
                 <InputLabel id="demo-simple-select-label">Wheel</InputLabel>
                 <Select
@@ -605,18 +629,18 @@ let Playlist = (props) => {
           </Toolbar>
         </AppBar>
 
-        <div style={{ paddingBottom: "63px" }}>
+        <div style={{ paddingBottom: "63px", overflowX: isMobile ? "auto" : "visible" }}>
           <Table>
             <TableHead ref={topRef}>
               <TableRow>
-                <StyledTableCell></StyledTableCell>
-                <StyledTableCell>Cover Art</StyledTableCell>
+                {!isMobile && <StyledTableCell></StyledTableCell>}
+                {!isMobile && <StyledTableCell>Cover Art</StyledTableCell>}
                 <StyledTableCell>Track</StyledTableCell>
-                <StyledTableCell>Artist</StyledTableCell>
+                {!isMobile && <StyledTableCell>Artist</StyledTableCell>}
                 <StyledTableCell>Musical Key</StyledTableCell>
-                <StyledTableCell>Quality</StyledTableCell>
-                <StyledTableCell>Camelot Key</StyledTableCell>
-                <StyledTableCell>Open Key</StyledTableCell>
+                {!isMobile && <StyledTableCell>Quality</StyledTableCell>}
+                {!isTablet && <StyledTableCell>Camelot Key</StyledTableCell>}
+                {!isTablet && <StyledTableCell>Open Key</StyledTableCell>}
                 <StyledTableCell>BPM</StyledTableCell>
               </TableRow>
             </TableHead>
@@ -640,7 +664,17 @@ let Playlist = (props) => {
                   return aBPM - bBPM;
                 })
                 .map((item) => (
-                  <Row item={item} userId={props.userId} key={item.track.id} db={db} chordProgressions={chordProgressions} handleRowClick={handleRowClick} getKey={getKey} />
+                  <Row 
+                    item={item} 
+                    userId={props.userId} 
+                    key={item.track.id} 
+                    db={db} 
+                    chordProgressions={chordProgressions} 
+                    handleRowClick={handleRowClick} 
+                    getKey={getKey}
+                    isMobile={isMobile}
+                    isTablet={isTablet}
+                  />
                 ))}
             </TableBody>
           </Table>
@@ -662,7 +696,9 @@ let Playlist = (props) => {
               backgroundColor: "#1ED760",
               color: "#FFF",
               borderRadius: "0",
-              width: "100vw",
+              width: "100%",
+              minHeight: isMobile ? "56px" : "48px",
+              fontSize: isMobile ? "1rem" : "0.875rem",
             }}
             onClick={() => {
               topRef.current.scrollIntoView({
