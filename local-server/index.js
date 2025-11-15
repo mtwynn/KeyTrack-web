@@ -55,7 +55,7 @@ app.get('/spotify/login', function (req, res) {
 
   // your application requests authorization
   const scope =
-    'user-read-private user-read-email user-library-read user-read-playback-state playlist-read-private playlist-read-collaborative streaming';
+    'user-read-private user-read-email user-library-read user-read-playback-state playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private streaming';
 
   console.log(spotify_client_id)
   res.redirect(

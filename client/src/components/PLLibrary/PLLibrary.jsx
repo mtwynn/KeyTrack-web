@@ -88,11 +88,39 @@ let PLLibrary = (props) => {
   const [currPlaylist, setCurrPlaylist] = React.useState(null);
   const [playlistKeys, setPlaylistKeys] = React.useState(null);
   const [playlistName, setPlaylistName] = React.useState("");
+  const [playlistId, setPlaylistId] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [searchItems, setSearchItems] = React.useState(props.pllibrary);
 
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
+
+  // Add tracks to current playlist state without refetching
+  const addTracksToPlaylistState = (tracks, audioFeatures = []) => {
+    if (!currPlaylist) return;
+    
+    // Convert tracks to playlist item format if needed
+    const newItems = tracks.map(track => {
+      // If track is already in playlist format, use it; otherwise wrap it
+      if (track.track) {
+        return track;
+      }
+      return {
+        added_at: new Date().toISOString(),
+        track: track
+      };
+    });
+    
+    setCurrPlaylist([...currPlaylist, ...newItems]);
+    
+    // Add audio features to playlistKeys if provided
+    if (audioFeatures.length > 0 && playlistKeys) {
+      setPlaylistKeys([...playlistKeys, ...audioFeatures]);
+      console.log(`Added ${newItems.length} track(s) with metadata to playlist state`);
+    } else {
+      console.log(`Added ${newItems.length} track(s) to playlist state (no metadata)`);
+    }
+  };
 
   useEffect(() => {
     if (search === "") {
@@ -139,6 +167,7 @@ let PLLibrary = (props) => {
     setLoadingPlaylist(true);
 
     setPlaylistName(playlist.name);
+    setPlaylistId(playlist.id);
 
     for (var i = 0; i < numRequests; ++i) {
       playlistPromises.push(
@@ -272,11 +301,13 @@ let PLLibrary = (props) => {
           handlePlaylistOpen={handlePlaylistOpen}
           handlePlaylistClose={handlePlaylistClose}
           playlistName={playlistName}
+          playlistId={playlistId}
           playlist={currPlaylist}
           playlistKeys={playlistKeys}
           token={props.token}
           userId={props.userId}
           updatePlayer={props.updatePlayer}
+          addTracksToPlaylistState={addTracksToPlaylistState}
         />
       ) : null}
     </>
