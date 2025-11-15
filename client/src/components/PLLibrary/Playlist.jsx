@@ -23,10 +23,11 @@ import {
   IconButton,
   Typography,
   Select,
+  Collapse,
 } from "@material-ui/core";
 
 import { useTheme } from "@material-ui/core/styles";
-import { ArrowUpward, Close, Search, Delete } from "@material-ui/icons";
+import { ArrowUpward, Close, Search, Delete, FilterList, ExpandMore, ExpandLess } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 
 import { initializeApp } from "firebase/app";
@@ -136,9 +137,17 @@ const useStyles = makeStyles((theme) => ({
     minWidth: 120,
     maxWidth: 300,
     [theme.breakpoints.down('sm')]: {
-      marginLeft: theme.spacing(1),
+      marginLeft: 0,
+      marginBottom: theme.spacing(0.5),
       minWidth: '100%',
       maxWidth: '100%',
+      fontSize: '0.875rem',
+      '& .MuiInputLabel-root': {
+        fontSize: '0.75rem',
+      },
+      '& .MuiSelect-root': {
+        fontSize: '0.875rem',
+      },
     },
   },
   minFilter: {
@@ -147,7 +156,16 @@ const useStyles = makeStyles((theme) => ({
     minWidth: 20,
     maxWidth: 50,
     [theme.breakpoints.down('sm')]: {
-      marginLeft: theme.spacing(1),
+      marginLeft: theme.spacing(0.5),
+      marginBottom: theme.spacing(0.5),
+      minWidth: 60,
+      maxWidth: 60,
+      '& .MuiInputLabel-root': {
+        fontSize: '0.75rem',
+      },
+      '& .MuiInput-root': {
+        fontSize: '0.875rem',
+      },
     },
   },
   toFilter: {
@@ -155,12 +173,31 @@ const useStyles = makeStyles((theme) => ({
     marginBottom: theme.spacing(1),
     minWidth: 20,
     maxWidth: 20,
+    [theme.breakpoints.down('sm')]: {
+      marginLeft: theme.spacing(0.5),
+      marginBottom: theme.spacing(0.5),
+      '& .MuiInputLabel-root': {
+        fontSize: '0.75rem',
+      },
+    },
   },
   maxFilter: {
     marginLeft: theme.spacing(1),
     marginBottom: theme.spacing(1),
     minWidth: 20,
     maxWidth: 50,
+    [theme.breakpoints.down('sm')]: {
+      marginLeft: theme.spacing(0.5),
+      marginBottom: theme.spacing(0.5),
+      minWidth: 60,
+      maxWidth: 60,
+      '& .MuiInputLabel-root': {
+        fontSize: '0.75rem',
+      },
+      '& .MuiInput-root': {
+        fontSize: '0.875rem',
+      },
+    },
   },
   chips: {
     display: "flex",
@@ -168,6 +205,13 @@ const useStyles = makeStyles((theme) => ({
   },
   chip: {
     margin: 2,
+    [theme.breakpoints.down('sm')]: {
+      height: 24,
+      fontSize: '0.75rem',
+      '& .MuiChip-label': {
+        padding: '0 8px',
+      },
+    },
   },
   noLabel: {
     marginTop: theme.spacing(3),
@@ -220,6 +264,7 @@ let Playlist = (props) => {
   const [keyFilter, setKeyFilter] = React.useState([]);
   const [minBpm, setMinBpm] = React.useState("");
   const [maxBpm, setMaxBpm] = React.useState("");
+  const [showFilters, setShowFilters] = React.useState(!isMobile); // Collapsed on mobile by default
   let [searchItems, setSearchItems] = React.useState(allItems);
   let [chordProgressions, setChordProgressions] = React.useState({});
 
@@ -429,55 +474,92 @@ let Playlist = (props) => {
         onClose={props.handlePlaylistClose}
       >
         <AppBar className={classes.appBar}>
-          <Typography variant="h6" className={classes.title}>
-            {props.playlistName}
-          </Typography>
-          <Toolbar>
-            <Input
-              classes={{
-                root: classes.search,
-                focused: classes.inputFocused,
-              }}
-              type={"text"}
-              onChange={handleChange}
-              placeholder="Search"
-              endAdornment={
-                <InputAdornment position="end">
-                  <Search />
-                </InputAdornment>
-              }
-            />
-            <FormControl>
+          <Toolbar style={{ 
+            minHeight: isMobile ? '56px' : '64px',
+            padding: isMobile ? theme.spacing(0, 1) : theme.spacing(0, 2)
+          }}>
+            {isMobile && (
               <IconButton
-                edge="end"
                 color="inherit"
-                onClick={props.handlePlaylistClose}
-                aria-label="close"
+                onClick={() => setShowFilters(!showFilters)}
+                aria-label="toggle filters"
+                edge="start"
               >
-                <Close />
+                {showFilters ? <ExpandLess /> : <FilterList />}
               </IconButton>
-            </FormControl>
-          </Toolbar>
-          <Toolbar 
-            style={{ 
-              flexWrap: 'wrap',
-              padding: theme.spacing(1, 2),
-            }}
-          >
+            )}
             <Typography 
-              variant="overline" 
+              variant={isMobile ? "subtitle1" : "h6"} 
               className={classes.title}
-              style={{ width: '100%', marginBottom: theme.spacing(1) }}
+              style={{ 
+                flex: 1,
+                fontSize: isMobile ? '1rem' : '1.25rem',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
             >
-              Filters
+              {props.playlistName}
             </Typography>
-
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: theme.spacing(1),
-              width: '100%'
+            <IconButton
+              edge="end"
+              color="inherit"
+              onClick={props.handlePlaylistClose}
+              aria-label="close"
+            >
+              <Close />
+            </IconButton>
+          </Toolbar>
+          
+          <Collapse in={showFilters} timeout="auto">
+            <Toolbar style={{ 
+              minHeight: isMobile ? '48px' : '64px',
+              padding: isMobile ? theme.spacing(0.5, 1) : theme.spacing(0, 2)
             }}>
+              <Input
+                classes={{
+                  root: classes.search,
+                  focused: classes.inputFocused,
+                }}
+                type={"text"}
+                onChange={handleChange}
+                placeholder="Search"
+                style={{
+                  fontSize: isMobile ? '0.875rem' : '1rem'
+                }}
+                endAdornment={
+                  <InputAdornment position="end">
+                    <Search style={{ fontSize: isMobile ? '20px' : '24px' }} />
+                  </InputAdornment>
+                }
+              />
+            </Toolbar>
+            <Toolbar 
+              style={{ 
+                flexWrap: 'wrap',
+                padding: isMobile ? theme.spacing(0.5, 1) : theme.spacing(1, 2),
+                minHeight: isMobile ? 'auto' : '64px',
+              }}
+            >
+              <Typography 
+                variant="overline" 
+                className={classes.title}
+                style={{ 
+                  width: '100%', 
+                  marginBottom: isMobile ? theme.spacing(0.5) : theme.spacing(1),
+                  fontSize: isMobile ? '0.7rem' : '0.75rem',
+                  lineHeight: 1
+                }}
+              >
+                Filters
+              </Typography>
+
+              <div style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: isMobile ? theme.spacing(0.5) : theme.spacing(1),
+                width: '100%'
+              }}>
               <FormControl className={classes.filter}>
                 <InputLabel id="demo-simple-select-label">Wheel</InputLabel>
                 <Select
@@ -622,11 +704,13 @@ let Playlist = (props) => {
                 aria-label="delete"
                 className={classes.button}
                 onClick={clearFilters}
+                style={{ fontSize: isMobile ? '0.875rem' : '1rem' }}
               >
-                <Delete />
+                <Delete style={{ fontSize: isMobile ? '20px' : '24px' }} />
               </IconButton>
             </FormControl>
           </Toolbar>
+          </Collapse>
         </AppBar>
 
         <div style={{ paddingBottom: "63px", overflowX: isMobile ? "auto" : "visible" }}>
