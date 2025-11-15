@@ -645,14 +645,16 @@ let Playlist = (props) => {
             </TableBody>
           </Table>
 
-          <Recommendations
-            token={props.token}
-            playlistId={props.playlistId}
-            playlistTracks={allItems}
-            playlistKeys={props.playlistKeys}
-            updatePlayer={props.updatePlayer}
-            addTracksToPlaylistState={props.addTracksToPlaylistState}
-          />
+          {props.userId === props.playlistOwnerId && (
+            <Recommendations
+              token={props.token}
+              playlistId={props.playlistId}
+              playlistTracks={allItems}
+              playlistKeys={props.playlistKeys}
+              updatePlayer={props.updatePlayer}
+              addTracksToPlaylistState={props.addTracksToPlaylistState}
+            />
+          )}
 
           <Fab
             variant="extended"

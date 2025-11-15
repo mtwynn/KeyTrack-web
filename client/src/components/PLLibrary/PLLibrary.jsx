@@ -89,6 +89,7 @@ let PLLibrary = (props) => {
   const [playlistKeys, setPlaylistKeys] = React.useState(null);
   const [playlistName, setPlaylistName] = React.useState("");
   const [playlistId, setPlaylistId] = React.useState("");
+  const [playlistOwnerId, setPlaylistOwnerId] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [searchItems, setSearchItems] = React.useState(props.pllibrary);
 
@@ -168,6 +169,7 @@ let PLLibrary = (props) => {
 
     setPlaylistName(playlist.name);
     setPlaylistId(playlist.id);
+    setPlaylistOwnerId(playlist.owner.id);
 
     for (var i = 0; i < numRequests; ++i) {
       playlistPromises.push(
@@ -302,6 +304,7 @@ let PLLibrary = (props) => {
           handlePlaylistClose={handlePlaylistClose}
           playlistName={playlistName}
           playlistId={playlistId}
+          playlistOwnerId={playlistOwnerId}
           playlist={currPlaylist}
           playlistKeys={playlistKeys}
           token={props.token}
