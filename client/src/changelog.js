@@ -1,5 +1,23 @@
 const changelog = [
   {
+    version: "1.2.0",
+    date: "11/15/25",
+    changes: [
+      {
+        type: "feature",
+        desc: "Added persistent Spotify player at app level - player now remains visible and functional across playlist changes",
+      },
+      {
+        type: "bugfix",
+        desc: "Fixed 'Device not found' error when switching between playlists by moving player to app component level",
+      },
+      {
+        type: "feature",
+        desc: "Upgraded to React 18 and react-scripts 5 for improved performance and modern JavaScript support",
+      },
+    ],
+  },
+  {
     version: "1.1.0",
     date: "10/14/22",
     changes: [
