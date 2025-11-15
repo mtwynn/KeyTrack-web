@@ -27,6 +27,7 @@ import changelog from './changelog.js';
 import CurrentSong from './components/CurrentSong/CurrentSong';
 import PLLibrary from './components/PLLibrary/PLLibrary';
 import KeyCalculator from './utils/KeyCalculator';
+import SpotifyPlayer from 'react-spotify-web-playback';
 
 // Utils
 import { getHashParams } from './utils/utils';
@@ -74,10 +75,15 @@ class App extends React.Component {
       soundcloud: {
         loggedIn: soundcloudParams.access_token ? true : false,
       },
+      player: {
+        uris: [],
+        isPlaying: false,
+      },
     };
 
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
+    this.updatePlayer = this.updatePlayer.bind(this);
 
     if (spotifyParams.access_token) {
       spotifyWebApi.setAccessToken(spotifyParams.access_token);
@@ -155,6 +161,15 @@ class App extends React.Component {
   openKeyCalculator() {
     this.setState({
       showKeyCalculator: !this.state.showKeyCalculator,
+    });
+  }
+
+  updatePlayer(uris, isPlaying) {
+    this.setState({
+      player: {
+        uris: uris,
+        isPlaying: isPlaying,
+      },
     });
   }
 
@@ -261,6 +276,7 @@ class App extends React.Component {
                     token={this.state.access_token}
                     pllibrary={this.state.pllibrary}
                     userId={this.state.user_id}
+                    updatePlayer={this.updatePlayer}
                   />
                 </FadeIn>
               </Grid>
@@ -399,6 +415,24 @@ class App extends React.Component {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Spotify Player - always visible at bottom */}
+        {this.state.spotify.loggedIn && (
+          <div style={{ position: 'fixed', bottom: 0, left: 0, width: '100vw', zIndex: 9999 }}>
+            <SpotifyPlayer
+              token={this.state.access_token}
+              uris={this.state.player.uris}
+              styles={{
+                activeColor: '#1ED760',
+                loaderColor: '#1ED760',
+                sliderColor: '#1ED760',
+              }}
+              play={this.state.player.isPlaying}
+              showSaveIcon={true}
+              magnifySliderOnHover={true}
+            />
+          </div>
+        )}
       </div>
     );
   }

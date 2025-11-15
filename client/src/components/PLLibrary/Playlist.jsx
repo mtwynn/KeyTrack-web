@@ -36,7 +36,6 @@ import KeyboardArrowUpIcon from "@material-ui/icons/KeyboardArrowUp";
 import { useTheme } from "@material-ui/core/styles";
 import { ArrowUpward, Close, Search, Delete } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
-import SpotifyPlayer from "react-spotify-web-playback";
 
 import { initializeApp } from "firebase/app";
 import { firebaseConfig } from "../../../src/config/firebaseConfig";
@@ -217,8 +216,6 @@ let Playlist = (props) => {
   const [minBpm, setMinBpm] = React.useState("");
   const [maxBpm, setMaxBpm] = React.useState("");
   let [searchItems, setSearchItems] = React.useState(allItems);
-  let [uris, setUris] = React.useState([]);
-  let [isPlaying, setIsPlaying] = React.useState(false);
   let [chordProgressions, setChordProgressions] = React.useState({});
 
   let topRef = React.createRef();
@@ -230,9 +227,10 @@ let Playlist = (props) => {
 
   let handleRowClick = (event, item) => {
     let uri = item.track.uri;
-    setUris([uri]);
-
-    setIsPlaying(true);
+    // Call the parent's updatePlayer function
+    if (props.updatePlayer) {
+      props.updatePlayer([uri], true);
+    }
   };
 
   const db = getFirestore();
@@ -916,34 +914,6 @@ let Playlist = (props) => {
           >
             <ArrowUpward />
             Back To Top
-          </Fab>
-        </div>
-
-        <div style={{ position: "fixed", bottom: 0, width: "100vw" }}>
-          <SpotifyPlayer
-            token={spotifyWebApi.getAccessToken()}
-            uris={uris}
-            styles={{
-              activeColor: "#1ED760",
-              loaderColor: "#1ED760",
-              sliderColor: "#1ED760",
-            }}
-            play={isPlaying}
-            showSaveIcon={true}
-            magnifySliderOnHover={true}
-          />
-          <Fab
-            variant="extended"
-            style={{
-              backgroundColor: "#FFF",
-              color: "#333",
-              borderRadius: "0",
-              width: "100vw",
-              height: "15px",
-            }}
-          >
-            The web player is a little buggy. Please try clicking Play again if
-            clicking a track does not play it.
           </Fab>
         </div>
       </Dialog>
