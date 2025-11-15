@@ -107,22 +107,30 @@ When prompted for the **publish directory**, specify:
 
 ### Backend Deployment (Heroku)
 
-The backend server is configured for automatic deployment via Heroku.
+The backend server is configured for **automatic deployment** via Heroku.
 
-#### Auto-Deploy Setup
+#### ⚡ Auto-Deploy (Recommended)
 
-1. Connect your GitHub repository to Heroku
-2. Enable automatic deploys from your main branch
-3. Push updates to GitHub - Heroku will automatically deploy! 🎉
+The backend **automatically deploys** when code is merged to the `master` branch:
+
+1. Make your changes and commit to a feature branch
+2. Create a pull request to merge into `master`
+3. Once merged, **Heroku automatically deploys** the updated backend! 🎉
+
+**No manual deployment needed** - just merge to `master` and Heroku handles the rest.
 
 #### Manual Deploy (if needed)
+
+If you need to deploy manually:
 
 ```bash
 cd local-server
 heroku login
 heroku git:remote -a your-app-name
-git push heroku main
+git push heroku master
 ```
+
+**Note:** The auto-deploy is configured to watch the `master` branch in the connected GitHub repository.
 
 ---
 
