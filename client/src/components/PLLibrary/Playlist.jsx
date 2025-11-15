@@ -575,6 +575,22 @@ let Playlist = (props) => {
                       root: classes.root,
                     },
                   }}
+                  MenuProps={{
+                    anchorOrigin: {
+                      vertical: "bottom",
+                      horizontal: "left"
+                    },
+                    transformOrigin: {
+                      vertical: "top",
+                      horizontal: "left"
+                    },
+                    getContentAnchorEl: null,
+                    PaperProps: {
+                      style: {
+                        maxHeight: isMobile ? 250 : 400,
+                      }
+                    }
+                  }}
                   input={<Input />}
                 >
                   {["Musical", "Camelot", "Open"].map((type) => (
@@ -610,6 +626,22 @@ let Playlist = (props) => {
                       icon: classes.icon,
                       root: classes.root,
                     },
+                  }}
+                  MenuProps={{
+                    anchorOrigin: {
+                      vertical: "bottom",
+                      horizontal: "left"
+                    },
+                    transformOrigin: {
+                      vertical: "top",
+                      horizontal: "left"
+                    },
+                    getContentAnchorEl: null,
+                    PaperProps: {
+                      style: {
+                        maxHeight: isMobile ? 250 : 400,
+                      }
+                    }
                   }}
                   input={<Input />}
                 >
@@ -651,6 +683,22 @@ let Playlist = (props) => {
                         icon: classes.icon,
                         root: classes.root,
                       },
+                    }}
+                    MenuProps={{
+                      anchorOrigin: {
+                        vertical: "bottom",
+                        horizontal: "left"
+                      },
+                      transformOrigin: {
+                        vertical: "top",
+                        horizontal: "left"
+                      },
+                      getContentAnchorEl: null,
+                      PaperProps: {
+                        style: {
+                          maxHeight: isMobile ? 250 : 400,
+                        }
+                      }
                     }}
                     input={<Input />}
                   >
@@ -713,7 +761,11 @@ let Playlist = (props) => {
           </Collapse>
         </AppBar>
 
-        <div style={{ paddingBottom: "63px", overflowX: isMobile ? "auto" : "visible" }}>
+        <div style={{ 
+          paddingBottom: isMobile ? "180px" : "63px", 
+          overflowX: isMobile ? "auto" : "visible",
+          overflowY: "visible"
+        }}>
           <Table>
             <TableHead ref={topRef}>
               <TableRow>
