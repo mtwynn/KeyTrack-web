@@ -9,35 +9,24 @@ import {
   Dialog,
   Input,
   InputAdornment,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Toolbar,
   Paper,
   makeStyles,
-  withStyles,
+  Card,
+  CardContent,
+  Typography,
+  Box,
+  Chip,
+  useMediaQuery,
+  useTheme,
 } from "@material-ui/core";
 
-import { MenuOpen, Search } from "@material-ui/icons";
+import { MenuOpen, Search, MusicNote } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
 import { useEffect } from "react";
-
-const StyledTableCell = withStyles((theme) => ({
-  head: {
-    backgroundColor: "#191414",
-    color: theme.palette.common.white,
-    fontWeight: "bolder",
-  },
-  body: {
-    fontSize: 14,
-  },
-}))(TableCell);
 
 const useStyles = makeStyles((theme) => ({
   appBar: {
@@ -71,22 +60,124 @@ const useStyles = makeStyles((theme) => ({
   colorPrimary: {
     color: "#1ED760",
   },
+  playlistCard: {
+    marginBottom: theme.spacing(2),
+    cursor: "pointer",
+    transition: "all 0.2s ease-in-out",
+    "&:hover": {
+      transform: "translateY(-2px)",
+      boxShadow: theme.shadows[4],
+      backgroundColor: "#f0fff4",
+    },
+    [theme.breakpoints.down('sm')]: {
+      marginBottom: theme.spacing(1),
+    },
+  },
+  cardContent: {
+    display: "flex",
+    alignItems: "center",
+    padding: theme.spacing(2),
+    "&:last-child": {
+      paddingBottom: theme.spacing(2),
+    },
+    [theme.breakpoints.down('sm')]: {
+      padding: theme.spacing(1.5),
+      flexDirection: "column",
+      alignItems: "flex-start",
+    },
+  },
+  albumArt: {
+    width: 80,
+    height: 80,
+    marginRight: theme.spacing(2),
+    [theme.breakpoints.down('sm')]: {
+      width: 60,
+      height: 60,
+      marginRight: 0,
+      marginBottom: theme.spacing(1),
+    },
+  },
+  playlistInfo: {
+    flex: 1,
+    minWidth: 0,
+    [theme.breakpoints.down('sm')]: {
+      width: "100%",
+    },
+  },
+  playlistHeader: {
+    display: "flex",
+    alignItems: "baseline",
+    marginBottom: theme.spacing(0.5),
+    gap: theme.spacing(1.5),
+    [theme.breakpoints.down('sm')]: {
+      flexWrap: "wrap",
+      gap: theme.spacing(0.5),
+    },
+  },
+  playlistTitle: {
+    fontWeight: 600,
+    fontSize: "1.1rem",
+    [theme.breakpoints.down('sm')]: {
+      fontSize: "1rem",
+    },
+  },
+  playlistDescription: {
+    color: theme.palette.text.secondary,
+    fontSize: "0.8rem",
+    marginBottom: theme.spacing(1),
+    textAlign: "left",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+    [theme.breakpoints.down('sm')]: {
+      fontSize: "0.75rem",
+      WebkitLineClamp: 1,
+    },
+  },
+  playlistMeta: {
+    display: "flex",
+    alignItems: "center",
+    gap: theme.spacing(1),
+    [theme.breakpoints.down('sm')]: {
+      flexWrap: "wrap",
+      gap: theme.spacing(0.5),
+    },
+  },
+  ownerText: {
+    fontSize: "0.8rem",
+    color: theme.palette.text.secondary,
+    fontWeight: 400,
+    [theme.breakpoints.down('sm')]: {
+      fontSize: "0.7rem",
+    },
+  },
+  trackChip: {
+    backgroundColor: "#1ED760",
+    color: "#fff",
+    fontWeight: 600,
+    height: 24,
+    [theme.breakpoints.down('sm')]: {
+      height: 20,
+      fontSize: "0.75rem",
+    },
+  },
+  openButton: {
+    marginLeft: theme.spacing(2),
+    color: "#1ED760",
+    [theme.breakpoints.down('sm')]: {
+      marginLeft: 0,
+      alignSelf: "center",
+    },
+  },
 }));
 
-const StyledTableRow = withStyles((theme) => ({
-  root: {
-    "&:nth-of-type(odd)": {
-      backgroundColor: theme.palette.action.hover,
-    },
-    "&:hover": {
-      background: "#bcf6d0",
-    },
-    transition: "background .15s ease-in",
-    cursor: "pointer",
-  },
-}))(TableRow);
-
 let PLLibrary = (props) => {
+  const classes = useStyles();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  
   const [loadingPlaylist, setLoadingPlaylist] = React.useState(false);
   const [showPlaylist, setShowPlaylist] = React.useState(false);
   const [currPlaylist, setCurrPlaylist] = React.useState(null);
@@ -218,7 +309,6 @@ let PLLibrary = (props) => {
   let handlePlaylistClose = () => {
     setShowPlaylist(false);
   };
-  const classes = useStyles();
 
   return (
     <>
@@ -256,50 +346,69 @@ let PLLibrary = (props) => {
         </Toolbar>
       </AppBar>
 
-      <TableContainer component={Paper} className={classes.root}>
-        <Table className={classes.table} aria-label="customized table">
-          <TableHead>
-            <TableRow>
-              <StyledTableCell></StyledTableCell>
-              <StyledTableCell>Cover Art</StyledTableCell>
-              <StyledTableCell>Title</StyledTableCell>
-              <StyledTableCell>Description</StyledTableCell>
-              <StyledTableCell>Owner</StyledTableCell>
-              <StyledTableCell>Number of Tracks</StyledTableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {searchItems.map((playlist) => (
-              <Fragment key={playlist.id}>
-                <StyledTableRow
-                  key={playlist.id}
-                  onClick={() => handlePlaylistOpen(playlist)}
+      <Box sx={{ padding: isMobile ? 1 : 2 }}>
+        {searchItems.map((playlist) => (
+          <Card
+            key={playlist.id}
+            className={classes.playlistCard}
+            onClick={() => handlePlaylistOpen(playlist)}
+          >
+            <CardContent className={classes.cardContent}>
+              {/* Album Art */}
+              <Avatar
+                variant="square"
+                src={playlist.images[0] ? playlist.images[0].url : undefined}
+                className={classes.albumArt}
+              >
+                <MusicNote />
+              </Avatar>
+
+              {/* Playlist Info */}
+              <Box className={classes.playlistInfo}>
+                {/* Title and Owner - Always on same line */}
+                <Box className={classes.playlistHeader}>
+                  <Typography className={classes.playlistTitle}>
+                    {playlist.name}
+                  </Typography>
+                  <Typography className={classes.ownerText}>
+                    by {playlist.owner.display_name}
+                  </Typography>
+                </Box>
+
+                {/* Description */}
+                {playlist.description && (
+                  <Typography className={classes.playlistDescription}>
+                    {playlist.description}
+                  </Typography>
+                )}
+
+                {/* Meta Info: Track Count */}
+                <Box className={classes.playlistMeta}>
+                  <Chip
+                    label={`${playlist.tracks.total} tracks`}
+                    size="small"
+                    className={classes.trackChip}
+                    icon={<MusicNote style={{ color: "#fff" }} />}
+                  />
+                </Box>
+              </Box>
+
+              {/* Open Button */}
+              {!isMobile && (
+                <IconButton
+                  className={classes.openButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePlaylistOpen(playlist);
+                  }}
                 >
-                  <StyledTableCell>
-                    <IconButton onClick={() => handlePlaylistOpen(playlist)}>
-                      <MenuOpen />
-                    </IconButton>
-                  </StyledTableCell>
-                  <StyledTableCell>
-                    <Avatar
-                      variant="square"
-                      src={
-                        playlist.images[0] ? playlist.images[0].url : undefined
-                      }
-                    ></Avatar>
-                  </StyledTableCell>
-                  <StyledTableCell>{playlist.name}</StyledTableCell>
-                  <StyledTableCell>{playlist.description}</StyledTableCell>
-                  <StyledTableCell>
-                    {playlist.owner.display_name}
-                  </StyledTableCell>
-                  <StyledTableCell>{playlist.tracks.total}</StyledTableCell>
-                </StyledTableRow>
-              </Fragment>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                  <MenuOpen />
+                </IconButton>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
 
       {showPlaylist ? (
         <Playlist
