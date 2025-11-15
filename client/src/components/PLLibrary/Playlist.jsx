@@ -24,6 +24,7 @@ import {
   Typography,
   Select,
   Collapse,
+  Box,
 } from "@material-ui/core";
 
 import { useTheme } from "@material-ui/core/styles";
@@ -127,6 +128,10 @@ const useStyles = makeStyles((theme) => ({
     marginRight: theme.spacing(3),
     marginLeft: theme.spacing(3),
     borderWidth: "10px",
+    [theme.breakpoints.down('sm')]: {
+      marginRight: 0,
+      marginLeft: 0,
+    },
   },
   input: {
     color: "white",
@@ -432,6 +437,12 @@ let Playlist = (props) => {
       setValue = value;
     }
 
+    // Clear keyFilter when wheel is changed (different wheels have different key representations)
+    if (type === "wheel") {
+      setKeyFilter([]);
+      setQualityFilter([]);
+    }
+
     let funcMap = {
       wheel: setWheel,
       key: setKeyFilter,
@@ -525,7 +536,8 @@ let Playlist = (props) => {
                 onChange={handleChange}
                 placeholder="Search"
                 style={{
-                  fontSize: isMobile ? '0.875rem' : '1rem'
+                  fontSize: isMobile ? '0.875rem' : '1rem',
+                  width: isMobile ? '100%' : 'auto'
                 }}
                 endAdornment={
                   <InputAdornment position="end">
@@ -536,24 +548,13 @@ let Playlist = (props) => {
             </Toolbar>
             <Toolbar 
               style={{ 
-                flexWrap: 'wrap',
+                flexDirection: 'column',
+                alignItems: 'stretch',
                 padding: isMobile ? theme.spacing(0.5, 1) : theme.spacing(1, 2),
                 minHeight: isMobile ? 'auto' : '64px',
               }}
             >
-              <Typography 
-                variant="overline" 
-                className={classes.title}
-                style={{ 
-                  width: '100%', 
-                  marginBottom: isMobile ? theme.spacing(0.5) : theme.spacing(1),
-                  fontSize: isMobile ? '0.7rem' : '0.75rem',
-                  lineHeight: 1
-                }}
-              >
-                Filters
-              </Typography>
-
+              {/* Filter Controls */}
               <div style={{
                 display: 'flex',
                 flexWrap: 'wrap',
@@ -746,17 +747,18 @@ let Playlist = (props) => {
                   onChange={(e) => handleFilterChange(e, "maxBpm")}
                 />
               </FormControl>
-            </div>
-            <FormControl>
+
               <IconButton
-                aria-label="delete"
-                className={classes.button}
-                onClick={clearFilters}
-                style={{ fontSize: isMobile ? '0.875rem' : '1rem' }}
-              >
-                <Delete style={{ fontSize: isMobile ? '20px' : '24px' }} />
-              </IconButton>
-            </FormControl>
+                  aria-label="clear filters"
+                  className={classes.button}
+                  onClick={clearFilters}
+                  size="small"
+                  style={{ padding: isMobile ? 4 : 8 }}
+                  title="Clear all filters"
+                >
+                  <Delete style={{ fontSize: isMobile ? '18px' : '20px' }} />
+                </IconButton>
+            </div>
           </Toolbar>
           </Collapse>
         </AppBar>
