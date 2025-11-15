@@ -721,7 +721,7 @@ let Playlist = (props) => {
                 {!isMobile && <StyledTableCell>Cover Art</StyledTableCell>}
                 <StyledTableCell>Track</StyledTableCell>
                 {!isMobile && <StyledTableCell>Artist</StyledTableCell>}
-                <StyledTableCell>Musical Key</StyledTableCell>
+                <StyledTableCell>{isMobile ? "Key" : "Musical Key"}</StyledTableCell>
                 {!isMobile && <StyledTableCell>Quality</StyledTableCell>}
                 {!isTablet && <StyledTableCell>Camelot Key</StyledTableCell>}
                 {!isTablet && <StyledTableCell>Open Key</StyledTableCell>}
