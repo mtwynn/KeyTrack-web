@@ -276,6 +276,7 @@ let PLLibrary = (props) => {
           playlistKeys={playlistKeys}
           token={props.token}
           userId={props.userId}
+          updatePlayer={props.updatePlayer}
         />
       ) : null}
     </>

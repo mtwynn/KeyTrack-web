@@ -1,5 +1,6 @@
 .App {
   text-align: center;
+  padding-bottom: 120px; /* Space for fixed player at bottom */
 }
 
 .App-logo {
