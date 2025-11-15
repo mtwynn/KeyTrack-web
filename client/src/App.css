@@ -3,6 +3,31 @@
   padding-bottom: 120px; /* Space for fixed player at bottom */
 }
 
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .App {
+    padding-bottom: 140px; /* More space for player on mobile */
+  }
+  
+  .m-div {
+    margin: 0.4rem;
+  }
+  
+  .m-button {
+    margin: 0.4rem;
+  }
+  
+  /* Make tables scrollable on mobile */
+  table {
+    font-size: 0.875rem;
+  }
+  
+  /* Adjust image size on mobile */
+  img {
+    width: 100px;
+  }
+}
+
 .App-logo {
   height: 40vmin;
   pointer-events: none;

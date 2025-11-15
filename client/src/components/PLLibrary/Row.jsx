@@ -54,58 +54,100 @@ let Row = (props) => {
           onClick={(event) => props.handleRowClick(event, item)}
           sx={{ "& > *": { borderBottom: "unset" } }}
         >
+          {!props.isMobile && (
+            <TableCell>
+              <IconButton
+                aria-label="expand row"
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(!open);
+                }}
+              >
+                {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+              </IconButton>
+            </TableCell>
+          )}
+          {!props.isMobile && (
+            <TableCell>
+              <Avatar
+                variant="square"
+                src={
+                  item.track.album.images[0]
+                    ? item.track.album.images[0].url
+                    : null
+                }
+              ></Avatar>
+            </TableCell>
+          )}
           <TableCell>
-            <IconButton
-              aria-label="expand row"
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpen(!open);
-              }}
-            >
-              {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-            </IconButton>
+            {props.isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <Avatar
+                  variant="square"
+                  src={
+                    item.track.album.images[0]
+                      ? item.track.album.images[0].url
+                      : null
+                  }
+                  style={{ width: 40, height: 40 }}
+                ></Avatar>
+                <IconButton
+                  aria-label="expand row"
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(!open);
+                  }}
+                >
+                  {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                </IconButton>
+              </div>
+            )}
+            <div style={{ fontWeight: 'bold' }}>{item.track.name}</div>
+            {props.isMobile && (
+              <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '4px' }}>
+                {item.track.artists.map((artist) => artist.name).join(", ")}
+              </div>
+            )}
           </TableCell>
-          <TableCell>
-            <Avatar
-              variant="square"
-              src={
-                item.track.album.images[0]
-                  ? item.track.album.images[0].url
-                  : null
-              }
-            ></Avatar>
-          </TableCell>
-          <TableCell>{item.track.name}</TableCell>
-          <TableCell>
-            {item.track.artists.map((artist) => artist.name).join(", ")}
-          </TableCell>
+          {!props.isMobile && (
+            <TableCell>
+              {item.track.artists.map((artist) => artist.name).join(", ")}
+            </TableCell>
+          )}
           <TableCell>
             {getKey(item.track.id) || getKey(item.track.id) === 0
               ? KeyMap[getKey(item.track.id).key].key
               : "N/A"}
           </TableCell>
-          <TableCell>
-            {getKey(item.track.id) || getKey(item.track.id) === 0
-              ? getKey(item.track.id).mode === 1
-                ? "Major"
-                : "Minor"
-              : "N/A"}
-          </TableCell>
-          <TableCell>
-            {getKey(item.track.id) || getKey(item.track.id) === 0
-              ? KeyMap[getKey(item.track.id).key].camelot[
-                  getKey(item.track.id).mode
-                ]
-              : "N/A"}
-          </TableCell>
-          <TableCell>
-            {getKey(item.track.id) || getKey(item.track.id) === 0
-              ? KeyMap[getKey(item.track.id).key].open[
-                  getKey(item.track.id).mode
-                ]
-              : "N/A"}
-          </TableCell>
+          {!props.isMobile && (
+            <TableCell>
+              {getKey(item.track.id) || getKey(item.track.id) === 0
+                ? getKey(item.track.id).mode === 1
+                  ? "Major"
+                  : "Minor"
+                : "N/A"}
+            </TableCell>
+          )}
+          {!props.isTablet && (
+            <TableCell>
+              {getKey(item.track.id) || getKey(item.track.id) === 0
+                ? KeyMap[getKey(item.track.id).key].camelot[
+                    getKey(item.track.id).mode
+                  ]
+                : "N/A"}
+            </TableCell>
+          )}
+          {!props.isTablet && (
+            <TableCell>
+              {getKey(item.track.id) || getKey(item.track.id) === 0
+                ? KeyMap[getKey(item.track.id).key].open[
+                    getKey(item.track.id).mode
+                  ]
+                : "N/A"}
+            </TableCell>
+          )}
           <TableCell>
             {getKey(item.track.id) || getKey(item.track.id) === 0
               ? Math.round(getKey(item.track.id).bpm)
