@@ -118,7 +118,11 @@ let Row = (props) => {
           )}
           <TableCell>
             {getKey(item.track.id) || getKey(item.track.id) === 0
-              ? KeyMap[getKey(item.track.id).key].key
+              ? `${KeyMap[getKey(item.track.id).key].key}${
+                  props.isMobile 
+                    ? (getKey(item.track.id).mode === 1 ? " Maj" : " Min")
+                    : ""
+                }`
               : "N/A"}
           </TableCell>
           {!props.isMobile && (
