@@ -57,6 +57,7 @@ app.get('/spotify/login', function (req, res) {
   const scope =
     'user-read-private user-read-email user-library-read user-read-playback-state playlist-read-private playlist-read-collaborative streaming';
 
+  console.log(spotify_client_id)
   res.redirect(
     'https://accounts.spotify.com/authorize?' +
       querystring.stringify({

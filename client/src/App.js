@@ -361,9 +361,9 @@ class App extends React.Component {
                     </Typography>
                   </div>
                   <List dense={true}>
-                    {entry.changes.map((element) => {
+                    {entry.changes.map((element, idx) => {
                       return (
-                        <ListItem>
+                        <ListItem key={idx}>
                           <ListItemIcon>
                             {element.type === 'bugfix' ? (
                               <Build />

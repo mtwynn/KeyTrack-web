@@ -118,7 +118,7 @@ let CurrentSong = (props) => {
   return (
     <>
       <Card className={classes.root}>
-        <CardMedia className={classes.media} image={image} />
+        <CardMedia className={classes.media} image={image}>.</CardMedia>
         <CardContent>
           {loading ? <CircularProgress style={{ color: "white" }} /> : null}
 
