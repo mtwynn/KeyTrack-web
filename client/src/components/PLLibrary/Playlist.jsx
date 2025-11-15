@@ -37,6 +37,7 @@ import KeyMap from "../../utils/KeyMap";
 import { useEffect } from "react";
 
 import Row from "./Row";
+import Recommendations from "./Recommendations";
 
 initializeApp(firebaseConfig);
 
@@ -643,6 +644,18 @@ let Playlist = (props) => {
                 ))}
             </TableBody>
           </Table>
+
+          {props.userId === props.playlistOwnerId && (
+            <Recommendations
+              token={props.token}
+              playlistId={props.playlistId}
+              playlistTracks={allItems}
+              playlistKeys={props.playlistKeys}
+              updatePlayer={props.updatePlayer}
+              addTracksToPlaylistState={props.addTracksToPlaylistState}
+            />
+          )}
+
           <Fab
             variant="extended"
             style={{
