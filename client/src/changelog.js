@@ -27,6 +27,10 @@ const changelog = [
         type: "bugfix",
         desc: "Opening a playlist crate now shows a clear 'Loading crate…' indicator (plus a spinner on the card you clicked), and never gets stuck if a request fails.",
       },
+      {
+        type: "bugfix",
+        desc: "Opening the Playlist Library now shows a loading spinner on the tile while your playlists are fetched.",
+      },
     ],
   },
   {

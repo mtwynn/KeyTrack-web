@@ -11,6 +11,7 @@ import {
   Card,
   CardActionArea,
   Chip,
+  CircularProgress,
   Container,
   CssBaseline,
   Divider,
@@ -92,6 +93,7 @@ class App extends React.Component {
       openChangelog: false,
       showKeyCalculator: false,
       drawerOpen: false,
+      loadingPlaylists: false,
       themeMode:
         window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark'
           ? 'dark'
@@ -232,29 +234,39 @@ class App extends React.Component {
       return;
     }
 
-    let allPlaylists = [];
-    let offset = 50;
-    let response = await spotifyWebApi.getUserPlaylists(this.state.user_id, {
-      limit: 50,
-      offset: 0,
-    });
-    allPlaylists = response.items;
-
-    let next = response.next;
-    while (next !== null) {
-      let nextGroup = await spotifyWebApi.getUserPlaylists(this.state.user_id, {
+    this.setState({ loadingPlaylists: true });
+    try {
+      let allPlaylists = [];
+      let offset = 50;
+      let response = await spotifyWebApi.getUserPlaylists(this.state.user_id, {
         limit: 50,
-        offset: offset,
+        offset: 0,
       });
-      allPlaylists = allPlaylists.concat(nextGroup.items);
-      next = nextGroup.next;
-      offset += 50;
-    }
+      allPlaylists = response.items;
 
-    this.setState({
-      showPlaylists: true,
-      pllibrary: allPlaylists,
-    });
+      let next = response.next;
+      while (next !== null) {
+        let nextGroup = await spotifyWebApi.getUserPlaylists(
+          this.state.user_id,
+          {
+            limit: 50,
+            offset: offset,
+          }
+        );
+        allPlaylists = allPlaylists.concat(nextGroup.items);
+        next = nextGroup.next;
+        offset += 50;
+      }
+
+      this.setState({
+        showPlaylists: true,
+        pllibrary: allPlaylists,
+      });
+    } catch (error) {
+      console.error('Failed to load playlists', error);
+    } finally {
+      this.setState({ loadingPlaylists: false });
+    }
   }
 
   openKeyCalculator() {
@@ -327,7 +339,7 @@ class App extends React.Component {
   }
 
   // An action tile in the logged-in dashboard.
-  renderTile(icon, label, sub, onClick, active, always) {
+  renderTile(icon, label, sub, onClick, active, always, loading) {
     return (
       <Grid item xs={12} sm={4}>
         <Card
@@ -339,14 +351,19 @@ class App extends React.Component {
         >
           <CardActionArea
             onClick={onClick}
+            disabled={loading}
             style={{ padding: '22px 12px', textAlign: 'center', height: '100%' }}
           >
-            {icon}
+            {loading ? (
+              <CircularProgress size={40} style={{ color: '#1ED760' }} />
+            ) : (
+              icon
+            )}
             <Typography
               variant="subtitle1"
               style={{ fontWeight: 700, marginTop: 6 }}
             >
-              {label}
+              {loading ? 'Loading…' : label}
             </Typography>
             <Typography variant="caption" color="textSecondary">
               {sub}
@@ -497,7 +514,9 @@ class App extends React.Component {
               this.state.showPlaylists ? 'Close Library' : 'Playlist Library',
               'Analyze your crates',
               this.getUserPlaylists,
-              this.state.showPlaylists
+              this.state.showPlaylists,
+              false,
+              this.state.loadingPlaylists
             )}
             {this.renderTile(
               <Tune style={tileIcon} />,
