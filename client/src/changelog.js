@@ -1,5 +1,19 @@
 const changelog = [
   {
+    version: "1.5.1",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "bugfix",
+        desc: "Fixed local-development Spotify login — Spotify now rejects http://localhost as an insecure redirect URI, so local auth uses the 127.0.0.1 loopback address.",
+      },
+      {
+        type: "bugfix",
+        desc: "Developer experience: the local backend now loads Spotify credentials from a gitignored .env file, so they no longer need to be passed on every start.",
+      },
+    ],
+  },
+  {
     version: "1.5.0",
     date: "06/09/26",
     changes: [

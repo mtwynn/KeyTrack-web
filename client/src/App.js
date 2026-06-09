@@ -41,11 +41,11 @@ let isProduction = process.env.NODE_ENV === 'production';
 
 let spotifyLoginEndpoint = isProduction
   ? 'https://key-track2.herokuapp.com/spotify/login'
-  : 'http://localhost:8888/spotify/login';
+  : 'http://127.0.0.1:8888/spotify/login';
 
 let refreshTokenEndpoint = isProduction
   ? 'https://key-track2.herokuapp.com/refresh_token'
-  : 'http://localhost:8888/refresh_token';
+  : 'http://127.0.0.1:8888/refresh_token';
 
 // Refresh the access token this many ms before it actually expires, so API
 // calls never hit a window where the token is dead.
