@@ -20,11 +20,62 @@ import KeyboardArrowDownIcon from "@material-ui/icons/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@material-ui/icons/KeyboardArrowUp";
 
 import KeyMap from "../../utils/KeyMap";
+import { camelotColor, harmonicRelation } from "../../utils/harmonic";
 
 // TODO: FIX CHORD PROGRESSIONS BUG HERE
 let Row = (props) => {
     const { item } = props;
     const [open, setOpen] = React.useState(false);
+
+    // Key/Camelot info for this track, computed once.
+    const trackKey = props.getKey(item.track.id);
+    const camelot = trackKey ? KeyMap[trackKey.key].camelot[trackKey.mode] : null;
+    const keyColor = camelot ? camelotColor(camelot) : null;
+
+    // Harmonic-mixing highlight relative to the anchored track (if any).
+    const isAnchor = props.harmonicAnchorId === item.track.id;
+    const relation = harmonicRelation(
+      props.harmonicAnchorCamelot,
+      camelot,
+      isAnchor
+    );
+
+    const rowStyle = { cursor: "pointer" };
+    if (relation === "incompatible") rowStyle.opacity = 0.4;
+    if (relation === "compatible")
+      rowStyle.backgroundColor = "rgba(30, 215, 96, 0.12)";
+    if (relation === "anchor") {
+      rowStyle.backgroundColor = "rgba(30, 215, 96, 0.2)";
+      rowStyle.boxShadow = `inset 3px 0 0 ${keyColor ? keyColor.bg : "#1ED760"}`;
+    }
+
+    // A colored, clickable pill for a key value. Clicking anchors this track so
+    // its harmonic matches light up across the table.
+    const keyChip = (label) => (
+      <span
+        onClick={(e) => {
+          e.stopPropagation();
+          if (props.onToggleAnchor) props.onToggleAnchor(item);
+        }}
+        title="Click to highlight harmonic matches"
+        style={
+          keyColor
+            ? {
+                backgroundColor: keyColor.bg,
+                color: keyColor.text,
+                padding: "3px 10px",
+                borderRadius: "12px",
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "inline-block",
+                whiteSpace: "nowrap",
+              }
+            : {}
+        }
+      >
+        {label}
+      </span>
+    );
     const [editChords, setEditChords] = React.useState(false);
     const [oldProgressions, setOldProgressions] = React.useState(
       props.chordProgressions[item.track.id] || {}
@@ -50,7 +101,7 @@ let Row = (props) => {
         <TableRow
           key={item.track.id}
           hover
-          style={{ cursor: "pointer" }}
+          style={rowStyle}
           onClick={(event) => props.handleRowClick(event, item)}
           sx={{ "& > *": { borderBottom: "unset" } }}
         >
@@ -117,12 +168,16 @@ let Row = (props) => {
             </TableCell>
           )}
           <TableCell>
-            {getKey(item.track.id) || getKey(item.track.id) === 0
-              ? `${KeyMap[getKey(item.track.id).key].key}${
-                  props.isMobile 
-                    ? (getKey(item.track.id).mode === 1 ? " Maj" : " Min")
-                    : ""
-                }`
+            {trackKey
+              ? keyChip(
+                  `${KeyMap[trackKey.key].key}${
+                    props.isMobile
+                      ? trackKey.mode === 1
+                        ? " Maj"
+                        : " Min"
+                      : ""
+                  }`
+                )
               : "N/A"}
           </TableCell>
           {!props.isMobile && (
@@ -135,13 +190,7 @@ let Row = (props) => {
             </TableCell>
           )}
           {!props.isTablet && (
-            <TableCell>
-              {getKey(item.track.id) || getKey(item.track.id) === 0
-                ? KeyMap[getKey(item.track.id).key].camelot[
-                    getKey(item.track.id).mode
-                  ]
-                : "N/A"}
-            </TableCell>
+            <TableCell>{camelot ? keyChip(camelot) : "N/A"}</TableCell>
           )}
           {!props.isTablet && (
             <TableCell>
