@@ -19,6 +19,7 @@ import {
   TableRow,
   TableBody,
   TableHead,
+  TablePagination,
   AppBar,
   Toolbar,
   IconButton,
@@ -354,6 +355,12 @@ let Playlist = (props) => {
     [props.onAddToSet, getKey]
   );
 
+  // Pagination keeps the rendered DOM small. A huge table (thousands of nodes)
+  // makes the browser re-layout the whole page whenever a dialog/drawer opens,
+  // which froze opening the Set/Calculator for seconds on large crates.
+  const [page, setPage] = React.useState(0);
+  const [rowsPerPage, setRowsPerPage] = React.useState(100);
+
   // Sort once per data change (not on every render), on a copy so we don't
   // mutate the searchItems state in place. Default order: Camelot key, then BPM.
   const sortedItems = React.useMemo(() => {
@@ -371,6 +378,17 @@ let Playlist = (props) => {
     });
     return arr;
   }, [searchItems, getKey]);
+
+  // Only the current page is rendered into the DOM.
+  const pagedItems = React.useMemo(
+    () => sortedItems.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+    [sortedItems, page, rowsPerPage]
+  );
+
+  // Reset to the first page whenever the filtered result set changes.
+  React.useEffect(() => {
+    setPage(0);
+  }, [sortedItems]);
 
   useEffect(() => {
     let getChordProgressions = async () => {
@@ -704,6 +722,20 @@ let Playlist = (props) => {
               />
             </Box>
           )}
+          {sortedItems.length > 50 && (
+            <TablePagination
+              component="div"
+              count={sortedItems.length}
+              page={page}
+              onChangePage={(e, p) => setPage(p)}
+              rowsPerPage={rowsPerPage}
+              onChangeRowsPerPage={(e) => {
+                setRowsPerPage(parseInt(e.target.value, 10));
+                setPage(0);
+              }}
+              rowsPerPageOptions={[50, 100, 200]}
+            />
+          )}
           <Table>
             <TableHead ref={topRef}>
               <TableRow>
@@ -719,7 +751,7 @@ let Playlist = (props) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {sortedItems
+              {pagedItems
                 .map((item) => (
                   <Row
                     item={item}
