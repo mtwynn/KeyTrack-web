@@ -22,6 +22,9 @@ let KeyCalculator = (props) => {
 
   // Default to C Major (8B).
   const [code, setCode] = React.useState("8B");
+  // Stable references so the memoized wheel doesn't re-render needlessly.
+  const handlePick = React.useCallback((c) => setCode(c), []);
+  const selectedArr = React.useMemo(() => [code], [code]);
   const info = camelotInfo(code);
   const color = camelotColor(code);
   const compatible = [...compatibleCamelot(code)].filter((c) => c !== code);
@@ -35,7 +38,14 @@ let KeyCalculator = (props) => {
     : [];
 
   return (
-    <Dialog open={open} onClose={onClose} fullScreen={fullScreen} maxWidth="xs">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullScreen={fullScreen}
+      maxWidth="xs"
+      disableEnforceFocus
+      disableScrollLock
+    >
       <DialogTitle>Key Calculator</DialogTitle>
       <DialogContent>
         <Typography
@@ -48,8 +58,8 @@ let KeyCalculator = (props) => {
 
         <Box style={{ display: "flex", justifyContent: "center" }}>
           <CamelotWheel
-            selected={[code]}
-            onToggle={(c) => setCode(c)}
+            selected={selectedArr}
+            onToggle={handlePick}
             labelMode="combined"
           />
         </Box>
