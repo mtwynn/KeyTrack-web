@@ -311,27 +311,26 @@ let Playlist = (props) => {
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
 
+  // Index audio features by track id once, so getKey is O(1). Previously it
+  // did a linear .find() per call, and the table sort calls getKey twice per
+  // comparison — O(n^2 log n), which froze the UI on large crates for seconds.
+  const keysById = React.useMemo(() => {
+    const map = new Map();
+    (props.playlistKeys || []).forEach((track) => {
+      if (track) map.set(track.id, track);
+    });
+    return map;
+  }, [props.playlistKeys]);
+
   const getKey = React.useCallback(
     (id) => {
-      if (id) {
-        let result = props.playlistKeys.find((track) => {
-          if (track) {
-            return id.localeCompare(track.id) === 0;
-          }
-          return null;
-        });
-
-        if (result) {
-          return {
-            key: result.key,
-            mode: result.mode,
-            bpm: result.tempo,
-          };
-        }
-        return null;
-      }
+      if (!id) return undefined;
+      const result = keysById.get(id);
+      return result
+        ? { key: result.key, mode: result.mode, bpm: result.tempo }
+        : null;
     },
-    [props.playlistKeys]
+    [keysById]
   );
 
   // Camelot code of the anchored track, derived from its key.
@@ -354,6 +353,24 @@ let Playlist = (props) => {
     },
     [props.onAddToSet, getKey]
   );
+
+  // Sort once per data change (not on every render), on a copy so we don't
+  // mutate the searchItems state in place. Default order: Camelot key, then BPM.
+  const sortedItems = React.useMemo(() => {
+    const arr = [...searchItems];
+    arr.sort((a, b) => {
+      const aKey = getKey(a.track.id);
+      const bKey = getKey(b.track.id);
+      if (!aKey) return -1;
+      if (!bKey) return 1;
+      const aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
+      const bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
+      const cmp = aCamelot.localeCompare(bCamelot);
+      if (cmp !== 0) return cmp;
+      return aKey.bpm - bKey.bpm;
+    });
+    return arr;
+  }, [searchItems, getKey]);
 
   useEffect(() => {
     let getChordProgressions = async () => {
@@ -702,24 +719,7 @@ let Playlist = (props) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {searchItems
-                .sort((a, b) => {
-                  let aKey = getKey(a.track.id);
-                  let bKey = getKey(b.track.id);
-
-                  if (!aKey) return -1;
-                  if (!bKey) return 1;
-                  if (!aKey && !bKey) return 0;
-
-                  let aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
-                  let bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
-                  let aBPM = aKey.bpm;
-                  let bBPM = bKey.bpm;
-
-                  if (aCamelot.localeCompare(bCamelot) < 0) return -1;
-                  if (aCamelot.localeCompare(bCamelot) > 0) return 1;
-                  return aBPM - bBPM;
-                })
+              {sortedItems
                 .map((item) => (
                   <Row
                     item={item}
