@@ -7,9 +7,10 @@
  * https://developer.spotify.com/web-api/authorization-guide/#authorization_code_flow
  */
 
-// Load local dev credentials from local-server/.env if present. On Heroku the
-// real env vars are already set, so this is a harmless no-op there.
-require('dotenv').config();
+// Load local dev credentials from local-server/.env if present. Resolve the
+// path from __dirname so it works no matter which directory node is started
+// from. On Heroku the real env vars are already set, so this is a no-op there.
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 const express = require('express'); // Express web server framework
 const request = require('request'); // "Request" library
