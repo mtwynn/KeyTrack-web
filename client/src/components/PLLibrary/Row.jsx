@@ -18,6 +18,7 @@ import {
 
 import KeyboardArrowDownIcon from "@material-ui/icons/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@material-ui/icons/KeyboardArrowUp";
+import PlaylistAddIcon from "@material-ui/icons/PlaylistAdd";
 
 import KeyMap from "../../utils/KeyMap";
 import { camelotColor, harmonicRelation } from "../../utils/harmonic";
@@ -91,6 +92,20 @@ let Row = (props) => {
         {label}
       </span>
     );
+    const addButton = (
+      <IconButton
+        aria-label="add to set"
+        size="small"
+        title="Add to set"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (props.onAddToSet) props.onAddToSet(item);
+        }}
+      >
+        <PlaylistAddIcon fontSize="small" />
+      </IconButton>
+    );
+
     const [editChords, setEditChords] = React.useState(false);
     const [oldProgressions, setOldProgressions] = React.useState(
       props.chordProgressions[item.track.id] || {}
@@ -122,16 +137,19 @@ let Row = (props) => {
         >
           {!props.isMobile && (
             <TableCell>
-              <IconButton
-                aria-label="expand row"
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOpen(!open);
-                }}
-              >
-                {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-              </IconButton>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <IconButton
+                  aria-label="expand row"
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(!open);
+                  }}
+                >
+                  {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                </IconButton>
+                {addButton}
+              </div>
             </TableCell>
           )}
           {!props.isMobile && (
@@ -168,6 +186,7 @@ let Row = (props) => {
                 >
                   {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
                 </IconButton>
+                {addButton}
               </div>
             )}
             <div style={{ fontWeight: 'bold' }}>{item.track.name}</div>
