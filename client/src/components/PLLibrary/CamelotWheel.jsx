@@ -1,5 +1,5 @@
 import React from "react";
-import { camelotColor } from "../../utils/harmonic";
+import { camelotColor, camelotInfo, musicalLabel } from "../../utils/harmonic";
 
 // An interactive Camelot wheel used as a visual key filter. Outer ring = B
 // (major), inner ring = A (minor), numbers 1-12 clockwise from the top — the
@@ -28,7 +28,9 @@ const wedge = (rInner, rOuter, startDeg, endDeg) => {
   return `M ${x1} ${y1} A ${rOuter} ${rOuter} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${rInner} ${rInner} 0 ${large} 0 ${x4} ${y4} Z`;
 };
 
-const CamelotWheel = ({ selected = [], onToggle }) => {
+// labelMode: "camelot" (just the code), "open" (Open-key code), or "combined"
+// (Camelot code + musical key, like the Mixed In Key wheel).
+const CamelotWheel = ({ selected = [], onToggle, labelMode = "camelot" }) => {
   const hasSelection = selected.length > 0;
   const segments = [];
 
@@ -44,8 +46,21 @@ const CamelotWheel = ({ selected = [], onToggle }) => {
     ].forEach(({ letter, rIn, rOut }) => {
       const code = `${n}${letter}`;
       const color = camelotColor(code);
+      const info = camelotInfo(code);
       const isSelected = selected.includes(code);
       const [lx, ly] = pt((rIn + rOut) / 2, midDeg);
+
+      let labels;
+      if (labelMode === "open") {
+        labels = [{ text: info ? info.open : code, size: 11, bold: true, dy: 0 }];
+      } else if (labelMode === "combined") {
+        labels = [
+          { text: code, size: 11, bold: true, dy: -6 },
+          { text: musicalLabel(code), size: 8, bold: false, dy: 6 },
+        ];
+      } else {
+        labels = [{ text: code, size: 11, bold: true, dy: 0 }];
+      }
 
       segments.push(
         <g
@@ -60,18 +75,21 @@ const CamelotWheel = ({ selected = [], onToggle }) => {
             strokeWidth={isSelected ? 3 : 1}
             opacity={hasSelection && !isSelected ? 0.3 : 1}
           />
-          <text
-            x={lx}
-            y={ly}
-            fill={color.text}
-            fontSize="11"
-            fontWeight="700"
-            textAnchor="middle"
-            dominantBaseline="central"
-            style={{ pointerEvents: "none" }}
-          >
-            {code}
-          </text>
+          {labels.map((l, i) => (
+            <text
+              key={i}
+              x={lx}
+              y={ly + l.dy}
+              fill={color.text}
+              fontSize={l.size}
+              fontWeight={l.bold ? 700 : 500}
+              textAnchor="middle"
+              dominantBaseline="central"
+              style={{ pointerEvents: "none" }}
+            >
+              {l.text}
+            </text>
+          ))}
         </g>
       );
     });

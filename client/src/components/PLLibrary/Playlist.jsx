@@ -14,7 +14,6 @@ import {
   InputAdornment,
   InputLabel,
   MenuItem,
-  Popover,
   Table,
   TableCell,
   TableRow,
@@ -42,8 +41,7 @@ import { useEffect } from "react";
 
 import Row from "./Row";
 import Recommendations from "./Recommendations";
-import CamelotWheel from "./CamelotWheel";
-import { camelotColor } from "../../utils/harmonic";
+import KeyFilterPicker from "./KeyFilterPicker";
 
 initializeApp(firebaseConfig);
 
@@ -278,11 +276,22 @@ let Playlist = (props) => {
   let [chordProgressions, setChordProgressions] = React.useState({});
   // Track whose key is "anchored" for harmonic-mixing highlighting (or null).
   const [harmonicAnchorId, setHarmonicAnchorId] = React.useState(null);
-  // Anchor element for the Camelot-wheel filter popover.
-  const [wheelAnchor, setWheelAnchor] = React.useState(null);
+  // Key-filter bottom-sheet open state.
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  // Saved picker style: "notation" (Piano/Wheel by notation) or "combined".
+  const [filterMode, setFilterMode] = React.useState(
+    window.localStorage.getItem("keytrack_filter_mode") === "combined"
+      ? "combined"
+      : "notation"
+  );
 
-  // The Camelot wheel filters by underlying key (Camelot code), independent of
-  // the notation shown in the Key column.
+  const changeFilterMode = (mode) => {
+    window.localStorage.setItem("keytrack_filter_mode", mode);
+    setFilterMode(mode);
+  };
+
+  // Every picker (piano, wheel, combined) reads/writes the filter as Camelot
+  // codes, so the selection is independent of the notation being shown.
   const toggleKeyFilter = (code) => {
     setKeyFilter((prev) =>
       prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
@@ -596,54 +605,17 @@ let Playlist = (props) => {
                   variant="outlined"
                   size="small"
                   startIcon={<DonutLarge />}
-                  onClick={(e) => setWheelAnchor(e.currentTarget)}
-                  style={{ height: "100%", textTransform: "none" }}
+                  onClick={() => setPickerOpen(true)}
+                  style={{
+                    height: "100%",
+                    textTransform: "none",
+                    color: "#fff",
+                    borderColor: "rgba(255,255,255,0.6)",
+                  }}
                 >
-                  Key Wheel{keyFilter.length ? ` (${keyFilter.length})` : ""}
+                  Filter by Key{keyFilter.length ? ` (${keyFilter.length})` : ""}
                 </Button>
-                <Popover
-                  open={Boolean(wheelAnchor)}
-                  anchorEl={wheelAnchor}
-                  onClose={() => setWheelAnchor(null)}
-                  anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                  transformOrigin={{ vertical: "top", horizontal: "left" }}
-                >
-                  <Box style={{ padding: 12, textAlign: "center" }}>
-                    <Typography variant="caption" color="textSecondary">
-                      Click keys to filter · adjacent + opposite-ring keys mix in
-                      harmony
-                    </Typography>
-                    <CamelotWheel
-                      selected={keyFilter}
-                      onToggle={toggleKeyFilter}
-                    />
-                    <Button
-                      size="small"
-                      onClick={() => setKeyFilter([])}
-                      disabled={keyFilter.length === 0}
-                    >
-                      Clear keys
-                    </Button>
-                  </Box>
-                </Popover>
               </FormControl>
-              {keyFilter.length > 0 && (
-                <div className={classes.chips} style={{ alignItems: "center" }}>
-                  {keyFilter.map((code) => {
-                    const c = camelotColor(code);
-                    return (
-                      <Chip
-                        key={code}
-                        size="small"
-                        label={code}
-                        onDelete={() => toggleKeyFilter(code)}
-                        className={classes.chip}
-                        style={c ? { backgroundColor: c.bg, color: c.text } : {}}
-                      />
-                    );
-                  })}
-                </div>
-              )}
               {true && (
                 <FormControl className={classes.filter}>
                   <InputLabel id="demo-simple-select-label">Quality</InputLabel>
@@ -863,6 +835,17 @@ let Playlist = (props) => {
             Back To Top
           </Fab>
         </div>
+
+        <KeyFilterPicker
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          notation={wheel}
+          selected={keyFilter}
+          onToggle={toggleKeyFilter}
+          onClear={() => setKeyFilter([])}
+          filterMode={filterMode}
+          onChangeFilterMode={changeFilterMode}
+        />
       </Dialog>
     </div>
   );

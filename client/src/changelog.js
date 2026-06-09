@@ -5,7 +5,15 @@ const changelog = [
     changes: [
       {
         type: "feature",
-        desc: "Added an interactive Camelot wheel to filter a playlist by key — click wedges to pick keys, with the familiar Mixed In Key colors.",
+        desc: "New key filter as a mobile-friendly bottom sheet: a piano for Musical notation (pick notes + Major/Minor), an interactive Camelot wheel for Camelot, and an Open-key wheel for Open — with the familiar Mixed In Key colors.",
+      },
+      {
+        type: "feature",
+        desc: "Added a 'Combined wheel' picker style (a setting) showing Camelot codes and musical keys together on one wheel.",
+      },
+      {
+        type: "feature",
+        desc: "Key selections now carry across notations — pick D Major on the piano and it stays selected as 10B on the wheel; switching notation no longer clears your filter.",
       },
       {
         type: "feature",
