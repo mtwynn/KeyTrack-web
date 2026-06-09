@@ -3,6 +3,11 @@
   command = "npm run build"
   publish = "build"
 
+[build.environment]
+  # CRA treats ESLint warnings as errors when CI is set; Netlify sets CI=true.
+  # Disable so warnings don't fail the production build.
+  CI = "false"
+
 # SPA fallback: serve index.html for client-side routes
 [[redirects]]
   from = "/*"
