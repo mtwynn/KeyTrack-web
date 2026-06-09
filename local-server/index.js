@@ -7,6 +7,11 @@
  * https://developer.spotify.com/web-api/authorization-guide/#authorization_code_flow
  */
 
+// Load local dev credentials from local-server/.env if present. Resolve the
+// path from __dirname so it works no matter which directory node is started
+// from. On Heroku the real env vars are already set, so this is a no-op there.
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+
 const express = require('express'); // Express web server framework
 const request = require('request'); // "Request" library
 const cors = require('cors');
@@ -19,7 +24,9 @@ const spotify_client_secret = process.env.SPOTIFY_SECRET; // Your secret
 const isProduction = process.env.NODE_ENV === 'production';
 const redirect_uri = isProduction
   ? 'https://key-track2.herokuapp.com/callback/'
-  : 'http://localhost:8888/callback';
+  // Spotify rejects http://localhost as an "Insecure" redirect URI; the
+  // explicit loopback IP is required for local development.
+  : 'http://127.0.0.1:8888/callback';
 
 /**
  * Generates a random string containing numbers and letters,
