@@ -31,6 +31,10 @@ const changelog = [
         type: "bugfix",
         desc: "Opening the Playlist Library now shows a loading spinner on the tile while your playlists are fetched.",
       },
+      {
+        type: "feature",
+        desc: "Revamped the Key Calculator into an interactive Camelot wheel — tap any key to see it in all three notations (Musical / Camelot / Open) at once, plus its harmonic matches.",
+      },
     ],
   },
   {
