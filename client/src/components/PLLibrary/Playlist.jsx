@@ -42,7 +42,6 @@ import { useEffect } from "react";
 import Row from "./Row";
 import Recommendations from "./Recommendations";
 import KeyFilterPicker from "./KeyFilterPicker";
-import SetBuilder from "./SetBuilder";
 
 initializeApp(firebaseConfig);
 
@@ -288,35 +287,6 @@ let Playlist = (props) => {
     );
   };
 
-  // --- Set builder ---
-  const [setTracks, setSetTracks] = React.useState([]);
-  const [setOpen, setSetOpen] = React.useState(false);
-  const [bpmThreshold, setBpmThreshold] = React.useState(6);
-
-  const addToSet = React.useCallback((item) => {
-    setSetTracks((prev) =>
-      prev.some((t) => t.track.id === item.track.id) ? prev : [...prev, item]
-    );
-    setSetOpen(true);
-  }, []);
-
-  const removeFromSet = React.useCallback(
-    (index) => setSetTracks((prev) => prev.filter((_, i) => i !== index)),
-    []
-  );
-
-  const reorderSet = React.useCallback((from, to) => {
-    setSetTracks((prev) => {
-      if (to < 0 || to >= prev.length) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  }, []);
-
-  const clearSet = React.useCallback(() => setSetTracks([]), []);
-
   let topRef = React.createRef();
 
   let handleChange = _.debounce((event) => {
@@ -375,6 +345,15 @@ let Playlist = (props) => {
       prev === item.track.id ? null : item.track.id
     );
   }, []);
+
+  // Add a track to the app-level set, tagging it with this crate's key/BPM so
+  // the set stays self-contained across playlists.
+  const handleAddToSet = React.useCallback(
+    (item) => {
+      if (props.onAddToSet) props.onAddToSet(item, getKey(item.track.id));
+    },
+    [props.onAddToSet, getKey]
+  );
 
   useEffect(() => {
     let getChordProgressions = async () => {
@@ -622,7 +601,7 @@ let Playlist = (props) => {
                   variant="outlined"
                   size="small"
                   startIcon={<QueueMusic />}
-                  onClick={() => setSetOpen(true)}
+                  onClick={props.onOpenSet}
                   style={{
                     height: "100%",
                     textTransform: "none",
@@ -630,7 +609,7 @@ let Playlist = (props) => {
                     borderColor: "rgba(255,255,255,0.6)",
                   }}
                 >
-                  Set{setTracks.length ? ` (${setTracks.length})` : ""}
+                  Set{props.setCount ? ` (${props.setCount})` : ""}
                 </Button>
               </FormControl>
               <FormControl className={classes.minFilter}>
@@ -756,7 +735,7 @@ let Playlist = (props) => {
                     harmonicAnchorId={harmonicAnchorId}
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
                     onToggleAnchor={toggleHarmonicAnchor}
-                    onAddToSet={addToSet}
+                    onAddToSet={handleAddToSet}
                   />
                 ))}
             </TableBody>
@@ -806,18 +785,6 @@ let Playlist = (props) => {
           onChangeFilterMode={changeFilterMode}
         />
 
-        <SetBuilder
-          open={setOpen}
-          onClose={() => setSetOpen(false)}
-          set={setTracks}
-          getKey={getKey}
-          onReorder={reorderSet}
-          onRemove={removeFromSet}
-          onClear={clearSet}
-          bpmThreshold={bpmThreshold}
-          onChangeBpmThreshold={setBpmThreshold}
-          isMobile={isMobile}
-        />
       </Dialog>
     </div>
   );

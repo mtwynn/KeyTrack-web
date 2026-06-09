@@ -452,6 +452,9 @@ let PLLibrary = (props) => {
           userId={props.userId}
           updatePlayer={props.updatePlayer}
           addTracksToPlaylistState={addTracksToPlaylistState}
+          onAddToSet={props.onAddToSet}
+          onOpenSet={props.onOpenSet}
+          setCount={props.setCount}
         />
       ) : null}
     </>

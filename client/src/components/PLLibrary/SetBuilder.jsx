@@ -7,7 +7,9 @@ import {
   IconButton,
   Slider,
   Typography,
+  useMediaQuery,
 } from "@material-ui/core";
+import { useTheme } from "@material-ui/core/styles";
 import {
   ArrowUpward,
   ArrowDownward,
@@ -22,25 +24,26 @@ import { camelotColor, compatibleCamelot } from "../../utils/harmonic";
 const codeOf = (k) => (k ? KeyMap[k.key].camelot[k.mode] : null);
 
 // The ordered set, shown in a slide-out panel (bottom sheet on mobile, right
-// drawer on desktop). Each transition between consecutive tracks is validated
-// for harmonic key compatibility and BPM jump (vs a user-set threshold).
+// drawer on desktop). Each entry is { item, key } so the set is self-contained
+// and can hold tracks from multiple playlists. Each transition between
+// consecutive tracks is validated for harmonic key compatibility and BPM jump.
 const SetBuilder = ({
   open,
   onClose,
   set,
-  getKey,
   onReorder,
   onRemove,
   onClear,
   bpmThreshold,
   onChangeBpmThreshold,
-  isMobile,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [dragIndex, setDragIndex] = React.useState(null);
 
-  const rows = set.map((item) => {
-    const k = getKey(item.track.id);
-    return { item, code: codeOf(k), bpm: k ? Math.round(k.bpm) : null };
+  const rows = set.map((entry) => {
+    const k = entry.key;
+    return { item: entry.item, code: codeOf(k), bpm: k ? Math.round(k.bpm) : null };
   });
 
   const transition = (a, b) => {
