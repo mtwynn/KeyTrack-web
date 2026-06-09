@@ -30,7 +30,7 @@ import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
 
 // Utils
-import { getHashParams } from './utils/utils';
+import { getHashParams, saveSpotifyHashParams } from './utils/utils';
 
 // Assets
 import { ReactComponent as SpotifyLogo } from '../src/assets/login/spotify.svg';
@@ -47,6 +47,14 @@ let spotifyLoginEndpoint = isProduction
 let soundcloudLoginEndpoint = isProduction
   ? 'https://key-track2.herokuapp.com/soundcloud/login'
   : 'http://localhost:8888/soundcloud/login';
+
+let refreshTokenEndpoint = isProduction
+  ? 'https://key-track2.herokuapp.com/refresh_token'
+  : 'http://localhost:8888/refresh_token';
+
+// Refresh the access token this many ms before it actually expires, so API
+// calls never hit a window where the token is dead.
+const REFRESH_LEAD_MS = 5 * 60 * 1000;
 
 class App extends React.Component {
   constructor(props) {
@@ -84,19 +92,25 @@ class App extends React.Component {
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
+    this.refreshAccessToken = this.refreshAccessToken.bind(this);
+    this.scheduleTokenRefresh = this.scheduleTokenRefresh.bind(this);
 
     if (spotifyParams.access_token) {
       spotifyWebApi.setAccessToken(spotifyParams.access_token);
 
       Axios.get(
         `https://api.spotify.com/v1/me?access_token=${spotifyParams.access_token}`
-      ).then((user) => {
-        this.setState({
-          user_id: user.data.id,
-          access_token: spotifyParams.access_token,
-          user_name: user.data.display_name,
-        });
-      });
+      )
+        .then((user) => {
+          this.setState({
+            user_id: user.data.id,
+            access_token: spotifyParams.access_token,
+            user_name: user.data.display_name,
+          });
+        })
+        // A stale token here is expected on reload; componentDidMount will
+        // refresh it and re-bootstrap the user, so swallow the 401 quietly.
+        .catch(() => {});
     } else {
       console.error(
         'Could not get a spotify access token. Received spotify params from server: ',
@@ -124,11 +138,80 @@ class App extends React.Component {
 
   componentDidMount() {
     if (this.state.spotify.loggedIn) {
-      setTimeout(() => {
-        this.setState({
-          showSessionExpiryDialog: true,
+      this.scheduleTokenRefresh();
+    }
+  }
+
+  componentWillUnmount() {
+    clearTimeout(this.refreshTimer);
+  }
+
+  // Schedule a background token refresh shortly before the current token
+  // expires. Re-arms itself after every refresh so the session stays alive
+  // indefinitely without the user ever logging in again.
+  scheduleTokenRefresh() {
+    const params = getHashParams('spotify', isProduction);
+    const expiresAt = params.expires_at;
+
+    clearTimeout(this.refreshTimer);
+
+    // No expiry recorded (e.g. a session from before this feature shipped) or
+    // already within the lead window: refresh right now.
+    if (!expiresAt || expiresAt - Date.now() <= REFRESH_LEAD_MS) {
+      this.refreshAccessToken();
+      return;
+    }
+
+    this.refreshTimer = setTimeout(
+      this.refreshAccessToken,
+      expiresAt - Date.now() - REFRESH_LEAD_MS
+    );
+  }
+
+  // Exchange the stored refresh token for a fresh access token, update the
+  // Spotify client, player, and persisted credentials, then reschedule.
+  async refreshAccessToken() {
+    const params = getHashParams('spotify', isProduction);
+    if (!params.refresh_token) {
+      return;
+    }
+
+    try {
+      const { data } = await Axios.get(refreshTokenEndpoint, {
+        params: { refresh_token: params.refresh_token },
+      });
+
+      const access_token = data.access_token;
+      const expires_in = data.expires_in || 3600;
+      const updated = {
+        access_token,
+        // Spotify may rotate the refresh token; keep the old one otherwise.
+        refresh_token: data.refresh_token || params.refresh_token,
+        expires_at: Date.now() + expires_in * 1000,
+      };
+      saveSpotifyHashParams(updated);
+
+      spotifyWebApi.setAccessToken(access_token);
+      this.setState({ access_token, showSessionExpiryDialog: false });
+
+      // Ensure the user is bootstrapped — covers the case where the initial
+      // load happened with an already-expired token.
+      if (!this.state.user_id) {
+        const user = await Axios.get('https://api.spotify.com/v1/me', {
+          headers: { Authorization: `Bearer ${access_token}` },
         });
-      }, 3600 * 1000);
+        this.setState({
+          user_id: user.data.id,
+          user_name: user.data.display_name,
+        });
+      }
+
+      this.scheduleTokenRefresh();
+    } catch (error) {
+      // The refresh token itself was rejected (e.g. revoked). This is the only
+      // case where the user genuinely needs to log in again.
+      console.error('Spotify token refresh failed', error);
+      this.setState({ showSessionExpiryDialog: true });
     }
   }
 
@@ -401,8 +484,8 @@ class App extends React.Component {
         <Dialog maxWidth='md' open={this.state.showSessionExpiryDialog}>
           <DialogTitle>Oops!</DialogTitle>
           <DialogContent>
-            Your Spotify session has expired. You can refresh your session for
-            another hour by logging in again.
+            We couldn't automatically refresh your Spotify session. Please log
+            in again to continue.
           </DialogContent>
           <DialogActions>
             <Button onClick={this.handleLogout.bind(this)} variant='outlined'>

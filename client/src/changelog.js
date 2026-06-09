@@ -1,5 +1,19 @@
 const changelog = [
   {
+    version: "1.3.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Spotify sessions now refresh automatically in the background — no more hourly 'session expired' interruptions or forced re-logins.",
+      },
+      {
+        type: "bugfix",
+        desc: "Wired up the previously-unused token refresh flow: access tokens renew ~5 minutes before expiry and on app load if stale, and the player keeps working seamlessly across refreshes.",
+      },
+    ],
+  },
+  {
     version: "1.2.0",
     date: "11/15/25",
     changes: [
