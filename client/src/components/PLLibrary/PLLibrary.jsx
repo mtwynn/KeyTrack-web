@@ -460,4 +460,7 @@ let PLLibrary = (props) => {
     </>
   );
 };
-export default PLLibrary;
+// Memoized so toggling unrelated app-level state (e.g. opening the Set drawer)
+// doesn't re-render the whole library + playlist table. App passes stable props
+// (bound methods + state that doesn't change on those toggles).
+export default React.memo(PLLibrary);

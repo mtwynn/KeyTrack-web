@@ -84,6 +84,36 @@ const Wordmark = ({ variant, style }) => (
   </Typography>
 );
 
+// Stable style objects so the player isn't handed new props every render.
+const PLAYER_WRAP_STYLE = {
+  position: 'fixed',
+  bottom: 0,
+  left: 0,
+  width: '100vw',
+  zIndex: 9999,
+};
+const PLAYER_STYLES = {
+  activeColor: '#1ED760',
+  loaderColor: '#1ED760',
+  sliderColor: '#1ED760',
+};
+
+// Memoized so the Spotify Web Playback player only re-renders (and never
+// reconnects) when its own props change — not on every unrelated App re-render
+// like opening a drawer or dialog.
+const BottomPlayer = React.memo(({ token, uris, play }) => (
+  <div style={PLAYER_WRAP_STYLE}>
+    <SpotifyPlayer
+      token={token}
+      uris={uris}
+      styles={PLAYER_STYLES}
+      play={play}
+      showSaveIcon={true}
+      magnifySliderOnHover={true}
+    />
+  </div>
+));
+
 class App extends React.Component {
   constructor(props) {
     super(props);
@@ -826,28 +856,11 @@ class App extends React.Component {
 
           {/* Spotify Player - always visible at bottom */}
           {loggedIn && (
-            <div
-              style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                width: '100vw',
-                zIndex: 9999,
-              }}
-            >
-              <SpotifyPlayer
-                token={this.state.access_token}
-                uris={this.state.player.uris}
-                styles={{
-                  activeColor: '#1ED760',
-                  loaderColor: '#1ED760',
-                  sliderColor: '#1ED760',
-                }}
-                play={this.state.player.isPlaying}
-                showSaveIcon={true}
-                magnifySliderOnHover={true}
-              />
-            </div>
+            <BottomPlayer
+              token={this.state.access_token}
+              uris={this.state.player.uris}
+              play={this.state.player.isPlaying}
+            />
           )}
         </div>
       </ThemeProvider>
