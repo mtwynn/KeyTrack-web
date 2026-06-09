@@ -272,6 +272,8 @@ let Playlist = (props) => {
   const [showFilters, setShowFilters] = React.useState(!isMobile); // Collapsed on mobile by default
   let [searchItems, setSearchItems] = React.useState(allItems);
   let [chordProgressions, setChordProgressions] = React.useState({});
+  // Track whose key is "anchored" for harmonic-mixing highlighting (or null).
+  const [harmonicAnchorId, setHarmonicAnchorId] = React.useState(null);
 
   let topRef = React.createRef();
 
@@ -313,6 +315,18 @@ let Playlist = (props) => {
         return null;
       }
     }
+  };
+
+  // Camelot code of the anchored track, derived from its key.
+  const anchorKey = harmonicAnchorId ? getKey(harmonicAnchorId) : null;
+  const harmonicAnchorCamelot = anchorKey
+    ? KeyMap[anchorKey.key].camelot[anchorKey.mode]
+    : null;
+
+  const toggleHarmonicAnchor = (item) => {
+    setHarmonicAnchorId((prev) =>
+      prev === item.track.id ? null : item.track.id
+    );
   };
 
   useEffect(() => {
@@ -763,11 +777,34 @@ let Playlist = (props) => {
           </Collapse>
         </AppBar>
 
-        <div style={{ 
-          paddingBottom: isMobile ? "180px" : "63px", 
+        <div style={{
+          paddingBottom: isMobile ? "180px" : "63px",
           overflowX: isMobile ? "auto" : "visible",
           overflowY: "visible"
         }}>
+          {harmonicAnchorCamelot && (
+            <Box
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 16px",
+                backgroundColor: "#f0fbf4",
+                borderBottom: "1px solid #cdeed7",
+              }}
+            >
+              <Typography variant="body2" style={{ fontWeight: 600 }}>
+                🎚 Harmonic matches for {harmonicAnchorCamelot} — compatible
+                tracks highlighted, others dimmed
+              </Typography>
+              <Chip
+                size="small"
+                label="Clear"
+                onClick={() => setHarmonicAnchorId(null)}
+                onDelete={() => setHarmonicAnchorId(null)}
+              />
+            </Box>
+          )}
           <Table>
             <TableHead ref={topRef}>
               <TableRow>
@@ -802,16 +839,19 @@ let Playlist = (props) => {
                   return aBPM - bBPM;
                 })
                 .map((item) => (
-                  <Row 
-                    item={item} 
-                    userId={props.userId} 
-                    key={item.track.id} 
-                    db={db} 
-                    chordProgressions={chordProgressions} 
-                    handleRowClick={handleRowClick} 
+                  <Row
+                    item={item}
+                    userId={props.userId}
+                    key={item.track.id}
+                    db={db}
+                    chordProgressions={chordProgressions}
+                    handleRowClick={handleRowClick}
                     getKey={getKey}
                     isMobile={isMobile}
                     isTablet={isTablet}
+                    harmonicAnchorId={harmonicAnchorId}
+                    harmonicAnchorCamelot={harmonicAnchorCamelot}
+                    onToggleAnchor={toggleHarmonicAnchor}
                   />
                 ))}
             </TableBody>

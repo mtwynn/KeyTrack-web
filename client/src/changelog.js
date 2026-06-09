@@ -1,5 +1,19 @@
 const changelog = [
   {
+    version: "1.5.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Harmonic mixing: click any track's key to highlight every harmonically compatible track in the playlist (same key, adjacent on the Camelot wheel, or relative major/minor) and dim the rest.",
+      },
+      {
+        type: "feature",
+        desc: "Color-coded keys — each key is now shown as a colored Camelot-wheel chip for faster at-a-glance scanning.",
+      },
+    ],
+  },
+  {
     version: "1.4.0",
     date: "06/09/26",
     changes: [
