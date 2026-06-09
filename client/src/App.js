@@ -4,9 +4,19 @@ import './App.css';
 
 import Spotify from 'spotify-web-api-js';
 import {
+  AppBar,
+  Avatar,
+  Box,
   Button,
+  Card,
+  CardActionArea,
   Chip,
+  Container,
+  CssBaseline,
+  Divider,
+  Drawer,
   Grid,
+  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,11 +26,25 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Switch,
+  Toolbar,
   Typography,
-  withStyles,
 } from '@material-ui/core';
+import { ThemeProvider } from '@material-ui/core/styles';
 
-import { Build, Receipt, SettingsApplications } from '@material-ui/icons';
+import {
+  Brightness4,
+  Brightness7,
+  Build,
+  ExitToApp,
+  GraphicEq,
+  LibraryMusic,
+  Menu as MenuIcon,
+  MusicNote,
+  Receipt,
+  SettingsApplications,
+  Tune,
+} from '@material-ui/icons';
 import FadeIn from 'react-fade-in';
 
 import changelog from './changelog.js';
@@ -28,12 +52,11 @@ import CurrentSong from './components/CurrentSong/CurrentSong';
 import PLLibrary from './components/PLLibrary/PLLibrary';
 import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
+import SpotifyIcon from './components/SpotifyIcon';
+import { makeAppTheme, THEME_STORAGE_KEY } from './theme';
 
 // Utils
 import { getHashParams, saveSpotifyHashParams } from './utils/utils';
-
-// Assets
-import { ReactComponent as SpotifyLogo } from '../src/assets/login/spotify.svg';
 
 const spotifyWebApi = new Spotify();
 
@@ -51,6 +74,13 @@ let refreshTokenEndpoint = isProduction
 // calls never hit a window where the token is dead.
 const REFRESH_LEAD_MS = 5 * 60 * 1000;
 
+// Brand wordmark with the "Key" in Spotify green.
+const Wordmark = ({ variant, style }) => (
+  <Typography variant={variant} style={{ fontWeight: 800, ...style }}>
+    <span style={{ color: '#1ED760' }}>Key</span>Track
+  </Typography>
+);
+
 class App extends React.Component {
   constructor(props) {
     super(props);
@@ -61,6 +91,11 @@ class App extends React.Component {
     this.state = {
       openChangelog: false,
       showKeyCalculator: false,
+      drawerOpen: false,
+      themeMode:
+        window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark'
+          ? 'dark'
+          : 'light',
       spotify: {
         loggedIn: spotifyParams.access_token ? true : false,
         nowPlaying: {
@@ -82,6 +117,7 @@ class App extends React.Component {
 
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
+    this.toggleTheme = this.toggleTheme.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
     this.scheduleTokenRefresh = this.scheduleTokenRefresh.bind(this);
@@ -190,6 +226,12 @@ class App extends React.Component {
   }
 
   async getUserPlaylists() {
+    // Toggle closed if already open.
+    if (this.state.showPlaylists) {
+      this.setState({ showPlaylists: false });
+      return;
+    }
+
     let allPlaylists = [];
     let offset = 50;
     let response = await spotifyWebApi.getUserPlaylists(this.state.user_id, {
@@ -210,7 +252,7 @@ class App extends React.Component {
     }
 
     this.setState({
-      showPlaylists: !this.state.showPlaylists,
+      showPlaylists: true,
       pllibrary: allPlaylists,
     });
   }
@@ -219,6 +261,12 @@ class App extends React.Component {
     this.setState({
       showKeyCalculator: !this.state.showKeyCalculator,
     });
+  }
+
+  toggleTheme() {
+    const themeMode = this.state.themeMode === 'dark' ? 'light' : 'dark';
+    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+    this.setState({ themeMode });
   }
 
   updatePlayer(uris, isPlaying) {
@@ -263,224 +311,451 @@ class App extends React.Component {
     localStorage.removeItem('spotify_hash_params');
   }
 
-  render() {
+  // A small feature callout used on the landing hero.
+  renderHighlight(icon, label, sub) {
     return (
-      <div className='App m-div'>
-        <FadeIn transitionDuration={1000}>
-          <div className='login'>
-            {this.state.spotify.loggedIn ? (
-              <SpotifyLogo
-                className='logo-spotify'
-                onClick={this.handleLogout.bind(this)}
-              />
-            ) : (
-              <SpotifyLogo
-                className='logo'
-                onClick={() => {
-                  if (!this.state.spotify.loggedIn) {
-                    window.location.href = spotifyLoginEndpoint;
-                  }
-                }}
-              />
-            )}
-          </div>
+      <Grid item xs={4}>
+        {icon}
+        <Typography variant="subtitle2" style={{ fontWeight: 700 }}>
+          {label}
+        </Typography>
+        <Typography variant="caption" color="textSecondary">
+          {sub}
+        </Typography>
+      </Grid>
+    );
+  }
 
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={12} md={this.state.showPlaylists ? 4 : 12}>
-              <div className='current-song m-div'>
-                <CurrentSong token={this.state.access_token} />
-              </div>
-              <div className='m-div'>
-                <Button
-                  variant='contained'
-                  onClick={this.getUserPlaylists}
-                  disabled={!this.state.spotify.loggedIn}
-                  fullWidth
-                  style={{ maxWidth: '300px' }}
-                >
-                  {this.state.showPlaylists
-                    ? 'Close Playlist Library'
-                    : 'Open Playlist Library'}
-                </Button>
-              </div>
-
-              <div className='m-div'>
-                <Button 
-                  variant='contained' 
-                  onClick={this.openKeyCalculator}
-                  fullWidth
-                  style={{ maxWidth: '300px' }}
-                >
-                  Key Calculator
-                </Button>
-              </div>
-            </Grid>
-
-            {this.state.showPlaylists ? (
-              <Grid item xs={12} sm={12} md={8}>
-                <FadeIn transitionDuration={1000}>
-                  <PLLibrary
-                    token={this.state.access_token}
-                    pllibrary={this.state.pllibrary}
-                    userId={this.state.user_id}
-                    updatePlayer={this.updatePlayer}
-                  />
-                </FadeIn>
-              </Grid>
-            ) : null}
-          </Grid>
-          {this.state.showKeyCalculator ? (
-            <FadeIn transitionDuration={1000}>
-              <KeyCalculator
-                open={this.state.showKeyCalculator}
-                onClose={this.openKeyCalculator}
-              />
-            </FadeIn>
-          ) : null}
-          <div className='m-div'>
-            <Typography variant='overline'>Powered by Spotify</Typography>
-          </div>
-          <div className='m-div'>
-            <Typography variant='caption'>Made by Tam Nguyen</Typography>
-          </div>
-          {this.state.showPlaylists && (
-            <>
-              <Chip
-                label={'v' + changelog[0].version}
-                className='version-label'
-              />
-
-              <Chip
-                className='changelog'
-                style={{ padding: '0.3rem' }}
-                icon={<Receipt />}
-                label='Changelog'
-                onClick={() => {
-                  this.setState({
-                    openChangelog: true,
-                  });
-                }}
-              />
-            </>
-          )}
-        </FadeIn>
-
-        {!this.state.showPlaylists && (
-          <>
-            <Chip
-              label={'v' + changelog[0].version}
-              className='version-label'
-            />
-
-            <Chip
-              className='changelog'
-              style={{ padding: '0.3rem' }}
-              icon={<Receipt />}
-              label='Changelog'
-              onClick={() => {
-                this.setState({
-                  openChangelog: true,
-                });
-              }}
-            />
-          </>
-        )}
-        <Dialog
-          fullWidth={true}
-          maxWidth='md'
-          open={this.state.openChangelog}
-          onClose={this.handleCloseChangelog.bind(this)}
+  // An action tile in the logged-in dashboard.
+  renderTile(icon, label, sub, onClick, active, always) {
+    return (
+      <Grid item xs={12} sm={4}>
+        <Card
+          elevation={active ? 6 : 1}
+          style={{
+            height: '100%',
+            border: active ? '2px solid #1ED760' : '2px solid transparent',
+          }}
         >
-          <DialogTitle>Changelog</DialogTitle>
-          <DialogContent>
-            {changelog.map((entry) => {
-              return (
-                <DialogContentText key={entry.version}>
-                  <div>
-                    <Typography className='changelog-entry-header' variant='h6'>
-                      v{entry.version}
-                    </Typography>
-                    <Typography
-                      className='changelog-entry-header'
-                      variant='button'
-                    >
-                      {entry.date}
-                    </Typography>
-                  </div>
-                  <List dense={true}>
-                    {entry.changes.map((element, idx) => {
-                      return (
-                        <ListItem key={idx}>
-                          <ListItemIcon>
-                            {element.type === 'bugfix' ? (
-                              <Build />
-                            ) : (
-                              <SettingsApplications />
-                            )}
-                          </ListItemIcon>
-                          <ListItemText primary={element.desc} />
-                        </ListItem>
-                      );
-                    })}
-                  </List>
-                </DialogContentText>
-              );
-            })}
-          </DialogContent>
-
-          <DialogActions>
-            <Button
-              onClick={this.handleCloseChangelog.bind(this)}
-              color='primary'
+          <CardActionArea
+            onClick={onClick}
+            style={{ padding: '22px 12px', textAlign: 'center', height: '100%' }}
+          >
+            {icon}
+            <Typography
+              variant="subtitle1"
+              style={{ fontWeight: 700, marginTop: 6 }}
             >
-              Close
-            </Button>
-          </DialogActions>
-        </Dialog>
+              {label}
+            </Typography>
+            <Typography variant="caption" color="textSecondary">
+              {sub}
+            </Typography>
+            {always && (
+              <div>
+                <Chip
+                  size="small"
+                  label="No login needed"
+                  style={{ marginTop: 8 }}
+                />
+              </div>
+            )}
+          </CardActionArea>
+        </Card>
+      </Grid>
+    );
+  }
 
-        <Dialog maxWidth='md' open={this.state.showSessionExpiryDialog}>
-          <DialogTitle>Oops!</DialogTitle>
-          <DialogContent>
-            We couldn't automatically refresh your Spotify session. Please log
-            in again to continue.
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={this.handleLogout.bind(this)} variant='outlined'>
-              Logout
-            </Button>
-            <Button
-              onClick={() => {
-                window.location.href = spotifyLoginEndpoint;
-              }}
+  renderFooter(version) {
+    return (
+      <Box style={{ textAlign: 'center', padding: '20px 0' }}>
+        <Typography variant="overline" color="textSecondary">
+          Powered by Spotify · Made by Tam Nguyen · {version}
+        </Typography>
+        <div>
+          <Button
+            size="small"
+            color="primary"
+            startIcon={<Receipt />}
+            onClick={() => this.setState({ openChangelog: true })}
+          >
+            Changelog
+          </Button>
+        </div>
+      </Box>
+    );
+  }
+
+  // Logged-out landing: hero with value prop, login CTA, and the always-on
+  // Key Calculator.
+  renderLanding(themeToggle, version) {
+    const iconStyle = { fontSize: 30, color: '#1ED760' };
+    return (
+      <>
+        <div style={{ position: 'absolute', top: 12, right: 12 }}>
+          {themeToggle}
+        </div>
+        <FadeIn transitionDuration={800}>
+          <Container maxWidth="sm">
+            <Box
               style={{
-                backgroundColor: '#1ED760',
+                minHeight: '86vh',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center',
+                gap: 22,
               }}
-              color='primary'
-              variant='contained'
             >
-              Login
-            </Button>
-          </DialogActions>
-        </Dialog>
+              <Wordmark variant="h2" style={{ letterSpacing: '-1px' }} />
+              <Typography
+                variant="h6"
+                color="textSecondary"
+                style={{ maxWidth: 360 }}
+              >
+                Find keys &amp; BPMs, mix in harmony, and build your sets.
+              </Typography>
 
-        {/* Spotify Player - always visible at bottom */}
-        {this.state.spotify.loggedIn && (
-          <div style={{ position: 'fixed', bottom: 0, left: 0, width: '100vw', zIndex: 9999 }}>
-            <SpotifyPlayer
-              token={this.state.access_token}
-              uris={this.state.player.uris}
-              styles={{
-                activeColor: '#1ED760',
-                loaderColor: '#1ED760',
-                sliderColor: '#1ED760',
-              }}
-              play={this.state.player.isPlaying}
-              showSaveIcon={true}
-              magnifySliderOnHover={true}
+              <Grid
+                container
+                spacing={2}
+                style={{ maxWidth: 420, margin: '4px 0' }}
+              >
+                {this.renderHighlight(
+                  <GraphicEq style={iconStyle} />,
+                  'Harmonic mixing',
+                  'Camelot-wheel matches'
+                )}
+                {this.renderHighlight(
+                  <MusicNote style={iconStyle} />,
+                  'Key & BPM',
+                  'Instant track analysis'
+                )}
+                {this.renderHighlight(
+                  <LibraryMusic style={iconStyle} />,
+                  'Crate analysis',
+                  'Sort & filter playlists'
+                )}
+              </Grid>
+
+              <Button
+                variant="contained"
+                color="primary"
+                size="large"
+                startIcon={<SpotifyIcon />}
+                style={{ borderRadius: 28, padding: '10px 28px', fontWeight: 700 }}
+                onClick={() => {
+                  window.location.href = spotifyLoginEndpoint;
+                }}
+              >
+                Log in with Spotify
+              </Button>
+              <Button
+                variant="outlined"
+                size="large"
+                style={{ borderRadius: 28 }}
+                onClick={this.openKeyCalculator}
+              >
+                Open Key Calculator
+              </Button>
+              <Typography variant="caption" color="textSecondary">
+                No account needed for the Key Calculator
+              </Typography>
+            </Box>
+            {this.renderFooter(version)}
+          </Container>
+        </FadeIn>
+      </>
+    );
+  }
+
+  // Logged-in dashboard: a minimal top bar (wordmark + hamburger) and the
+  // primary action tiles. Secondary controls + Current Song live in the drawer.
+  renderHome(version) {
+    const tileIcon = { fontSize: 40, color: '#1ED760' };
+    return (
+      <>
+        <AppBar position="static" color="default" elevation={1}>
+          <Toolbar>
+            <Wordmark variant="h6" style={{ flexGrow: 1 }} />
+            <IconButton
+              edge="end"
+              color="inherit"
+              aria-label="menu"
+              onClick={() => this.setState({ drawerOpen: true })}
+            >
+              <MenuIcon />
+            </IconButton>
+          </Toolbar>
+        </AppBar>
+
+        <Container style={{ paddingTop: 24, paddingBottom: 130 }}>
+          <Grid container spacing={2} justify="center">
+            {this.renderTile(
+              <LibraryMusic style={tileIcon} />,
+              this.state.showPlaylists ? 'Close Library' : 'Playlist Library',
+              'Analyze your crates',
+              this.getUserPlaylists,
+              this.state.showPlaylists
+            )}
+            {this.renderTile(
+              <Tune style={tileIcon} />,
+              'Key Calculator',
+              'Convert any key',
+              this.openKeyCalculator,
+              false,
+              true
+            )}
+          </Grid>
+
+          {this.state.showPlaylists && (
+            <Box style={{ marginTop: 24 }}>
+              <FadeIn transitionDuration={600}>
+                <PLLibrary
+                  token={this.state.access_token}
+                  pllibrary={this.state.pllibrary}
+                  userId={this.state.user_id}
+                  updatePlayer={this.updatePlayer}
+                />
+              </FadeIn>
+            </Box>
+          )}
+        </Container>
+      </>
+    );
+  }
+
+  // Right-side slide-out (hamburger) drawer. Holds the compact Current Song
+  // widget plus the secondary controls (theme, changelog, logout) that would
+  // otherwise clutter the top bar. Same on desktop and mobile.
+  renderDrawer(isDark, version) {
+    const close = () => this.setState({ drawerOpen: false });
+    return (
+      <Drawer anchor="right" open={this.state.drawerOpen} onClose={close}>
+        <Box
+          role="presentation"
+          style={{
+            width: 300,
+            maxWidth: '85vw',
+            padding: 16,
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 12,
+            }}
+          >
+            <Avatar style={{ backgroundColor: '#1ED760' }}>
+              {this.state.user_name
+                ? this.state.user_name.charAt(0).toUpperCase()
+                : '?'}
+            </Avatar>
+            <div>
+              <Typography variant="subtitle2" style={{ fontWeight: 700 }}>
+                {this.state.user_name || 'Spotify user'}
+              </Typography>
+              <Typography variant="caption" color="textSecondary">
+                Connected to Spotify
+              </Typography>
+            </div>
+          </Box>
+
+          <Divider />
+
+          <Box style={{ padding: '14px 0' }}>
+            <CurrentSong token={this.state.access_token} />
+          </Box>
+
+          <Divider />
+
+          <List>
+            <ListItem>
+              <ListItemIcon>
+                {isDark ? <Brightness7 /> : <Brightness4 />}
+              </ListItemIcon>
+              <ListItemText primary="Dark mode" />
+              <Switch
+                edge="end"
+                color="primary"
+                checked={isDark}
+                onChange={this.toggleTheme}
+              />
+            </ListItem>
+            <ListItem
+              button
+              onClick={() =>
+                this.setState({ openChangelog: true, drawerOpen: false })
+              }
+            >
+              <ListItemIcon>
+                <Receipt />
+              </ListItemIcon>
+              <ListItemText primary="Changelog" secondary={version} />
+            </ListItem>
+          </List>
+
+          <Divider />
+
+          <List>
+            <ListItem button onClick={this.handleLogout.bind(this)}>
+              <ListItemIcon>
+                <ExitToApp />
+              </ListItemIcon>
+              <ListItemText primary="Logout" />
+            </ListItem>
+          </List>
+
+          <Box style={{ marginTop: 'auto', textAlign: 'center', paddingTop: 12 }}>
+            <Typography variant="caption" color="textSecondary">
+              Powered by Spotify · Made by Tam Nguyen
+            </Typography>
+          </Box>
+        </Box>
+      </Drawer>
+    );
+  }
+
+  render() {
+    const theme = makeAppTheme(this.state.themeMode);
+    const isDark = this.state.themeMode === 'dark';
+    const loggedIn = this.state.spotify.loggedIn;
+    const version = 'v' + changelog[0].version;
+
+    const themeToggle = (
+      <IconButton
+        onClick={this.toggleTheme}
+        color="inherit"
+        title="Toggle dark mode"
+        aria-label="toggle theme"
+      >
+        {isDark ? <Brightness7 /> : <Brightness4 />}
+      </IconButton>
+    );
+
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <div className="App">
+          {loggedIn ? (
+            <>
+              {this.renderHome(version)}
+              {this.renderDrawer(isDark, version)}
+            </>
+          ) : (
+            this.renderLanding(themeToggle, version)
+          )}
+
+          {this.state.showKeyCalculator && (
+            <KeyCalculator
+              open={this.state.showKeyCalculator}
+              onClose={this.openKeyCalculator}
             />
-          </div>
-        )}
-      </div>
+          )}
+
+          <Dialog
+            fullWidth={true}
+            maxWidth="md"
+            open={this.state.openChangelog}
+            onClose={this.handleCloseChangelog.bind(this)}
+          >
+            <DialogTitle>Changelog</DialogTitle>
+            <DialogContent>
+              {changelog.map((entry) => {
+                return (
+                  <DialogContentText key={entry.version} component="div">
+                    <div>
+                      <Typography variant="h6">v{entry.version}</Typography>
+                      <Typography variant="button" color="textSecondary">
+                        {entry.date}
+                      </Typography>
+                    </div>
+                    <List dense={true}>
+                      {entry.changes.map((element, idx) => {
+                        return (
+                          <ListItem key={idx}>
+                            <ListItemIcon>
+                              {element.type === 'bugfix' ? (
+                                <Build />
+                              ) : (
+                                <SettingsApplications />
+                              )}
+                            </ListItemIcon>
+                            <ListItemText primary={element.desc} />
+                          </ListItem>
+                        );
+                      })}
+                    </List>
+                  </DialogContentText>
+                );
+              })}
+            </DialogContent>
+
+            <DialogActions>
+              <Button
+                onClick={this.handleCloseChangelog.bind(this)}
+                color="primary"
+              >
+                Close
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          <Dialog maxWidth="md" open={this.state.showSessionExpiryDialog}>
+            <DialogTitle>Oops!</DialogTitle>
+            <DialogContent>
+              We couldn't automatically refresh your Spotify session. Please log
+              in again to continue.
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={this.handleLogout.bind(this)} variant="outlined">
+                Logout
+              </Button>
+              <Button
+                onClick={() => {
+                  window.location.href = spotifyLoginEndpoint;
+                }}
+                color="primary"
+                variant="contained"
+              >
+                Login
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Spotify Player - always visible at bottom */}
+          {loggedIn && (
+            <div
+              style={{
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                width: '100vw',
+                zIndex: 9999,
+              }}
+            >
+              <SpotifyPlayer
+                token={this.state.access_token}
+                uris={this.state.player.uris}
+                styles={{
+                  activeColor: '#1ED760',
+                  loaderColor: '#1ED760',
+                  sliderColor: '#1ED760',
+                }}
+                play={this.state.player.isPlaying}
+                showSaveIcon={true}
+                magnifySliderOnHover={true}
+              />
+            </div>
+          )}
+        </div>
+      </ThemeProvider>
     );
   }
 }

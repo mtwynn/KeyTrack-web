@@ -1,5 +1,31 @@
 const changelog = [
   {
+    version: "1.6.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Redesigned the app: a proper landing page with a clear 'Log in with Spotify' button and feature highlights, and a clean dashboard with action tiles once you're in.",
+      },
+      {
+        type: "feature",
+        desc: "Added a light/dark theme toggle (your choice is remembered).",
+      },
+      {
+        type: "feature",
+        desc: "Tucked the secondary controls into a slide-out menu (theme, changelog, logout) to keep the top bar clean on desktop and mobile.",
+      },
+      {
+        type: "feature",
+        desc: "Current Song is now a compact widget in the slide-out menu — quick to reach without taking over the screen.",
+      },
+      {
+        type: "feature",
+        desc: "The Key Calculator is now available without logging in; Current Song and Playlist Library are clearly gated behind Spotify login.",
+      },
+    ],
+  },
+  {
     version: "1.5.1",
     date: "06/09/26",
     changes: [
