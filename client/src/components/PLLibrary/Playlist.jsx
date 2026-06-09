@@ -45,7 +45,6 @@ import KeyFilterPicker from "./KeyFilterPicker";
 
 initializeApp(firebaseConfig);
 
-const qualities = ["Major", "Minor"];
 const musicalKeys = [
   "C",
   "C♯/D♭",
@@ -237,15 +236,6 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-function getStyles(attr, attrFilter, theme) {
-  return {
-    fontWeight:
-      attrFilter.indexOf(attr) === -1
-        ? theme.typography.fontWeightRegular
-        : theme.typography.fontWeightMedium,
-  };
-}
-
 const StyledTableCell = withStyles((theme) => ({
   head: {
     backgroundColor: "#1ED760",
@@ -267,7 +257,6 @@ let Playlist = (props) => {
 
   const [search, setSearch] = React.useState("");
   const [wheel, setWheel] = React.useState("Musical");
-  const [qualityFilter, setQualityFilter] = React.useState([]);
   const [keyFilter, setKeyFilter] = React.useState([]);
   const [minBpm, setMinBpm] = React.useState("");
   const [maxBpm, setMaxBpm] = React.useState("");
@@ -369,7 +358,6 @@ let Playlist = (props) => {
 
     if (
       keyFilter.length === 0 &&
-      qualityFilter.length === 0 &&
       search === "" &&
       minBpm === "" &&
       maxBpm === ""
@@ -400,20 +388,6 @@ let Playlist = (props) => {
               return keyFilter.includes(camelot);
             });
           }
-          if (qualityFilter.length !== 0) {
-            filteredItems = filteredItems.filter((item) => {
-              let trackKey = getKey(item.track.id);
-              let mappedQuality =
-                trackKey || trackKey === 0
-                  ? trackKey.mode === 1
-                    ? "Major"
-                    : "Minor"
-                  : "N/A";
-
-              return qualityFilter.includes(mappedQuality);
-            });
-          }
-
           if (minBpm !== "") {
             let bpmNum = parseInt(minBpm);
             filteredItems = filteredItems.filter((item) => {
@@ -440,24 +414,17 @@ let Playlist = (props) => {
       );
     }
     // `wheel` only changes the displayed notation, not which tracks match.
-  }, [search, keyFilter, qualityFilter, minBpm, maxBpm]);
+  }, [search, keyFilter, minBpm, maxBpm]);
 
   const handleFilterChange = (event, type) => {
     const {
       target: { value },
     } = event;
 
-    let setValue;
-
-    if (type === "quality") {
-      setValue = typeof value === "string" ? value.split(",") : value;
-    } else {
-      setValue = value;
-    }
+    const setValue = value;
 
     let funcMap = {
       wheel: setWheel,
-      quality: setQualityFilter,
       minBpm: _.debounce(setMinBpm, 500),
       maxBpm: _.debounce(setMaxBpm, 500),
     };
@@ -467,7 +434,6 @@ let Playlist = (props) => {
 
   const clearFilters = () => {
     setKeyFilter([]);
-    setQualityFilter([]);
     setMinBpm("");
     setMaxBpm("");
     document.getElementById("minBpm").value = "";
@@ -616,65 +582,6 @@ let Playlist = (props) => {
                   Filter by Key{keyFilter.length ? ` (${keyFilter.length})` : ""}
                 </Button>
               </FormControl>
-              {true && (
-                <FormControl className={classes.filter}>
-                  <InputLabel id="demo-simple-select-label">Quality</InputLabel>
-                  <Select
-                    label="Quality"
-                    labelId="demo-simple-select-label"
-                    id="demo-simple-select"
-                    value={qualityFilter}
-                    multiple
-                    onChange={(e) => handleFilterChange(e, "quality")}
-                    renderValue={(selected) => (
-                      <div className={classes.chips}>
-                        {selected.map((value) => (
-                          <Chip
-                            key={value}
-                            label={value}
-                            className={classes.chip}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    classes={classes.select}
-                    inputProps={{
-                      classes: {
-                        icon: classes.icon,
-                        root: classes.root,
-                      },
-                    }}
-                    MenuProps={{
-                      anchorOrigin: {
-                        vertical: "bottom",
-                        horizontal: "left"
-                      },
-                      transformOrigin: {
-                        vertical: "top",
-                        horizontal: "left"
-                      },
-                      getContentAnchorEl: null,
-                      PaperProps: {
-                        style: {
-                          maxHeight: isMobile ? 250 : 400,
-                        }
-                      }
-                    }}
-                    input={<Input />}
-                  >
-                    {qualities.map((quality) => (
-                      <MenuItem
-                        key={quality}
-                        value={quality}
-                        style={getStyles(quality, qualityFilter, theme)}
-                      >
-                        {quality}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-
               <FormControl className={classes.minFilter}>
                 <InputLabel id="demo-simple-select-label">BPM: </InputLabel>
               </FormControl>

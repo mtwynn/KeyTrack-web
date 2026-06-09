@@ -19,6 +19,14 @@ const changelog = [
         type: "feature",
         desc: "Collapsed the Musical / Camelot / Open key columns into a single Key column whose notation follows the Notation selector, for a cleaner, less cluttered table.",
       },
+      {
+        type: "feature",
+        desc: "Removed the redundant Quality filter — major/minor is now built into every key picker.",
+      },
+      {
+        type: "bugfix",
+        desc: "Opening a playlist crate now shows a clear 'Loading crate…' indicator (plus a spinner on the card you clicked), and never gets stuck if a request fails.",
+      },
     ],
   },
   {
