@@ -15,8 +15,6 @@ const cookieParser = require('cookie-parser');
 
 const spotify_client_id = process.env.SPOTIFY_ID; // Your client id
 const spotify_client_secret = process.env.SPOTIFY_SECRET; // Your secret
-const soundcloud_client_id = process.env.SOUNDCLOUD_ID;
-const soundcloud_secret = process.env.SOUNDCLOUD_SECRET;
 
 const isProduction = process.env.NODE_ENV === 'production';
 const redirect_uri = isProduction
@@ -153,8 +151,6 @@ app.get('/callback', function (req, res) {
         );
       }
     });
-  } else {
-    // Soundcloud flow
   }
 });
 
@@ -197,24 +193,5 @@ app.get('/refresh_token', function (req, res) {
   });
 });
 
-app.get('/soundcloud/login', function (req, res) {
-  const state = generateRandomString(16);
-
-  // https://api.soundcloud.com/connect?client_id=iCyQg0vibTPEFK5kZNgdbWhvsZ8iV6Qx&redirect_uri=https://key-track.netlify.app/&response_type=code
-  res.redirect(
-    'https://api.soundcloud.com/connect?' +
-      querystring.stringify({
-        client_id: soundcloud_client_id,
-        redirect_uri: 'https://key-track.netlify.app/',
-        state: state,
-        response_type: 'code',
-      })
-  );
-});
-
 console.log('Listening on 8888');
 app.listen(process.env.PORT || 8888);
-
-// . iCyQg0vibTPEFK5kZNgdbWhvsZ8iV6Qx
-// . R9TSEyiI6agFeG6TujyCT6SAgj4F3SWr
-//   https://key-track.netlify.app/
