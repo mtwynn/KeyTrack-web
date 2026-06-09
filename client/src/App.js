@@ -160,6 +160,7 @@ class App extends React.Component {
     this.reorderSet = this.reorderSet.bind(this);
     this.clearSet = this.clearSet.bind(this);
     this.openSet = this.openSet.bind(this);
+    this.loadSet = this.loadSet.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
     this.scheduleTokenRefresh = this.scheduleTokenRefresh.bind(this);
@@ -346,6 +347,11 @@ class App extends React.Component {
 
   openSet() {
     this.setState({ setOpen: true });
+  }
+
+  // Replace the current set with a loaded saved set.
+  loadSet(entries) {
+    this.setState({ set: entries, setOpen: true });
   }
 
   toggleTheme() {
@@ -852,6 +858,8 @@ class App extends React.Component {
             onReorder={this.reorderSet}
             onRemove={this.removeFromSet}
             onClear={this.clearSet}
+            userId={this.state.user_id}
+            onLoadSet={this.loadSet}
           />
 
           {/* Spotify Player - always visible at bottom */}

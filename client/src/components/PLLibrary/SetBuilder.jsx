@@ -3,9 +3,11 @@ import {
   Box,
   Button,
   Chip,
+  Divider,
   Drawer,
   IconButton,
   Slider,
+  TextField,
   Typography,
   useMediaQuery,
 } from "@material-ui/core";
@@ -16,10 +18,18 @@ import {
   Close,
   Delete,
   DragIndicator,
+  Save,
 } from "@material-ui/icons";
 
 import KeyMap from "../../utils/KeyMap";
 import { camelotColor, compatibleCamelot } from "../../utils/harmonic";
+import {
+  fetchSets,
+  saveSet,
+  updateSet,
+  deleteSet,
+  deserializeTracks,
+} from "../../utils/sets";
 
 const codeOf = (k) => (k ? KeyMap[k.key].camelot[k.mode] : null);
 
@@ -27,12 +37,84 @@ const codeOf = (k) => (k ? KeyMap[k.key].camelot[k.mode] : null);
 // drawer on desktop). Each entry is { item, key } so the set is self-contained
 // and can hold tracks from multiple playlists. Each transition between
 // consecutive tracks is validated for harmonic key compatibility and BPM jump.
-const SetBuilder = ({ open, onClose, set, onReorder, onRemove, onClear }) => {
+const SetBuilder = ({
+  open,
+  onClose,
+  set,
+  onReorder,
+  onRemove,
+  onClear,
+  userId,
+  onLoadSet,
+}) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [dragIndex, setDragIndex] = React.useState(null);
   // Local so dragging the slider only re-renders this panel, never the whole app.
   const [bpmThreshold, setBpmThreshold] = React.useState(6);
+
+  // Saved-set persistence (Firestore).
+  const [savedSets, setSavedSets] = React.useState([]);
+  const [setName, setSetName] = React.useState("");
+  const [loadedSetId, setLoadedSetId] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const refreshSaved = React.useCallback(async () => {
+    if (!userId) return;
+    try {
+      setSavedSets(await fetchSets(userId));
+    } catch (e) {
+      console.error("Failed to load saved sets", e);
+    }
+  }, [userId]);
+
+  React.useEffect(() => {
+    if (open) refreshSaved();
+  }, [open, refreshSaved]);
+
+  const handleSave = async (asNew) => {
+    if (!userId || !setName.trim() || set.length === 0) return;
+    setBusy(true);
+    try {
+      if (!asNew && loadedSetId) {
+        await updateSet(userId, loadedSetId, {
+          name: setName.trim(),
+          bpmThreshold,
+          set,
+        });
+      } else {
+        const ref = await saveSet(userId, {
+          name: setName.trim(),
+          bpmThreshold,
+          set,
+        });
+        setLoadedSetId(ref.id);
+      }
+      await refreshSaved();
+    } catch (e) {
+      console.error("Failed to save set", e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleLoad = (s) => {
+    if (onLoadSet) onLoadSet(deserializeTracks(s.tracks));
+    setLoadedSetId(s.id);
+    setSetName(s.name || "");
+    if (typeof s.bpmThreshold === "number") setBpmThreshold(s.bpmThreshold);
+  };
+
+  const handleDeleteSaved = async (s) => {
+    if (!userId) return;
+    try {
+      await deleteSet(userId, s.id);
+      if (loadedSetId === s.id) setLoadedSetId(null);
+      await refreshSaved();
+    } catch (e) {
+      console.error("Failed to delete set", e);
+    }
+  };
 
   const rows = set.map((entry) => {
     const k = entry.key;
@@ -90,6 +172,7 @@ const SetBuilder = ({ open, onClose, set, onReorder, onRemove, onClear }) => {
           display: "flex",
           flexDirection: "column",
           height: "100%",
+          overflowY: "auto",
         }}
       >
         <Box
@@ -139,7 +222,7 @@ const SetBuilder = ({ open, onClose, set, onReorder, onRemove, onClear }) => {
                 : "All transitions smooth ✓"}
             </Typography>
 
-            <Box style={{ overflowY: "auto", flex: 1 }}>
+            <Box>
               {rows.map((r, i) => (
                 <React.Fragment key={`${r.item.track.id}-${i}`}>
                   <Box
@@ -273,6 +356,102 @@ const SetBuilder = ({ open, onClose, set, onReorder, onRemove, onClear }) => {
               Clear set
             </Button>
           </>
+        )}
+
+        {/* Save the current set */}
+        {set.length > 0 && userId && (
+          <Box style={{ marginTop: 16 }}>
+            <Divider style={{ marginBottom: 12 }} />
+            <Box style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <TextField
+                size="small"
+                variant="outlined"
+                placeholder="Set name"
+                value={setName}
+                onChange={(e) => setSetName(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              {loadedSetId ? (
+                <>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="primary"
+                    disabled={busy || !setName.trim()}
+                    onClick={() => handleSave(false)}
+                  >
+                    Update
+                  </Button>
+                  <Button
+                    size="small"
+                    disabled={busy || !setName.trim()}
+                    onClick={() => handleSave(true)}
+                  >
+                    Save new
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="primary"
+                  startIcon={<Save />}
+                  disabled={busy || !setName.trim()}
+                  onClick={() => handleSave(true)}
+                >
+                  Save
+                </Button>
+              )}
+            </Box>
+          </Box>
+        )}
+
+        {/* Saved sets */}
+        {userId && savedSets.length > 0 && (
+          <Box style={{ marginTop: 20 }}>
+            <Typography variant="overline" color="textSecondary">
+              Saved sets
+            </Typography>
+            {savedSets.map((s) => (
+              <Box
+                key={s.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "4px 0",
+                }}
+              >
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    variant="body2"
+                    style={{
+                      fontWeight: 600,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {s.name}
+                    {loadedSetId === s.id ? " (loaded)" : ""}
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    {(s.tracks || []).length} tracks
+                  </Typography>
+                </Box>
+                <Button size="small" onClick={() => handleLoad(s)}>
+                  Load
+                </Button>
+                <IconButton
+                  size="small"
+                  onClick={() => handleDeleteSaved(s)}
+                  aria-label="delete saved set"
+                >
+                  <Delete fontSize="small" />
+                </IconButton>
+              </Box>
+            ))}
+          </Box>
         )}
       </Box>
     </Drawer>
