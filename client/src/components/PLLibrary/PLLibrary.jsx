@@ -4,6 +4,7 @@ import _ from "underscore";
 import {
   AppBar,
   Avatar,
+  Button,
   IconButton,
   CircularProgress,
   Dialog,
@@ -180,6 +181,8 @@ let PLLibrary = (props) => {
   
   const [loadingPlaylist, setLoadingPlaylist] = React.useState(false);
   const [loadingId, setLoadingId] = React.useState(null);
+  const [loadingAll, setLoadingAll] = React.useState(false);
+  const [allProgress, setAllProgress] = React.useState({ done: 0, total: 0 });
   const [showPlaylist, setShowPlaylist] = React.useState(false);
   const [currPlaylist, setCurrPlaylist] = React.useState(null);
   const [playlistKeys, setPlaylistKeys] = React.useState(null);
@@ -322,6 +325,94 @@ let PLLibrary = (props) => {
     setShowPlaylist(false);
   };
 
+  // --- Cross-playlist search: load every crate's tracks into one virtual
+  // playlist, then reuse the normal Playlist view to search/filter across them.
+  const fetchAllTracks = async (playlistId) => {
+    let items = [];
+    let offset = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const res = await spotifyWebApi.getPlaylistTracks(playlistId, {
+        offset,
+        limit: 100,
+      });
+      items = items.concat(res.items || []);
+      if (!res.next) break;
+      offset += 100;
+    }
+    return items.filter((it) => it.track && it.track.id);
+  };
+
+  const fetchFeatures = async (ids) => {
+    const out = [];
+    for (let i = 0; i < ids.length; i += 100) {
+      const res = await spotifyWebApi.getAudioFeaturesForTracks(
+        ids.slice(i, i + 100)
+      );
+      out.push(...(res.audio_features || []));
+    }
+    return out;
+  };
+
+  // Concurrency-capped map to avoid bursting the Spotify rate limit.
+  const mapWithLimit = async (items, limit, fn) => {
+    const results = new Array(items.length);
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < items.length) {
+        const idx = cursor++;
+        results[idx] = await fn(items[idx], idx);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(limit, items.length) }, worker)
+    );
+    return results;
+  };
+
+  const handleSearchAllCrates = async () => {
+    const playlists = props.pllibrary || [];
+    if (playlists.length === 0) return;
+
+    setAllProgress({ done: 0, total: playlists.length });
+    setLoadingAll(true);
+    try {
+      const perPlaylist = await mapWithLimit(playlists, 4, async (pl) => {
+        const tracks = await fetchAllTracks(pl.id);
+        const features = await fetchFeatures(tracks.map((t) => t.track.id));
+        setAllProgress((p) => ({ ...p, done: p.done + 1 }));
+        return { tracks, features };
+      });
+
+      // Aggregate + dedupe by track id.
+      const seen = new Set();
+      const allTracks = [];
+      const featById = new Map();
+      perPlaylist.forEach(({ tracks, features }) => {
+        tracks.forEach((item) => {
+          if (!seen.has(item.track.id)) {
+            seen.add(item.track.id);
+            allTracks.push(item);
+          }
+        });
+        features.forEach((f) => {
+          if (f) featById.set(f.id, f);
+        });
+      });
+
+      setPlaylistName(`All Crates · ${allTracks.length} tracks`);
+      setPlaylistId("__all_crates__");
+      setPlaylistOwnerId(null); // hides owner-only Recommendations
+      setCurrPlaylist(allTracks);
+      setPlaylistKeys(Array.from(featById.values()));
+      setShowPlaylist(true);
+    } catch (error) {
+      console.error("Failed to load all crates", error);
+    } finally {
+      setLoadingAll(false);
+    }
+  };
+
   return (
     <>
       <Dialog
@@ -363,8 +454,51 @@ let PLLibrary = (props) => {
               </InputAdornment>
             }
           />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<Search />}
+            onClick={handleSearchAllCrates}
+            disabled={!props.pllibrary || props.pllibrary.length === 0}
+            style={{
+              color: "#fff",
+              borderColor: "rgba(255,255,255,0.5)",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            {isMobile ? "All crates" : "Search all crates"}
+          </Button>
         </Toolbar>
       </AppBar>
+
+      <Dialog
+        open={loadingAll}
+        PaperProps={{
+          style: {
+            padding: "28px 44px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 16,
+            borderRadius: 12,
+          },
+        }}
+      >
+        <CircularProgress
+          classes={{ colorPrimary: classes.colorPrimary }}
+          size={64}
+          variant={allProgress.total ? "determinate" : "indeterminate"}
+          value={
+            allProgress.total
+              ? (allProgress.done / allProgress.total) * 100
+              : 0
+          }
+        />
+        <Typography variant="body1" style={{ fontWeight: 600 }}>
+          Loading all crates… {allProgress.done}/{allProgress.total}
+        </Typography>
+      </Dialog>
 
       <Box sx={{ padding: isMobile ? 1 : 2 }}>
         {searchItems.map((playlist) => (
