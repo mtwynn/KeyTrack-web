@@ -360,4 +360,7 @@ let Row = (props) => {
     );
   }
 
-  export default Row;
+  // Memoized so rows skip re-rendering when Playlist re-renders without their
+  // props changing (e.g. when an unrelated app-level dialog opens). Rows still
+  // re-render when the anchor, notation, or chord data they depend on changes.
+  export default React.memo(Row);
