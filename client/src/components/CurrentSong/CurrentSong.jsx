@@ -1,172 +1,139 @@
 import React from "react";
 import PropTypes from "prop-types";
 import {
+  Avatar,
+  Box,
   Button,
-  Card,
-  CardActions,
-  CardContent,
-  CardMedia,
+  Chip,
   CircularProgress,
-  Grid,
   Typography,
-  makeStyles,
-  withStyles,
 } from "@material-ui/core";
+import { Refresh } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 
 import KeyMap from "../../utils/KeyMap";
+import { camelotColor } from "../../utils/harmonic";
 
-const GreenButton = withStyles((theme) => ({
-  root: {
-    color: "#FFFFFF",
-    backgroundColor: "#1ED760",
-    "&:hover": {
-      backgroundColor: "#1DB954",
-    },
-    fontFamily: [
-      "-apple-system",
-      "BlinkMacSystemFont",
-      '"Segoe UI"',
-      "Roboto",
-      '"Helvetica Neue"',
-      "Arial",
-      "sans-serif",
-      '"Apple Color Emoji"',
-      '"Segoe UI Emoji"',
-      '"Segoe UI Symbol"',
-    ].join(","),
-  },
-}))(Button);
-
-const useStyles = makeStyles((theme) => ({
-  root: {
-    maxWidth: "13rem",
-    backgroundColor: "#191414",
-    display: "inline-block",
-  },
-  media: {
-    height: "11rem",
-    width: "11rem",
-    margin: "1rem",
-  },
-  margin: {
-    margin: theme.spacing(1),
-  },
-  center: {
-    justifyContent: "center",
-  },
-  text: {
-    color: "#FFFFFF",
-    fontFamily: [
-      "-apple-system",
-      "BlinkMacSystemFont",
-      '"Segoe UI"',
-      "Roboto",
-      '"Helvetica Neue"',
-      "Arial",
-      "sans-serif",
-      '"Apple Color Emoji"',
-      '"Segoe UI Emoji"',
-      '"Segoe UI Symbol"',
-    ].join(","),
-  },
-}));
-
+// Compact "now playing" widget designed to live in the slide-out drawer on both
+// desktop and mobile. Click Refresh to read the currently playing track and
+// show its key / Camelot / BPM.
 let CurrentSong = (props) => {
-  let [name, setName] = React.useState("Nothing currently playing");
-  let [key, setKey] = React.useState(null);
-  let [camelot, setCamelot] = React.useState(null);
-  let [openKey, setOpenKey] = React.useState(null);
-  let [bpm, setBpm] = React.useState("");
-  let [mode, setMode] = React.useState(-1);
-  let [image, setImage] = React.useState("");
+  const [name, setName] = React.useState("Nothing playing");
+  const [musicalKey, setMusicalKey] = React.useState(null);
+  const [camelot, setCamelot] = React.useState(null);
+  const [bpm, setBpm] = React.useState("");
+  const [mode, setMode] = React.useState(-1);
+  const [image, setImage] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
 
-  let [loading, setLoading] = React.useState(false);
-
-  const classes = useStyles();
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
 
-  const getNowPlaying = () => {
-    setLoading(true);
-    spotifyWebApi.getMyCurrentPlaybackState().then((response) => {
-      try {
-        spotifyWebApi
-          .getAudioAnalysisForTrack(response.item.id)
-          .then((response) => {
-            setLoading(false);
-            console.log(response);
-            setBpm(Math.round(response.track.tempo));
-            setKey(KeyMap[response.track.key].key);
-            setMode(response.track.mode);
-
-            setCamelot(KeyMap[response.track.key].camelot[response.track.mode]);
-            setOpenKey(KeyMap[response.track.key].open[response.track.mode]);
-          });
-        setName(
-          response === "" ? "Nothing currently playing" : response.item.name
-        );
-        setImage(response === "" ? null : response.item.album.images[0].url);
-      } catch (error) {
-        if (error instanceof TypeError) {
-          setName("Nothing currently playing");
-        }
-      }
-    });
+  const clearTrack = () => {
+    setName("Nothing playing");
+    setMusicalKey(null);
+    setCamelot(null);
+    setBpm("");
+    setMode(-1);
+    setImage(null);
   };
 
+  const getNowPlaying = () => {
+    setLoading(true);
+    spotifyWebApi
+      .getMyCurrentPlaybackState()
+      .then((response) => {
+        if (!response || !response.item) {
+          setLoading(false);
+          clearTrack();
+          return;
+        }
+
+        setName(response.item.name);
+        setImage(
+          response.item.album.images[0]
+            ? response.item.album.images[0].url
+            : null
+        );
+
+        spotifyWebApi
+          .getAudioAnalysisForTrack(response.item.id)
+          .then((analysis) => {
+            setLoading(false);
+            setBpm(Math.round(analysis.track.tempo));
+            setMusicalKey(KeyMap[analysis.track.key].key);
+            setMode(analysis.track.mode);
+            setCamelot(
+              KeyMap[analysis.track.key].camelot[analysis.track.mode]
+            );
+          })
+          // Audio analysis can fail (e.g. local/unavailable tracks); keep the
+          // track name but skip the key/BPM rather than crashing.
+          .catch(() => setLoading(false));
+      })
+      // Previously unhandled — a failed call rejects with a raw XHR and tripped
+      // the dev error overlay. Fail gracefully instead.
+      .catch(() => {
+        setLoading(false);
+        clearTrack();
+      });
+  };
+
+  const color = camelot ? camelotColor(camelot) : null;
+
   return (
-    <>
-      <Card className={classes.root}>
-        <CardMedia className={classes.media} image={image}>.</CardMedia>
-        <CardContent>
-          {loading ? <CircularProgress style={{ color: "white" }} /> : null}
+    <Box style={{ width: "100%" }}>
+      <Typography variant="overline" color="textSecondary">
+        Now Playing
+      </Typography>
 
-          <Typography className={classes.text}>{name}</Typography>
+      <Box style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+        <Avatar variant="rounded" src={image} style={{ width: 46, height: 46 }} />
+        <Typography
+          variant="body2"
+          style={{
+            fontWeight: 600,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {name}
+        </Typography>
+      </Box>
 
-          <Typography variant="h3" className={classes.text}>
-            {key}
-          </Typography>
-          <Typography variant="h5" className={classes.text}>
-            {mode !== -1 ? (mode === 1 ? "Major" : "Minor") : ""}
-          </Typography>
-          <br />
-          <Typography variant="h6" className={classes.text}>
-            {bpm ? `${bpm} BPM` : null}
-          </Typography>
+      {camelot && (
+        <Box style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          <Chip
+            size="small"
+            label={`${musicalKey} ${mode === 1 ? "Maj" : "Min"}`}
+          />
+          <Chip
+            size="small"
+            label={camelot}
+            style={color ? { backgroundColor: color.bg, color: color.text } : {}}
+          />
+          <Chip size="small" label={`${bpm} BPM`} />
+        </Box>
+      )}
 
-          <Grid container spacing={2} justify="space-between">
-            <Grid item>
-              <Typography variant="button" className={classes.text}>
-                {camelot ? `C: ${camelot}` : null}
-              </Typography>
-            </Grid>
-            <Grid item>
-              <Typography variant="button" className={classes.text}>
-                {openKey ? `O: ${openKey}` : null}
-              </Typography>
-            </Grid>
-          </Grid>
-        </CardContent>
-        <CardActions className={classes.center}>
-          <GreenButton
-            variant="contained"
-            color="primary"
-            onClick={getNowPlaying}
-            className={classes.margin}
-            disabled={props.token ? false : true}
-          >
-            Current Song
-          </GreenButton>
-        </CardActions>
-      </Card>
-      <div className="m-div"></div>
-    </>
+      <Button
+        fullWidth
+        variant="outlined"
+        size="small"
+        startIcon={loading ? <CircularProgress size={16} /> : <Refresh />}
+        onClick={getNowPlaying}
+        disabled={!props.token}
+        style={{ marginTop: 12 }}
+      >
+        {loading ? "Checking…" : "Refresh now playing"}
+      </Button>
+    </Box>
   );
 };
 
 CurrentSong.propTypes = {
-  api: PropTypes.object,
+  token: PropTypes.string,
 };
 
 export default CurrentSong;

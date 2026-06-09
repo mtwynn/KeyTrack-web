@@ -13,6 +13,14 @@ const changelog = [
       },
       {
         type: "feature",
+        desc: "Tucked the secondary controls into a slide-out menu (theme, changelog, logout) to keep the top bar clean on desktop and mobile.",
+      },
+      {
+        type: "feature",
+        desc: "Current Song is now a compact widget in the slide-out menu — quick to reach without taking over the screen.",
+      },
+      {
+        type: "feature",
         desc: "The Key Calculator is now available without logging in; Current Song and Playlist Library are clearly gated behind Spotify login.",
       },
     ],

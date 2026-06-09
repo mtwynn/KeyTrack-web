@@ -5,6 +5,7 @@ import './App.css';
 import Spotify from 'spotify-web-api-js';
 import {
   AppBar,
+  Avatar,
   Box,
   Button,
   Card,
@@ -12,6 +13,8 @@ import {
   Chip,
   Container,
   CssBaseline,
+  Divider,
+  Drawer,
   Grid,
   IconButton,
   Dialog,
@@ -23,6 +26,7 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Switch,
   Toolbar,
   Typography,
 } from '@material-ui/core';
@@ -35,6 +39,7 @@ import {
   ExitToApp,
   GraphicEq,
   LibraryMusic,
+  Menu as MenuIcon,
   MusicNote,
   Receipt,
   SettingsApplications,
@@ -86,7 +91,7 @@ class App extends React.Component {
     this.state = {
       openChangelog: false,
       showKeyCalculator: false,
-      showCurrentSong: true,
+      drawerOpen: false,
       themeMode:
         window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark'
           ? 'dark'
@@ -112,7 +117,6 @@ class App extends React.Component {
 
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
-    this.toggleCurrentSong = this.toggleCurrentSong.bind(this);
     this.toggleTheme = this.toggleTheme.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
@@ -257,10 +261,6 @@ class App extends React.Component {
     this.setState({
       showKeyCalculator: !this.state.showKeyCalculator,
     });
-  }
-
-  toggleCurrentSong() {
-    this.setState({ showCurrentSong: !this.state.showCurrentSong });
   }
 
   toggleTheme() {
@@ -470,47 +470,28 @@ class App extends React.Component {
     );
   }
 
-  // Logged-in dashboard: top bar + action tiles + the active tool.
-  renderHome(themeToggle, changelogButton, version) {
+  // Logged-in dashboard: a minimal top bar (wordmark + hamburger) and the
+  // primary action tiles. Secondary controls + Current Song live in the drawer.
+  renderHome(version) {
     const tileIcon = { fontSize: 40, color: '#1ED760' };
     return (
       <>
         <AppBar position="static" color="default" elevation={1}>
           <Toolbar>
             <Wordmark variant="h6" style={{ flexGrow: 1 }} />
-            <Typography
-              variant="caption"
-              color="textSecondary"
-              style={{ marginRight: 4 }}
-            >
-              {version}
-            </Typography>
-            {changelogButton}
-            {themeToggle}
-            {this.state.user_name && (
-              <Typography variant="body2" style={{ margin: '0 12px' }}>
-                {this.state.user_name}
-              </Typography>
-            )}
-            <Button
+            <IconButton
+              edge="end"
               color="inherit"
-              startIcon={<ExitToApp />}
-              onClick={this.handleLogout.bind(this)}
+              aria-label="menu"
+              onClick={() => this.setState({ drawerOpen: true })}
             >
-              Logout
-            </Button>
+              <MenuIcon />
+            </IconButton>
           </Toolbar>
         </AppBar>
 
         <Container style={{ paddingTop: 24, paddingBottom: 130 }}>
           <Grid container spacing={2} justify="center">
-            {this.renderTile(
-              <MusicNote style={tileIcon} />,
-              'Current Song',
-              "What's playing now",
-              this.toggleCurrentSong,
-              this.state.showCurrentSong
-            )}
             {this.renderTile(
               <LibraryMusic style={tileIcon} />,
               this.state.showPlaylists ? 'Close Library' : 'Playlist Library',
@@ -528,18 +509,6 @@ class App extends React.Component {
             )}
           </Grid>
 
-          {this.state.showCurrentSong && (
-            <Box
-              style={{
-                marginTop: 24,
-                display: 'flex',
-                justifyContent: 'center',
-              }}
-            >
-              <CurrentSong token={this.state.access_token} />
-            </Box>
-          )}
-
           {this.state.showPlaylists && (
             <Box style={{ marginTop: 24 }}>
               <FadeIn transitionDuration={600}>
@@ -554,6 +523,102 @@ class App extends React.Component {
           )}
         </Container>
       </>
+    );
+  }
+
+  // Right-side slide-out (hamburger) drawer. Holds the compact Current Song
+  // widget plus the secondary controls (theme, changelog, logout) that would
+  // otherwise clutter the top bar. Same on desktop and mobile.
+  renderDrawer(isDark, version) {
+    const close = () => this.setState({ drawerOpen: false });
+    return (
+      <Drawer anchor="right" open={this.state.drawerOpen} onClose={close}>
+        <Box
+          role="presentation"
+          style={{
+            width: 300,
+            maxWidth: '85vw',
+            padding: 16,
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 12,
+            }}
+          >
+            <Avatar style={{ backgroundColor: '#1ED760' }}>
+              {this.state.user_name
+                ? this.state.user_name.charAt(0).toUpperCase()
+                : '?'}
+            </Avatar>
+            <div>
+              <Typography variant="subtitle2" style={{ fontWeight: 700 }}>
+                {this.state.user_name || 'Spotify user'}
+              </Typography>
+              <Typography variant="caption" color="textSecondary">
+                Connected to Spotify
+              </Typography>
+            </div>
+          </Box>
+
+          <Divider />
+
+          <Box style={{ padding: '14px 0' }}>
+            <CurrentSong token={this.state.access_token} />
+          </Box>
+
+          <Divider />
+
+          <List>
+            <ListItem>
+              <ListItemIcon>
+                {isDark ? <Brightness7 /> : <Brightness4 />}
+              </ListItemIcon>
+              <ListItemText primary="Dark mode" />
+              <Switch
+                edge="end"
+                color="primary"
+                checked={isDark}
+                onChange={this.toggleTheme}
+              />
+            </ListItem>
+            <ListItem
+              button
+              onClick={() =>
+                this.setState({ openChangelog: true, drawerOpen: false })
+              }
+            >
+              <ListItemIcon>
+                <Receipt />
+              </ListItemIcon>
+              <ListItemText primary="Changelog" secondary={version} />
+            </ListItem>
+          </List>
+
+          <Divider />
+
+          <List>
+            <ListItem button onClick={this.handleLogout.bind(this)}>
+              <ListItemIcon>
+                <ExitToApp />
+              </ListItemIcon>
+              <ListItemText primary="Logout" />
+            </ListItem>
+          </List>
+
+          <Box style={{ marginTop: 'auto', textAlign: 'center', paddingTop: 12 }}>
+            <Typography variant="caption" color="textSecondary">
+              Powered by Spotify · Made by Tam Nguyen
+            </Typography>
+          </Box>
+        </Box>
+      </Drawer>
     );
   }
 
@@ -574,24 +639,18 @@ class App extends React.Component {
       </IconButton>
     );
 
-    const changelogButton = (
-      <IconButton
-        color="inherit"
-        title="Changelog"
-        aria-label="changelog"
-        onClick={() => this.setState({ openChangelog: true })}
-      >
-        <Receipt />
-      </IconButton>
-    );
-
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <div className="App">
-          {loggedIn
-            ? this.renderHome(themeToggle, changelogButton, version)
-            : this.renderLanding(themeToggle, version)}
+          {loggedIn ? (
+            <>
+              {this.renderHome(version)}
+              {this.renderDrawer(isDark, version)}
+            </>
+          ) : (
+            this.renderLanding(themeToggle, version)
+          )}
 
           {this.state.showKeyCalculator && (
             <KeyCalculator
