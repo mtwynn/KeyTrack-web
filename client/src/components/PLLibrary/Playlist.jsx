@@ -29,7 +29,7 @@ import {
 } from "@material-ui/core";
 
 import { useTheme } from "@material-ui/core/styles";
-import { ArrowUpward, Close, Search, Delete, DonutLarge, FilterList, ExpandMore, ExpandLess } from "@material-ui/icons";
+import { ArrowUpward, Close, Search, Delete, DonutLarge, FilterList, ExpandMore, ExpandLess, QueueMusic } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 
 import { initializeApp } from "firebase/app";
@@ -42,6 +42,7 @@ import { useEffect } from "react";
 import Row from "./Row";
 import Recommendations from "./Recommendations";
 import KeyFilterPicker from "./KeyFilterPicker";
+import SetBuilder from "./SetBuilder";
 
 initializeApp(firebaseConfig);
 
@@ -286,6 +287,35 @@ let Playlist = (props) => {
       prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
     );
   };
+
+  // --- Set builder ---
+  const [setTracks, setSetTracks] = React.useState([]);
+  const [setOpen, setSetOpen] = React.useState(false);
+  const [bpmThreshold, setBpmThreshold] = React.useState(6);
+
+  const addToSet = React.useCallback((item) => {
+    setSetTracks((prev) =>
+      prev.some((t) => t.track.id === item.track.id) ? prev : [...prev, item]
+    );
+    setSetOpen(true);
+  }, []);
+
+  const removeFromSet = React.useCallback(
+    (index) => setSetTracks((prev) => prev.filter((_, i) => i !== index)),
+    []
+  );
+
+  const reorderSet = React.useCallback((from, to) => {
+    setSetTracks((prev) => {
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
+  const clearSet = React.useCallback(() => setSetTracks([]), []);
 
   let topRef = React.createRef();
 
@@ -587,6 +617,22 @@ let Playlist = (props) => {
                   Filter by Key{keyFilter.length ? ` (${keyFilter.length})` : ""}
                 </Button>
               </FormControl>
+              <FormControl className={classes.filter}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<QueueMusic />}
+                  onClick={() => setSetOpen(true)}
+                  style={{
+                    height: "100%",
+                    textTransform: "none",
+                    color: "#fff",
+                    borderColor: "rgba(255,255,255,0.6)",
+                  }}
+                >
+                  Set{setTracks.length ? ` (${setTracks.length})` : ""}
+                </Button>
+              </FormControl>
               <FormControl className={classes.minFilter}>
                 <InputLabel id="demo-simple-select-label">BPM: </InputLabel>
               </FormControl>
@@ -710,6 +756,7 @@ let Playlist = (props) => {
                     harmonicAnchorId={harmonicAnchorId}
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
                     onToggleAnchor={toggleHarmonicAnchor}
+                    onAddToSet={addToSet}
                   />
                 ))}
             </TableBody>
@@ -757,6 +804,19 @@ let Playlist = (props) => {
           onClear={() => setKeyFilter([])}
           filterMode={filterMode}
           onChangeFilterMode={changeFilterMode}
+        />
+
+        <SetBuilder
+          open={setOpen}
+          onClose={() => setSetOpen(false)}
+          set={setTracks}
+          getKey={getKey}
+          onReorder={reorderSet}
+          onRemove={removeFromSet}
+          onClear={clearSet}
+          bpmThreshold={bpmThreshold}
+          onChangeBpmThreshold={setBpmThreshold}
+          isMobile={isMobile}
         />
       </Dialog>
     </div>

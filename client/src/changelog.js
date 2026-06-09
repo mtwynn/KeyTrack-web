@@ -1,5 +1,19 @@
 const changelog = [
   {
+    version: "1.8.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Set Builder: add tracks to an ordered set with the + on each row, then reorder them (drag on desktop, up/down on mobile). Each transition is checked for harmonic key compatibility and BPM jump, with clashes flagged.",
+      },
+      {
+        type: "feature",
+        desc: "Set Builder lets you set the BPM-jump threshold that counts as a rough transition, and shows a running count of clashes.",
+      },
+    ],
+  },
+  {
     version: "1.7.1",
     date: "06/09/26",
     changes: [
