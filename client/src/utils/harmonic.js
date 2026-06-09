@@ -6,7 +6,44 @@
 // opposite letter (relative major/minor). These are the rules DJs use for a
 // clean key transition.
 
+import KeyMap from "./KeyMap";
+
 const CAMELOT_RE = /^(\d{1,2})([AB])$/;
+
+// Camelot codes are the canonical representation of a key across every filter
+// surface (piano, wheel, open). Build a reverse lookup from KeyMap so any code
+// can be rendered in musical or Open-key notation. mode 0 = minor, 1 = major.
+const CAMELOT_INFO = {};
+KeyMap.forEach((entry, pitchClass) => {
+  [0, 1].forEach((mode) => {
+    CAMELOT_INFO[entry.camelot[mode]] = {
+      musical: entry.key, // e.g. "C", "C♯/D♭"
+      quality: mode === 1 ? "Major" : "Minor",
+      open: entry.open[mode], // e.g. "10m"
+      pitchClass,
+      mode,
+    };
+  });
+});
+
+// Look up musical/open info for a Camelot code (or null).
+export function camelotInfo(code) {
+  return CAMELOT_INFO[code] || null;
+}
+
+// Compact musical label for a code, e.g. "C♯ Maj" (drops the enharmonic
+// alternative so it fits on a wheel wedge or piano key).
+export function musicalLabel(code) {
+  const info = CAMELOT_INFO[code];
+  if (!info) return "";
+  const note = info.musical.split("/")[0];
+  return `${note} ${info.quality === "Major" ? "Maj" : "Min"}`;
+}
+
+// Camelot code for a pitch class (0-11) and mode (0 minor, 1 major).
+export function camelotForKey(pitchClass, mode) {
+  return KeyMap[pitchClass] ? KeyMap[pitchClass].camelot[mode] : null;
+}
 
 function parse(code) {
   const m = CAMELOT_RE.exec(code || "");

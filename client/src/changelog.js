@@ -1,5 +1,43 @@
 const changelog = [
   {
+    version: "1.7.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "New key filter as a mobile-friendly bottom sheet: a piano for Musical notation (pick notes + Major/Minor), an interactive Camelot wheel for Camelot, and an Open-key wheel for Open — with the familiar Mixed In Key colors.",
+      },
+      {
+        type: "feature",
+        desc: "Added a 'Combined wheel' picker style (a setting) showing Camelot codes and musical keys together on one wheel.",
+      },
+      {
+        type: "feature",
+        desc: "Key selections now carry across notations — pick D Major on the piano and it stays selected as 10B on the wheel; switching notation no longer clears your filter.",
+      },
+      {
+        type: "feature",
+        desc: "Collapsed the Musical / Camelot / Open key columns into a single Key column whose notation follows the Notation selector, for a cleaner, less cluttered table.",
+      },
+      {
+        type: "feature",
+        desc: "Removed the redundant Quality filter — major/minor is now built into every key picker.",
+      },
+      {
+        type: "bugfix",
+        desc: "Opening a playlist crate now shows a clear 'Loading crate…' indicator (plus a spinner on the card you clicked), and never gets stuck if a request fails.",
+      },
+      {
+        type: "bugfix",
+        desc: "Opening the Playlist Library now shows a loading spinner on the tile while your playlists are fetched.",
+      },
+      {
+        type: "feature",
+        desc: "Revamped the Key Calculator into an interactive Camelot wheel — tap any key to see it in all three notations (Musical / Camelot / Open) at once, plus its harmonic matches.",
+      },
+    ],
+  },
+  {
     version: "1.6.0",
     date: "06/09/26",
     changes: [

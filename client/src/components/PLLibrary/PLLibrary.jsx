@@ -179,6 +179,7 @@ let PLLibrary = (props) => {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   
   const [loadingPlaylist, setLoadingPlaylist] = React.useState(false);
+  const [loadingId, setLoadingId] = React.useState(null);
   const [showPlaylist, setShowPlaylist] = React.useState(false);
   const [currPlaylist, setCurrPlaylist] = React.useState(null);
   const [playlistKeys, setPlaylistKeys] = React.useState(null);
@@ -261,6 +262,7 @@ let PLLibrary = (props) => {
     let audioFeaturesPromises = [];
 
     setLoadingPlaylist(true);
+    setLoadingId(playlist.id);
 
     setPlaylistName(playlist.name);
     setPlaylistId(playlist.id);
@@ -272,38 +274,48 @@ let PLLibrary = (props) => {
       );
     }
 
-    Promise.all(playlistPromises).then((results) => {
-      let tempArr = [];
-
-      results.forEach((result) => {
-        tempArr = tempArr.concat(result.items);
-
-        let playlistItems = result.items;
-        let playlistItemIds = [];
-
-        for (var j = 0; j < playlistItems.length; ++j) {
-          let id = playlistItems[j].track.id;
-          playlistItemIds.push(id);
-        }
-
-        audioFeaturesPromises.push(
-          spotifyWebApi.getAudioFeaturesForTracks(playlistItemIds)
-        );
-      });
-
-      Promise.all(audioFeaturesPromises).then((results) => {
-        let keysArr = [];
+    Promise.all(playlistPromises)
+      .then((results) => {
+        let tempArr = [];
 
         results.forEach((result) => {
-          keysArr = keysArr.concat(result.audio_features);
+          tempArr = tempArr.concat(result.items);
+
+          let playlistItems = result.items;
+          let playlistItemIds = [];
+
+          for (var j = 0; j < playlistItems.length; ++j) {
+            let id = playlistItems[j].track.id;
+            playlistItemIds.push(id);
+          }
+
+          audioFeaturesPromises.push(
+            spotifyWebApi.getAudioFeaturesForTracks(playlistItemIds)
+          );
         });
 
-        setCurrPlaylist(tempArr);
-        setPlaylistKeys(keysArr);
-        setShowPlaylist(true);
+        // Returned so the chain waits for audio features before resolving.
+        return Promise.all(audioFeaturesPromises).then((results) => {
+          let keysArr = [];
+
+          results.forEach((result) => {
+            keysArr = keysArr.concat(result.audio_features);
+          });
+
+          setCurrPlaylist(tempArr);
+          setPlaylistKeys(keysArr);
+          setShowPlaylist(true);
+        });
+      })
+      .catch((error) => {
+        console.error("Failed to load playlist", error);
+      })
+      // Always clear the loading state, even if a request failed, so the
+      // spinner never gets stuck.
+      .finally(() => {
         setLoadingPlaylist(false);
+        setLoadingId(null);
       });
-    });
   };
 
   let handlePlaylistClose = () => {
@@ -315,17 +327,25 @@ let PLLibrary = (props) => {
       <Dialog
         open={loadingPlaylist}
         PaperProps={{
-          classes: {
-            root: classes.loadingDialogPaper,
+          style: {
+            padding: "28px 44px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 16,
+            borderRadius: 12,
           },
         }}
       >
         <CircularProgress
           classes={{ colorPrimary: classes.colorPrimary }}
-          size={100}
+          size={64}
           variant="indeterminate"
           disableShrink
         />
+        <Typography variant="body1" style={{ fontWeight: 600 }}>
+          Loading crate…
+        </Typography>
       </Dialog>
       <AppBar className={classes.appBar}>
         <Toolbar>
@@ -393,17 +413,25 @@ let PLLibrary = (props) => {
                 </Box>
               </Box>
 
-              {/* Open Button */}
-              {!isMobile && (
-                <IconButton
+              {/* Open Button / per-card loading spinner */}
+              {loadingId === playlist.id ? (
+                <CircularProgress
+                  classes={{ colorPrimary: classes.colorPrimary }}
+                  size={24}
                   className={classes.openButton}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePlaylistOpen(playlist);
-                  }}
-                >
-                  <MenuOpen />
-                </IconButton>
+                />
+              ) : (
+                !isMobile && (
+                  <IconButton
+                    className={classes.openButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePlaylistOpen(playlist);
+                    }}
+                  >
+                    <MenuOpen />
+                  </IconButton>
+                )
               )}
             </CardContent>
           </Card>

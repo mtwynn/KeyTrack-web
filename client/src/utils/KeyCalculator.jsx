@@ -1,171 +1,131 @@
 import React from "react";
-
 import {
-  makeStyles,
+  Box,
+  Chip,
   Dialog,
+  DialogContent,
   DialogTitle,
-  InputLabel,
-  MenuItem,
-  FormControl,
-  FormControlLabel,
-  Grid,
-  Radio,
-  RadioGroup,
-  Select,
+  Typography,
+  useMediaQuery,
 } from "@material-ui/core";
+import { useTheme } from "@material-ui/core/styles";
 
-import KeyMap from "./KeyMap";
+import CamelotWheel from "../components/PLLibrary/CamelotWheel";
+import { camelotColor, camelotInfo, compatibleCamelot } from "./harmonic";
 
-const useStyles = makeStyles((theme) => ({
-  formControl: {
-    margin: theme.spacing(2),
-  },
-  selectEmpty: {
-    marginTop: theme.spacing(1),
-  },
-  radioControl: {
-    marginLeft: theme.spacing(1),
-  },
-  radio: {
-    "&$checked": {
-      color: "#1ED760",
-    },
-  },
-  checked: {},
-}));
-
+// Interactive key calculator: tap a key on the Camelot wheel to see it in all
+// three notations (Musical / Camelot / Open) at once, plus its harmonic matches.
 let KeyCalculator = (props) => {
   const { onClose, open } = props;
-  const [key, setKey] = React.useState(0);
-  const [mode, setMode] = React.useState("major");
-  const [camelot, setCamelot] = React.useState(0);
-  const [openKey, setOpenKey] = React.useState(0);
+  const theme = useTheme();
+  const fullScreen = useMediaQuery(theme.breakpoints.down("xs"));
 
-  const classes = useStyles();
+  // Default to C Major (8B).
+  const [code, setCode] = React.useState("8B");
+  // Stable references so the memoized wheel doesn't re-render needlessly.
+  const handlePick = React.useCallback((c) => setCode(c), []);
+  const selectedArr = React.useMemo(() => [code], [code]);
+  const info = camelotInfo(code);
+  const color = camelotColor(code);
+  const compatible = [...compatibleCamelot(code)].filter((c) => c !== code);
 
-  const handleClose = () => {
-    onClose();
-  };
-
-  const handleChange = (event) => {
-    if (event.target.name === "mode") {
-      setMode(event.target.value);
-    } else {
-      setKey(event.target.value);
-      setCamelot(event.target.value);
-      setOpenKey(event.target.value);
-    }
-  };
-
-  let musicalKeys = KeyMap.map((key, index) => (
-    <MenuItem value={index}>{key.key}</MenuItem>
-  ));
-
-  let minorCamelot = KeyMap.map((key, index) => (
-    <MenuItem value={index}>{key.camelot[0]}</MenuItem>
-  )).sort(function (a, b) {
-    if (a.props.children.length > b.props.children.length) return 1;
-    if (a.props.children.length < b.props.children.length) return -1;
-    return a.props.children.localeCompare(b.props.children);
-  });
-
-  let majorCamelot = KeyMap.map((key, index) => (
-    <MenuItem value={index}>{key.camelot[1]}</MenuItem>
-  )).sort(function (a, b) {
-    if (a.props.children.length > b.props.children.length) return 1;
-    if (a.props.children.length < b.props.children.length) return -1;
-    return a.props.children.localeCompare(b.props.children);
-  });
-
-  let minorOpen = KeyMap.map((key, index) => (
-    <MenuItem value={index}>{key.open[0]}</MenuItem>
-  )).sort(function (a, b) {
-    if (a.props.children.length > b.props.children.length) return 1;
-    if (a.props.children.length < b.props.children.length) return -1;
-    return a.props.children.localeCompare(b.props.children);
-  });
-
-  let majorOpen = KeyMap.map((key, index) => (
-    <MenuItem value={index}>{key.open[1]}</MenuItem>
-  )).sort(function (a, b) {
-    if (a.props.children.length > b.props.children.length) return 1;
-    if (a.props.children.length < b.props.children.length) return -1;
-    return a.props.children.localeCompare(b.props.children);
-  });
+  const notations = info
+    ? [
+        { label: "Musical", value: `${info.musical} ${info.quality}` },
+        { label: "Camelot", value: code },
+        { label: "Open Key", value: info.open },
+      ]
+    : [];
 
   return (
-    <Dialog onClose={handleClose} open={open}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullScreen={fullScreen}
+      maxWidth="xs"
+      disableEnforceFocus
+      disableScrollLock
+    >
       <DialogTitle>Key Calculator</DialogTitle>
-      <Grid container spacing={2}>
-        <Grid item>
-          <RadioGroup
-            className={classes.radioControl}
-            value={mode}
-            name="mode"
-            onChange={handleChange}
-          >
-            <Grid container>
-              <Grid item>
-                <FormControlLabel
-                  value="major"
-                  control={
-                    <Radio
-                      classes={{
-                        root: classes.radio,
-                        checked: classes.checked,
-                      }}
-                    />
-                  }
-                  label="Major"
-                />
-              </Grid>
-              <Grid item>
-                <FormControlLabel
-                  value="minor"
-                  control={
-                    <Radio
-                      classes={{
-                        root: classes.radio,
-                        checked: classes.checked,
-                      }}
-                    />
-                  }
-                  label="Minor"
-                />
-              </Grid>
-            </Grid>
-          </RadioGroup>
-        </Grid>
-      </Grid>
+      <DialogContent>
+        <Typography
+          variant="caption"
+          color="textSecondary"
+          style={{ display: "block", textAlign: "center", marginBottom: 4 }}
+        >
+          Tap a key on the wheel to convert between notations
+        </Typography>
 
-      <FormControl variant="outlined" className={classes.formControl}>
-        <InputLabel>Key</InputLabel>
-        <Select value={key} name="key" onChange={handleChange} label="Key">
-          {musicalKeys}
-        </Select>
-      </FormControl>
-      <FormControl variant="outlined" className={classes.formControl}>
-        <InputLabel>Camelot</InputLabel>
-        <Select
-          value={camelot}
-          name="camelot"
-          onChange={handleChange}
-          label="Camelot"
-        >
-          {mode === "major" ? majorCamelot : minorCamelot}
-        </Select>
-      </FormControl>
-      <FormControl variant="outlined" className={classes.formControl}>
-        <InputLabel>Open Key</InputLabel>
-        <Select
-          value={openKey}
-          name="open"
-          onChange={handleChange}
-          label="Open Key"
-        >
-          {mode === "major" ? majorOpen : minorOpen}
-        </Select>
-      </FormControl>
+        <Box style={{ display: "flex", justifyContent: "center" }}>
+          <CamelotWheel
+            selected={selectedArr}
+            onToggle={handlePick}
+            labelMode="combined"
+          />
+        </Box>
+
+        {info && (
+          <>
+            <Box
+              style={{
+                backgroundColor: color.bg,
+                color: color.text,
+                padding: 12,
+                borderRadius: 10,
+                textAlign: "center",
+                margin: "8px 0 16px",
+              }}
+            >
+              <Typography variant="h5" style={{ fontWeight: 700 }}>
+                {info.musical} {info.quality}
+              </Typography>
+            </Box>
+
+            <Box style={{ display: "flex", gap: 8 }}>
+              {notations.map((n) => (
+                <Box
+                  key={n.label}
+                  style={{
+                    flex: 1,
+                    padding: "10px 6px",
+                    borderRadius: 8,
+                    border: `1px solid ${theme.palette.divider}`,
+                    textAlign: "center",
+                  }}
+                >
+                  <Typography variant="overline" color="textSecondary">
+                    {n.label}
+                  </Typography>
+                  <Typography variant="h6">{n.value}</Typography>
+                </Box>
+              ))}
+            </Box>
+
+            <Typography
+              variant="overline"
+              color="textSecondary"
+              style={{ display: "block", marginTop: 16 }}
+            >
+              Mixes harmonically with
+            </Typography>
+            <Box style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {compatible.map((c) => {
+                const cc = camelotColor(c);
+                const ci = camelotInfo(c);
+                return (
+                  <Chip
+                    key={c}
+                    size="small"
+                    label={ci ? `${c} · ${ci.musical} ${ci.quality === "Major" ? "Maj" : "Min"}` : c}
+                    onClick={() => setCode(c)}
+                    style={cc ? { backgroundColor: cc.bg, color: cc.text } : {}}
+                  />
+                );
+              })}
+            </Box>
+          </>
+        )}
+      </DialogContent>
     </Dialog>
   );
 };

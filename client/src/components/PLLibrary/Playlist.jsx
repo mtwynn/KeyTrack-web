@@ -5,6 +5,7 @@ import {
   makeStyles,
   withStyles,
   useMediaQuery,
+  Button,
   Chip,
   Dialog,
   Fab,
@@ -28,7 +29,7 @@ import {
 } from "@material-ui/core";
 
 import { useTheme } from "@material-ui/core/styles";
-import { ArrowUpward, Close, Search, Delete, FilterList, ExpandMore, ExpandLess } from "@material-ui/icons";
+import { ArrowUpward, Close, Search, Delete, DonutLarge, FilterList, ExpandMore, ExpandLess } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 
 import { initializeApp } from "firebase/app";
@@ -40,10 +41,10 @@ import { useEffect } from "react";
 
 import Row from "./Row";
 import Recommendations from "./Recommendations";
+import KeyFilterPicker from "./KeyFilterPicker";
 
 initializeApp(firebaseConfig);
 
-const qualities = ["Major", "Minor"];
 const musicalKeys = [
   "C",
   "C♯/D♭",
@@ -235,15 +236,6 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-function getStyles(attr, attrFilter, theme) {
-  return {
-    fontWeight:
-      attrFilter.indexOf(attr) === -1
-        ? theme.typography.fontWeightRegular
-        : theme.typography.fontWeightMedium,
-  };
-}
-
 const StyledTableCell = withStyles((theme) => ({
   head: {
     backgroundColor: "#1ED760",
@@ -265,7 +257,6 @@ let Playlist = (props) => {
 
   const [search, setSearch] = React.useState("");
   const [wheel, setWheel] = React.useState("Musical");
-  const [qualityFilter, setQualityFilter] = React.useState([]);
   const [keyFilter, setKeyFilter] = React.useState([]);
   const [minBpm, setMinBpm] = React.useState("");
   const [maxBpm, setMaxBpm] = React.useState("");
@@ -274,6 +265,27 @@ let Playlist = (props) => {
   let [chordProgressions, setChordProgressions] = React.useState({});
   // Track whose key is "anchored" for harmonic-mixing highlighting (or null).
   const [harmonicAnchorId, setHarmonicAnchorId] = React.useState(null);
+  // Key-filter bottom-sheet open state.
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  // Saved picker style: "notation" (Piano/Wheel by notation) or "combined".
+  const [filterMode, setFilterMode] = React.useState(
+    window.localStorage.getItem("keytrack_filter_mode") === "combined"
+      ? "combined"
+      : "notation"
+  );
+
+  const changeFilterMode = (mode) => {
+    window.localStorage.setItem("keytrack_filter_mode", mode);
+    setFilterMode(mode);
+  };
+
+  // Every picker (piano, wheel, combined) reads/writes the filter as Camelot
+  // codes, so the selection is independent of the notation being shown.
+  const toggleKeyFilter = (code) => {
+    setKeyFilter((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+  };
 
   let topRef = React.createRef();
 
@@ -346,7 +358,6 @@ let Playlist = (props) => {
 
     if (
       keyFilter.length === 0 &&
-      qualityFilter.length === 0 &&
       search === "" &&
       minBpm === "" &&
       maxBpm === ""
@@ -371,46 +382,12 @@ let Playlist = (props) => {
           if (keyFilter.length !== 0) {
             filteredItems = filteredItems.filter((item) => {
               let trackKey = getKey(item.track.id);
-              let mappedKey;
-
-              switch (wheel) {
-                case "Musical":
-                  mappedKey =
-                    (trackKey || trackKey === 0) && KeyMap[trackKey.key].key;
-
-                  break;
-                case "Camelot":
-                  mappedKey =
-                    KeyMap[getKey(item.track.id).key].camelot[
-                      getKey(item.track.id).mode
-                    ];
-                  break;
-                case "Open":
-                  mappedKey =
-                    KeyMap[getKey(item.track.id).key].open[
-                      getKey(item.track.id).mode
-                    ];
-                  break;
-                default:
-                  break;
-              }
-              return keyFilter.includes(mappedKey);
+              if (!trackKey) return false;
+              // keyFilter holds Camelot codes (set via the wheel).
+              let camelot = KeyMap[trackKey.key].camelot[trackKey.mode];
+              return keyFilter.includes(camelot);
             });
           }
-          if (qualityFilter.length !== 0) {
-            filteredItems = filteredItems.filter((item) => {
-              let trackKey = getKey(item.track.id);
-              let mappedQuality =
-                trackKey || trackKey === 0
-                  ? trackKey.mode === 1
-                    ? "Major"
-                    : "Minor"
-                  : "N/A";
-
-              return qualityFilter.includes(mappedQuality);
-            });
-          }
-
           if (minBpm !== "") {
             let bpmNum = parseInt(minBpm);
             filteredItems = filteredItems.filter((item) => {
@@ -436,31 +413,18 @@ let Playlist = (props) => {
         }, 500)
       );
     }
-  }, [wheel, search, keyFilter, qualityFilter, minBpm, maxBpm]);
+    // `wheel` only changes the displayed notation, not which tracks match.
+  }, [search, keyFilter, minBpm, maxBpm]);
 
   const handleFilterChange = (event, type) => {
     const {
       target: { value },
     } = event;
 
-    let setValue;
-
-    if (type === "key" || type === "quality") {
-      setValue = typeof value === "string" ? value.split(",") : value;
-    } else {
-      setValue = value;
-    }
-
-    // Clear keyFilter when wheel is changed (different wheels have different key representations)
-    if (type === "wheel") {
-      setKeyFilter([]);
-      setQualityFilter([]);
-    }
+    const setValue = value;
 
     let funcMap = {
       wheel: setWheel,
-      key: setKeyFilter,
-      quality: setQualityFilter,
       minBpm: _.debounce(setMinBpm, 500),
       maxBpm: _.debounce(setMaxBpm, 500),
     };
@@ -468,21 +432,8 @@ let Playlist = (props) => {
     funcMap[type](setValue);
   };
 
-  const getKeysForWheel = (wheel) => {
-    switch (wheel) {
-      case "Camelot":
-        return camelotKeys;
-      case "Open":
-        return openKeys;
-      case "Musical":
-      default:
-        return musicalKeys;
-    }
-  };
-
   const clearFilters = () => {
     setKeyFilter([]);
-    setQualityFilter([]);
     setMinBpm("");
     setMaxBpm("");
     document.getElementById("minBpm").value = "";
@@ -576,9 +527,9 @@ let Playlist = (props) => {
                 width: '100%'
               }}>
               <FormControl className={classes.filter}>
-                <InputLabel id="demo-simple-select-label">Wheel</InputLabel>
+                <InputLabel id="demo-simple-select-label">Notation</InputLabel>
                 <Select
-                  label="Wheel"
+                  label="Notation"
                   labelId="demo-simple-select-label"
                   id="demo-simple-select"
                   value={wheel}
@@ -616,120 +567,21 @@ let Playlist = (props) => {
                 </Select>
               </FormControl>
               <FormControl className={classes.filter}>
-                <InputLabel id="demo-simple-select-label">Key</InputLabel>
-                <Select
-                  label="Key"
-                  labelId="demo-simple-select-label"
-                  id="demo-simple-select"
-                  value={keyFilter}
-                  multiple
-                  onChange={(e) => handleFilterChange(e, "key")}
-                  renderValue={(selected) => (
-                    <div className={classes.chips}>
-                      {selected.map((value) => (
-                        <Chip
-                          key={value}
-                          label={value}
-                          className={classes.chip}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  classes={classes.select}
-                  inputProps={{
-                    classes: {
-                      icon: classes.icon,
-                      root: classes.root,
-                    },
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<DonutLarge />}
+                  onClick={() => setPickerOpen(true)}
+                  style={{
+                    height: "100%",
+                    textTransform: "none",
+                    color: "#fff",
+                    borderColor: "rgba(255,255,255,0.6)",
                   }}
-                  MenuProps={{
-                    anchorOrigin: {
-                      vertical: "bottom",
-                      horizontal: "left"
-                    },
-                    transformOrigin: {
-                      vertical: "top",
-                      horizontal: "left"
-                    },
-                    getContentAnchorEl: null,
-                    PaperProps: {
-                      style: {
-                        maxHeight: isMobile ? 250 : 400,
-                      }
-                    }
-                  }}
-                  input={<Input />}
                 >
-                  {getKeysForWheel(wheel).map((key) => (
-                    <MenuItem
-                      key={key}
-                      value={key}
-                      style={getStyles(key, keyFilter, theme)}
-                    >
-                      {key}
-                    </MenuItem>
-                  ))}
-                </Select>
+                  Filter by Key{keyFilter.length ? ` (${keyFilter.length})` : ""}
+                </Button>
               </FormControl>
-              {wheel === "Musical" && (
-                <FormControl className={classes.filter}>
-                  <InputLabel id="demo-simple-select-label">Quality</InputLabel>
-                  <Select
-                    label="Quality"
-                    labelId="demo-simple-select-label"
-                    id="demo-simple-select"
-                    value={qualityFilter}
-                    multiple
-                    onChange={(e) => handleFilterChange(e, "quality")}
-                    renderValue={(selected) => (
-                      <div className={classes.chips}>
-                        {selected.map((value) => (
-                          <Chip
-                            key={value}
-                            label={value}
-                            className={classes.chip}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    classes={classes.select}
-                    inputProps={{
-                      classes: {
-                        icon: classes.icon,
-                        root: classes.root,
-                      },
-                    }}
-                    MenuProps={{
-                      anchorOrigin: {
-                        vertical: "bottom",
-                        horizontal: "left"
-                      },
-                      transformOrigin: {
-                        vertical: "top",
-                        horizontal: "left"
-                      },
-                      getContentAnchorEl: null,
-                      PaperProps: {
-                        style: {
-                          maxHeight: isMobile ? 250 : 400,
-                        }
-                      }
-                    }}
-                    input={<Input />}
-                  >
-                    {qualities.map((quality) => (
-                      <MenuItem
-                        key={quality}
-                        value={quality}
-                        style={getStyles(quality, qualityFilter, theme)}
-                      >
-                        {quality}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-
               <FormControl className={classes.minFilter}>
                 <InputLabel id="demo-simple-select-label">BPM: </InputLabel>
               </FormControl>
@@ -812,10 +664,10 @@ let Playlist = (props) => {
                 {!isMobile && <StyledTableCell>Cover Art</StyledTableCell>}
                 <StyledTableCell>Track</StyledTableCell>
                 {!isMobile && <StyledTableCell>Artist</StyledTableCell>}
-                <StyledTableCell>{isMobile ? "Key" : "Musical Key"}</StyledTableCell>
+                <StyledTableCell>
+                  {isMobile ? "Key" : `Key (${wheel})`}
+                </StyledTableCell>
                 {!isMobile && <StyledTableCell>Quality</StyledTableCell>}
-                {!isTablet && <StyledTableCell>Camelot Key</StyledTableCell>}
-                {!isTablet && <StyledTableCell>Open Key</StyledTableCell>}
                 <StyledTableCell>BPM</StyledTableCell>
               </TableRow>
             </TableHead>
@@ -849,6 +701,7 @@ let Playlist = (props) => {
                     getKey={getKey}
                     isMobile={isMobile}
                     isTablet={isTablet}
+                    wheel={wheel}
                     harmonicAnchorId={harmonicAnchorId}
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
                     onToggleAnchor={toggleHarmonicAnchor}
@@ -889,6 +742,17 @@ let Playlist = (props) => {
             Back To Top
           </Fab>
         </div>
+
+        <KeyFilterPicker
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          notation={wheel}
+          selected={keyFilter}
+          onToggle={toggleKeyFilter}
+          onClear={() => setKeyFilter([])}
+          filterMode={filterMode}
+          onChangeFilterMode={changeFilterMode}
+        />
       </Dialog>
     </div>
   );
