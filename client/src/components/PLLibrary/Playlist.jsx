@@ -294,40 +294,45 @@ let Playlist = (props) => {
     setSearch(String(event.target.value).toLowerCase());
   }, 500);
 
-  let handleRowClick = (event, item) => {
-    let uri = item.track.uri;
-    // Call the parent's updatePlayer function
-    if (props.updatePlayer) {
-      props.updatePlayer([uri], true);
-    }
-  };
+  // useCallback so Row (memoized) keeps a stable reference and doesn't
+  // re-render every time Playlist re-renders for unrelated reasons.
+  const handleRowClick = React.useCallback(
+    (event, item) => {
+      let uri = item.track.uri;
+      if (props.updatePlayer) {
+        props.updatePlayer([uri], true);
+      }
+    },
+    [props.updatePlayer]
+  );
 
   const db = getFirestore();
 
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
 
-  let getKey = (id) => {
-    if (id) {
-      let result = props.playlistKeys.find((track) => {
-        if (track) {
-          return id.localeCompare(track.id) === 0;
+  const getKey = React.useCallback(
+    (id) => {
+      if (id) {
+        let result = props.playlistKeys.find((track) => {
+          if (track) {
+            return id.localeCompare(track.id) === 0;
+          }
+          return null;
+        });
+
+        if (result) {
+          return {
+            key: result.key,
+            mode: result.mode,
+            bpm: result.tempo,
+          };
         }
         return null;
-      });
-
-      if (result) {
-        let returnObj = {
-          key: result.key,
-          mode: result.mode,
-          bpm: result.tempo,
-        };
-        return returnObj;
-      } else {
-        return null;
       }
-    }
-  };
+    },
+    [props.playlistKeys]
+  );
 
   // Camelot code of the anchored track, derived from its key.
   const anchorKey = harmonicAnchorId ? getKey(harmonicAnchorId) : null;
@@ -335,11 +340,11 @@ let Playlist = (props) => {
     ? KeyMap[anchorKey.key].camelot[anchorKey.mode]
     : null;
 
-  const toggleHarmonicAnchor = (item) => {
+  const toggleHarmonicAnchor = React.useCallback((item) => {
     setHarmonicAnchorId((prev) =>
       prev === item.track.id ? null : item.track.id
     );
-  };
+  }, []);
 
   useEffect(() => {
     let getChordProgressions = async () => {

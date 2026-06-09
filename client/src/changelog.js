@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.7.1",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "bugfix",
+        desc: "Performance: playlist rows are now memoized, so the big track table no longer re-renders when unrelated things change (e.g. opening a dialog) — the app feels snappier on large crates.",
+      },
+    ],
+  },
+  {
     version: "1.7.0",
     date: "06/09/26",
     changes: [
