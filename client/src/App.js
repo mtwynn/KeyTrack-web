@@ -99,7 +99,6 @@ class App extends React.Component {
       // App-level set so it spans playlists. Entries are { item, key }.
       set: [],
       setOpen: false,
-      bpmThreshold: 6,
       themeMode:
         window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark'
           ? 'dark'
@@ -130,6 +129,7 @@ class App extends React.Component {
     this.removeFromSet = this.removeFromSet.bind(this);
     this.reorderSet = this.reorderSet.bind(this);
     this.clearSet = this.clearSet.bind(this);
+    this.openSet = this.openSet.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
     this.scheduleTokenRefresh = this.scheduleTokenRefresh.bind(this);
@@ -312,6 +312,10 @@ class App extends React.Component {
 
   clearSet() {
     this.setState({ set: [] });
+  }
+
+  openSet() {
+    this.setState({ setOpen: true });
   }
 
   toggleTheme() {
@@ -576,7 +580,7 @@ class App extends React.Component {
                   userId={this.state.user_id}
                   updatePlayer={this.updatePlayer}
                   onAddToSet={this.addToSet}
-                  onOpenSet={() => this.setState({ setOpen: true })}
+                  onOpenSet={this.openSet}
                   setCount={this.state.set.length}
                 />
               </FadeIn>
@@ -818,8 +822,6 @@ class App extends React.Component {
             onReorder={this.reorderSet}
             onRemove={this.removeFromSet}
             onClear={this.clearSet}
-            bpmThreshold={this.state.bpmThreshold}
-            onChangeBpmThreshold={(v) => this.setState({ bpmThreshold: v })}
           />
 
           {/* Spotify Player - always visible at bottom */}

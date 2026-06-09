@@ -62,6 +62,8 @@ const KeyFilterPicker = ({
       anchor="bottom"
       open={open}
       onClose={onClose}
+      disableEnforceFocus
+      disableScrollLock
       PaperProps={{
         style: {
           borderTopLeftRadius: 16,

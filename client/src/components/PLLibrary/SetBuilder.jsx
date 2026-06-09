@@ -27,19 +27,12 @@ const codeOf = (k) => (k ? KeyMap[k.key].camelot[k.mode] : null);
 // drawer on desktop). Each entry is { item, key } so the set is self-contained
 // and can hold tracks from multiple playlists. Each transition between
 // consecutive tracks is validated for harmonic key compatibility and BPM jump.
-const SetBuilder = ({
-  open,
-  onClose,
-  set,
-  onReorder,
-  onRemove,
-  onClear,
-  bpmThreshold,
-  onChangeBpmThreshold,
-}) => {
+const SetBuilder = ({ open, onClose, set, onReorder, onRemove, onClear }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [dragIndex, setDragIndex] = React.useState(null);
+  // Local so dragging the slider only re-renders this panel, never the whole app.
+  const [bpmThreshold, setBpmThreshold] = React.useState(6);
 
   const rows = set.map((entry) => {
     const k = entry.key;
@@ -79,6 +72,8 @@ const SetBuilder = ({
       anchor={isMobile ? "bottom" : "right"}
       open={open}
       onClose={onClose}
+      disableEnforceFocus
+      disableScrollLock
       PaperProps={{
         style: {
           width: isMobile ? "100%" : 380,
@@ -120,7 +115,7 @@ const SetBuilder = ({
             max={20}
             step={1}
             valueLabelDisplay="auto"
-            onChange={(e, v) => onChangeBpmThreshold(v)}
+            onChange={(e, v) => setBpmThreshold(v)}
           />
         </Box>
 
