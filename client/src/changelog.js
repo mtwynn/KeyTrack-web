@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.10.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Save, load, update, and delete your sets — name a set and it's stored to your account, so you can pick up a build later. Saved sets keep each track's key/BPM, so loading one doesn't need to refetch from Spotify.",
+      },
+    ],
+  },
+  {
     version: "1.9.0",
     date: "06/09/26",
     changes: [
