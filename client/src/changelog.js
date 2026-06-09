@@ -1,5 +1,19 @@
 const changelog = [
   {
+    version: "1.4.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Removed the unfinished SoundCloud integration to streamline the app around Spotify.",
+      },
+      {
+        type: "bugfix",
+        desc: "Removed exposed SoundCloud API credentials that were hardcoded in the client bundle.",
+      },
+    ],
+  },
+  {
     version: "1.3.0",
     date: "06/09/26",
     changes: [

@@ -34,7 +34,6 @@ import { getHashParams, saveSpotifyHashParams } from './utils/utils';
 
 // Assets
 import { ReactComponent as SpotifyLogo } from '../src/assets/login/spotify.svg';
-import { ReactComponent as SoundcloudLogo } from '../src/assets/login/soundcloud.svg';
 
 const spotifyWebApi = new Spotify();
 
@@ -43,10 +42,6 @@ let isProduction = process.env.NODE_ENV === 'production';
 let spotifyLoginEndpoint = isProduction
   ? 'https://key-track2.herokuapp.com/spotify/login'
   : 'http://localhost:8888/spotify/login';
-
-let soundcloudLoginEndpoint = isProduction
-  ? 'https://key-track2.herokuapp.com/soundcloud/login'
-  : 'http://localhost:8888/soundcloud/login';
 
 let refreshTokenEndpoint = isProduction
   ? 'https://key-track2.herokuapp.com/refresh_token'
@@ -62,7 +57,6 @@ class App extends React.Component {
 
     // TODO move this to different component lifecycle
     const spotifyParams = getHashParams('spotify', isProduction);
-    const soundcloudParams = getHashParams('soundcloud', isProduction);
 
     this.state = {
       openChangelog: false,
@@ -79,9 +73,6 @@ class App extends React.Component {
         showPlaylists: false,
         pllibrary: null,
         showSessionExpiryDialog: false,
-      },
-      soundcloud: {
-        loggedIn: soundcloudParams.access_token ? true : false,
       },
       player: {
         uris: [],
@@ -116,23 +107,6 @@ class App extends React.Component {
         'Could not get a spotify access token. Received spotify params from server: ',
         spotifyParams
       );
-    }
-
-    // TODO: Move all the Axios.get calls to a utils function for API endpoints
-    if (soundcloudParams.access_token) {
-      Axios.get('https://api.soundcloud.com/me', {
-        headers: {
-          Accept: 'application/json; charset=utf-8',
-          Authorization: `OAuth ${soundcloudParams.access_token}`,
-        },
-      })
-        .then((response) => {
-          // TODO: Do something with this response
-          console.log(response);
-        })
-        .catch((error) => {
-          console.error(error);
-        });
     }
   }
 
@@ -287,7 +261,6 @@ class App extends React.Component {
 
     window.location.href = window.location.origin;
     localStorage.removeItem('spotify_hash_params');
-    localStorage.removeItem('soundcloud_hash_params');
   }
 
   render() {
@@ -306,22 +279,6 @@ class App extends React.Component {
                 onClick={() => {
                   if (!this.state.spotify.loggedIn) {
                     window.location.href = spotifyLoginEndpoint;
-                  }
-                }}
-              />
-            )}
-
-            {this.state.soundcloud.loggedIn ? (
-              <SoundcloudLogo
-                className='logo-soundcloud'
-                onClick={this.handleLogout.bind(this)}
-              />
-            ) : (
-              <SoundcloudLogo
-                className='logo'
-                onClick={() => {
-                  if (!this.state.soundcloud.loggedIn) {
-                    window.location.href = soundcloudLoginEndpoint;
                   }
                 }}
               />
