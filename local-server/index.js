@@ -112,7 +112,8 @@ app.get('/callback', function (req, res) {
     request.post(authOptions, function (error, response, body) {
       if (!error && response.statusCode === 200) {
         const access_token = body.access_token,
-          refresh_token = body.refresh_token;
+          refresh_token = body.refresh_token,
+          expires_in = body.expires_in;
 
         const options = {
           url: 'https://api.spotify.com/v1/me',
@@ -140,6 +141,7 @@ app.get('/callback', function (req, res) {
             querystring.stringify({
               access_token: access_token,
               refresh_token: refresh_token,
+              expires_in: expires_in,
             })
         );
       } else {
@@ -177,10 +179,20 @@ app.get('/refresh_token', function (req, res) {
 
   request.post(authOptions, function (error, response, body) {
     if (!error && response.statusCode === 200) {
-      const access_token = body.access_token;
+      // Spotify returns a fresh access_token and expires_in (seconds). It may
+      // also return a new refresh_token, which the client should persist.
       res.send({
-        access_token: access_token,
+        access_token: body.access_token,
+        expires_in: body.expires_in,
+        refresh_token: body.refresh_token,
       });
+    } else {
+      // Previously this branch was missing, so a failed refresh (e.g. revoked
+      // token) would hang the request forever. Respond so the client can fall
+      // back to a re-login prompt.
+      res
+        .status(response && response.statusCode ? response.statusCode : 500)
+        .send({ error: 'could_not_refresh_token' });
     }
   });
 });
