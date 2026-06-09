@@ -19,6 +19,7 @@ import {
   TableRow,
   TableBody,
   TableHead,
+  TablePagination,
   AppBar,
   Toolbar,
   IconButton,
@@ -42,7 +43,6 @@ import { useEffect } from "react";
 import Row from "./Row";
 import Recommendations from "./Recommendations";
 import KeyFilterPicker from "./KeyFilterPicker";
-import SetBuilder from "./SetBuilder";
 
 initializeApp(firebaseConfig);
 
@@ -288,35 +288,6 @@ let Playlist = (props) => {
     );
   };
 
-  // --- Set builder ---
-  const [setTracks, setSetTracks] = React.useState([]);
-  const [setOpen, setSetOpen] = React.useState(false);
-  const [bpmThreshold, setBpmThreshold] = React.useState(6);
-
-  const addToSet = React.useCallback((item) => {
-    setSetTracks((prev) =>
-      prev.some((t) => t.track.id === item.track.id) ? prev : [...prev, item]
-    );
-    setSetOpen(true);
-  }, []);
-
-  const removeFromSet = React.useCallback(
-    (index) => setSetTracks((prev) => prev.filter((_, i) => i !== index)),
-    []
-  );
-
-  const reorderSet = React.useCallback((from, to) => {
-    setSetTracks((prev) => {
-      if (to < 0 || to >= prev.length) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  }, []);
-
-  const clearSet = React.useCallback(() => setSetTracks([]), []);
-
   let topRef = React.createRef();
 
   let handleChange = _.debounce((event) => {
@@ -341,27 +312,26 @@ let Playlist = (props) => {
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
 
+  // Index audio features by track id once, so getKey is O(1). Previously it
+  // did a linear .find() per call, and the table sort calls getKey twice per
+  // comparison — O(n^2 log n), which froze the UI on large crates for seconds.
+  const keysById = React.useMemo(() => {
+    const map = new Map();
+    (props.playlistKeys || []).forEach((track) => {
+      if (track) map.set(track.id, track);
+    });
+    return map;
+  }, [props.playlistKeys]);
+
   const getKey = React.useCallback(
     (id) => {
-      if (id) {
-        let result = props.playlistKeys.find((track) => {
-          if (track) {
-            return id.localeCompare(track.id) === 0;
-          }
-          return null;
-        });
-
-        if (result) {
-          return {
-            key: result.key,
-            mode: result.mode,
-            bpm: result.tempo,
-          };
-        }
-        return null;
-      }
+      if (!id) return undefined;
+      const result = keysById.get(id);
+      return result
+        ? { key: result.key, mode: result.mode, bpm: result.tempo }
+        : null;
     },
-    [props.playlistKeys]
+    [keysById]
   );
 
   // Camelot code of the anchored track, derived from its key.
@@ -375,6 +345,50 @@ let Playlist = (props) => {
       prev === item.track.id ? null : item.track.id
     );
   }, []);
+
+  // Add a track to the app-level set, tagging it with this crate's key/BPM so
+  // the set stays self-contained across playlists.
+  const handleAddToSet = React.useCallback(
+    (item) => {
+      if (props.onAddToSet) props.onAddToSet(item, getKey(item.track.id));
+    },
+    [props.onAddToSet, getKey]
+  );
+
+  // Pagination keeps the rendered DOM small. A huge table (thousands of nodes)
+  // makes the browser re-layout the whole page whenever a dialog/drawer opens,
+  // which froze opening the Set/Calculator for seconds on large crates.
+  const [page, setPage] = React.useState(0);
+  const [rowsPerPage, setRowsPerPage] = React.useState(100);
+
+  // Sort once per data change (not on every render), on a copy so we don't
+  // mutate the searchItems state in place. Default order: Camelot key, then BPM.
+  const sortedItems = React.useMemo(() => {
+    const arr = [...searchItems];
+    arr.sort((a, b) => {
+      const aKey = getKey(a.track.id);
+      const bKey = getKey(b.track.id);
+      if (!aKey) return -1;
+      if (!bKey) return 1;
+      const aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
+      const bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
+      const cmp = aCamelot.localeCompare(bCamelot);
+      if (cmp !== 0) return cmp;
+      return aKey.bpm - bKey.bpm;
+    });
+    return arr;
+  }, [searchItems, getKey]);
+
+  // Only the current page is rendered into the DOM.
+  const pagedItems = React.useMemo(
+    () => sortedItems.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+    [sortedItems, page, rowsPerPage]
+  );
+
+  // Reset to the first page whenever the filtered result set changes.
+  React.useEffect(() => {
+    setPage(0);
+  }, [sortedItems]);
 
   useEffect(() => {
     let getChordProgressions = async () => {
@@ -622,7 +636,7 @@ let Playlist = (props) => {
                   variant="outlined"
                   size="small"
                   startIcon={<QueueMusic />}
-                  onClick={() => setSetOpen(true)}
+                  onClick={props.onOpenSet}
                   style={{
                     height: "100%",
                     textTransform: "none",
@@ -630,7 +644,7 @@ let Playlist = (props) => {
                     borderColor: "rgba(255,255,255,0.6)",
                   }}
                 >
-                  Set{setTracks.length ? ` (${setTracks.length})` : ""}
+                  Set{props.setCount ? ` (${props.setCount})` : ""}
                 </Button>
               </FormControl>
               <FormControl className={classes.minFilter}>
@@ -708,6 +722,20 @@ let Playlist = (props) => {
               />
             </Box>
           )}
+          {sortedItems.length > 50 && (
+            <TablePagination
+              component="div"
+              count={sortedItems.length}
+              page={page}
+              onChangePage={(e, p) => setPage(p)}
+              rowsPerPage={rowsPerPage}
+              onChangeRowsPerPage={(e) => {
+                setRowsPerPage(parseInt(e.target.value, 10));
+                setPage(0);
+              }}
+              rowsPerPageOptions={[50, 100, 200]}
+            />
+          )}
           <Table>
             <TableHead ref={topRef}>
               <TableRow>
@@ -723,24 +751,7 @@ let Playlist = (props) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {searchItems
-                .sort((a, b) => {
-                  let aKey = getKey(a.track.id);
-                  let bKey = getKey(b.track.id);
-
-                  if (!aKey) return -1;
-                  if (!bKey) return 1;
-                  if (!aKey && !bKey) return 0;
-
-                  let aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
-                  let bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
-                  let aBPM = aKey.bpm;
-                  let bBPM = bKey.bpm;
-
-                  if (aCamelot.localeCompare(bCamelot) < 0) return -1;
-                  if (aCamelot.localeCompare(bCamelot) > 0) return 1;
-                  return aBPM - bBPM;
-                })
+              {pagedItems
                 .map((item) => (
                   <Row
                     item={item}
@@ -756,7 +767,7 @@ let Playlist = (props) => {
                     harmonicAnchorId={harmonicAnchorId}
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
                     onToggleAnchor={toggleHarmonicAnchor}
-                    onAddToSet={addToSet}
+                    onAddToSet={handleAddToSet}
                   />
                 ))}
             </TableBody>
@@ -806,18 +817,6 @@ let Playlist = (props) => {
           onChangeFilterMode={changeFilterMode}
         />
 
-        <SetBuilder
-          open={setOpen}
-          onClose={() => setSetOpen(false)}
-          set={setTracks}
-          getKey={getKey}
-          onReorder={reorderSet}
-          onRemove={removeFromSet}
-          onClear={clearSet}
-          bpmThreshold={bpmThreshold}
-          onChangeBpmThreshold={setBpmThreshold}
-          isMobile={isMobile}
-        />
       </Dialog>
     </div>
   );

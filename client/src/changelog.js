@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.9.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "The Set Builder now spans playlists — add tracks from any crate into one shared set and reach it from the menu (or the Set button in a playlist). Each track keeps its own key/BPM, so transitions still validate across playlists.",
+      },
+    ],
+  },
+  {
     version: "1.8.0",
     date: "06/09/26",
     changes: [

@@ -42,6 +42,7 @@ import {
   LibraryMusic,
   Menu as MenuIcon,
   MusicNote,
+  QueueMusic,
   Receipt,
   SettingsApplications,
   Tune,
@@ -51,6 +52,7 @@ import FadeIn from 'react-fade-in';
 import changelog from './changelog.js';
 import CurrentSong from './components/CurrentSong/CurrentSong';
 import PLLibrary from './components/PLLibrary/PLLibrary';
+import SetBuilder from './components/PLLibrary/SetBuilder';
 import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
 import SpotifyIcon from './components/SpotifyIcon';
@@ -82,6 +84,36 @@ const Wordmark = ({ variant, style }) => (
   </Typography>
 );
 
+// Stable style objects so the player isn't handed new props every render.
+const PLAYER_WRAP_STYLE = {
+  position: 'fixed',
+  bottom: 0,
+  left: 0,
+  width: '100vw',
+  zIndex: 9999,
+};
+const PLAYER_STYLES = {
+  activeColor: '#1ED760',
+  loaderColor: '#1ED760',
+  sliderColor: '#1ED760',
+};
+
+// Memoized so the Spotify Web Playback player only re-renders (and never
+// reconnects) when its own props change — not on every unrelated App re-render
+// like opening a drawer or dialog.
+const BottomPlayer = React.memo(({ token, uris, play }) => (
+  <div style={PLAYER_WRAP_STYLE}>
+    <SpotifyPlayer
+      token={token}
+      uris={uris}
+      styles={PLAYER_STYLES}
+      play={play}
+      showSaveIcon={true}
+      magnifySliderOnHover={true}
+    />
+  </div>
+));
+
 class App extends React.Component {
   constructor(props) {
     super(props);
@@ -94,6 +126,9 @@ class App extends React.Component {
       showKeyCalculator: false,
       drawerOpen: false,
       loadingPlaylists: false,
+      // App-level set so it spans playlists. Entries are { item, key }.
+      set: [],
+      setOpen: false,
       themeMode:
         window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark'
           ? 'dark'
@@ -120,6 +155,11 @@ class App extends React.Component {
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
     this.toggleTheme = this.toggleTheme.bind(this);
+    this.addToSet = this.addToSet.bind(this);
+    this.removeFromSet = this.removeFromSet.bind(this);
+    this.reorderSet = this.reorderSet.bind(this);
+    this.clearSet = this.clearSet.bind(this);
+    this.openSet = this.openSet.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
     this.scheduleTokenRefresh = this.scheduleTokenRefresh.bind(this);
@@ -273,6 +313,39 @@ class App extends React.Component {
     this.setState({
       showKeyCalculator: !this.state.showKeyCalculator,
     });
+  }
+
+  // --- App-level set builder (spans playlists) ---
+  addToSet(item, key) {
+    this.setState((state) =>
+      state.set.some((e) => e.item.track.id === item.track.id)
+        ? null
+        : { set: [...state.set, { item, key }] }
+    );
+  }
+
+  removeFromSet(index) {
+    this.setState((state) => ({
+      set: state.set.filter((_, i) => i !== index),
+    }));
+  }
+
+  reorderSet(from, to) {
+    this.setState((state) => {
+      if (to < 0 || to >= state.set.length) return null;
+      const next = [...state.set];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return { set: next };
+    });
+  }
+
+  clearSet() {
+    this.setState({ set: [] });
+  }
+
+  openSet() {
+    this.setState({ setOpen: true });
   }
 
   toggleTheme() {
@@ -536,6 +609,9 @@ class App extends React.Component {
                   pllibrary={this.state.pllibrary}
                   userId={this.state.user_id}
                   updatePlayer={this.updatePlayer}
+                  onAddToSet={this.addToSet}
+                  onOpenSet={this.openSet}
+                  setCount={this.state.set.length}
                 />
               </FadeIn>
             </Box>
@@ -595,6 +671,26 @@ class App extends React.Component {
           <Divider />
 
           <List>
+            <ListItem
+              button
+              onClick={() =>
+                this.setState({ setOpen: true, drawerOpen: false })
+              }
+            >
+              <ListItemIcon>
+                <QueueMusic />
+              </ListItemIcon>
+              <ListItemText
+                primary="Set Builder"
+                secondary={
+                  this.state.set.length
+                    ? `${this.state.set.length} track${
+                        this.state.set.length > 1 ? 's' : ''
+                      }`
+                    : 'empty'
+                }
+              />
+            </ListItem>
             <ListItem>
               <ListItemIcon>
                 {isDark ? <Brightness7 /> : <Brightness4 />}
@@ -748,30 +844,23 @@ class App extends React.Component {
             </DialogActions>
           </Dialog>
 
+          {/* App-level set builder, reachable from any crate or the drawer */}
+          <SetBuilder
+            open={this.state.setOpen}
+            onClose={() => this.setState({ setOpen: false })}
+            set={this.state.set}
+            onReorder={this.reorderSet}
+            onRemove={this.removeFromSet}
+            onClear={this.clearSet}
+          />
+
           {/* Spotify Player - always visible at bottom */}
           {loggedIn && (
-            <div
-              style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                width: '100vw',
-                zIndex: 9999,
-              }}
-            >
-              <SpotifyPlayer
-                token={this.state.access_token}
-                uris={this.state.player.uris}
-                styles={{
-                  activeColor: '#1ED760',
-                  loaderColor: '#1ED760',
-                  sliderColor: '#1ED760',
-                }}
-                play={this.state.player.isPlaying}
-                showSaveIcon={true}
-                magnifySliderOnHover={true}
-              />
-            </div>
+            <BottomPlayer
+              token={this.state.access_token}
+              uris={this.state.player.uris}
+              play={this.state.player.isPlaying}
+            />
           )}
         </div>
       </ThemeProvider>
