@@ -1,5 +1,19 @@
 const changelog = [
   {
+    version: "1.7.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Added an interactive Camelot wheel to filter a playlist by key — click wedges to pick keys, with the familiar Mixed In Key colors.",
+      },
+      {
+        type: "feature",
+        desc: "Collapsed the Musical / Camelot / Open key columns into a single Key column whose notation follows the Notation selector, for a cleaner, less cluttered table.",
+      },
+    ],
+  },
+  {
     version: "1.6.0",
     date: "06/09/26",
     changes: [

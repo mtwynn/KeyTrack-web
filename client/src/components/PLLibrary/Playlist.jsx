@@ -5,6 +5,7 @@ import {
   makeStyles,
   withStyles,
   useMediaQuery,
+  Button,
   Chip,
   Dialog,
   Fab,
@@ -13,6 +14,7 @@ import {
   InputAdornment,
   InputLabel,
   MenuItem,
+  Popover,
   Table,
   TableCell,
   TableRow,
@@ -28,7 +30,7 @@ import {
 } from "@material-ui/core";
 
 import { useTheme } from "@material-ui/core/styles";
-import { ArrowUpward, Close, Search, Delete, FilterList, ExpandMore, ExpandLess } from "@material-ui/icons";
+import { ArrowUpward, Close, Search, Delete, DonutLarge, FilterList, ExpandMore, ExpandLess } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 
 import { initializeApp } from "firebase/app";
@@ -40,6 +42,8 @@ import { useEffect } from "react";
 
 import Row from "./Row";
 import Recommendations from "./Recommendations";
+import CamelotWheel from "./CamelotWheel";
+import { camelotColor } from "../../utils/harmonic";
 
 initializeApp(firebaseConfig);
 
@@ -274,6 +278,16 @@ let Playlist = (props) => {
   let [chordProgressions, setChordProgressions] = React.useState({});
   // Track whose key is "anchored" for harmonic-mixing highlighting (or null).
   const [harmonicAnchorId, setHarmonicAnchorId] = React.useState(null);
+  // Anchor element for the Camelot-wheel filter popover.
+  const [wheelAnchor, setWheelAnchor] = React.useState(null);
+
+  // The Camelot wheel filters by underlying key (Camelot code), independent of
+  // the notation shown in the Key column.
+  const toggleKeyFilter = (code) => {
+    setKeyFilter((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+  };
 
   let topRef = React.createRef();
 
@@ -371,30 +385,10 @@ let Playlist = (props) => {
           if (keyFilter.length !== 0) {
             filteredItems = filteredItems.filter((item) => {
               let trackKey = getKey(item.track.id);
-              let mappedKey;
-
-              switch (wheel) {
-                case "Musical":
-                  mappedKey =
-                    (trackKey || trackKey === 0) && KeyMap[trackKey.key].key;
-
-                  break;
-                case "Camelot":
-                  mappedKey =
-                    KeyMap[getKey(item.track.id).key].camelot[
-                      getKey(item.track.id).mode
-                    ];
-                  break;
-                case "Open":
-                  mappedKey =
-                    KeyMap[getKey(item.track.id).key].open[
-                      getKey(item.track.id).mode
-                    ];
-                  break;
-                default:
-                  break;
-              }
-              return keyFilter.includes(mappedKey);
+              if (!trackKey) return false;
+              // keyFilter holds Camelot codes (set via the wheel).
+              let camelot = KeyMap[trackKey.key].camelot[trackKey.mode];
+              return keyFilter.includes(camelot);
             });
           }
           if (qualityFilter.length !== 0) {
@@ -436,7 +430,8 @@ let Playlist = (props) => {
         }, 500)
       );
     }
-  }, [wheel, search, keyFilter, qualityFilter, minBpm, maxBpm]);
+    // `wheel` only changes the displayed notation, not which tracks match.
+  }, [search, keyFilter, qualityFilter, minBpm, maxBpm]);
 
   const handleFilterChange = (event, type) => {
     const {
@@ -445,39 +440,20 @@ let Playlist = (props) => {
 
     let setValue;
 
-    if (type === "key" || type === "quality") {
+    if (type === "quality") {
       setValue = typeof value === "string" ? value.split(",") : value;
     } else {
       setValue = value;
     }
 
-    // Clear keyFilter when wheel is changed (different wheels have different key representations)
-    if (type === "wheel") {
-      setKeyFilter([]);
-      setQualityFilter([]);
-    }
-
     let funcMap = {
       wheel: setWheel,
-      key: setKeyFilter,
       quality: setQualityFilter,
       minBpm: _.debounce(setMinBpm, 500),
       maxBpm: _.debounce(setMaxBpm, 500),
     };
 
     funcMap[type](setValue);
-  };
-
-  const getKeysForWheel = (wheel) => {
-    switch (wheel) {
-      case "Camelot":
-        return camelotKeys;
-      case "Open":
-        return openKeys;
-      case "Musical":
-      default:
-        return musicalKeys;
-    }
   };
 
   const clearFilters = () => {
@@ -576,9 +552,9 @@ let Playlist = (props) => {
                 width: '100%'
               }}>
               <FormControl className={classes.filter}>
-                <InputLabel id="demo-simple-select-label">Wheel</InputLabel>
+                <InputLabel id="demo-simple-select-label">Notation</InputLabel>
                 <Select
-                  label="Wheel"
+                  label="Notation"
                   labelId="demo-simple-select-label"
                   id="demo-simple-select"
                   value={wheel}
@@ -616,62 +592,59 @@ let Playlist = (props) => {
                 </Select>
               </FormControl>
               <FormControl className={classes.filter}>
-                <InputLabel id="demo-simple-select-label">Key</InputLabel>
-                <Select
-                  label="Key"
-                  labelId="demo-simple-select-label"
-                  id="demo-simple-select"
-                  value={keyFilter}
-                  multiple
-                  onChange={(e) => handleFilterChange(e, "key")}
-                  renderValue={(selected) => (
-                    <div className={classes.chips}>
-                      {selected.map((value) => (
-                        <Chip
-                          key={value}
-                          label={value}
-                          className={classes.chip}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  classes={classes.select}
-                  inputProps={{
-                    classes: {
-                      icon: classes.icon,
-                      root: classes.root,
-                    },
-                  }}
-                  MenuProps={{
-                    anchorOrigin: {
-                      vertical: "bottom",
-                      horizontal: "left"
-                    },
-                    transformOrigin: {
-                      vertical: "top",
-                      horizontal: "left"
-                    },
-                    getContentAnchorEl: null,
-                    PaperProps: {
-                      style: {
-                        maxHeight: isMobile ? 250 : 400,
-                      }
-                    }
-                  }}
-                  input={<Input />}
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<DonutLarge />}
+                  onClick={(e) => setWheelAnchor(e.currentTarget)}
+                  style={{ height: "100%", textTransform: "none" }}
                 >
-                  {getKeysForWheel(wheel).map((key) => (
-                    <MenuItem
-                      key={key}
-                      value={key}
-                      style={getStyles(key, keyFilter, theme)}
+                  Key Wheel{keyFilter.length ? ` (${keyFilter.length})` : ""}
+                </Button>
+                <Popover
+                  open={Boolean(wheelAnchor)}
+                  anchorEl={wheelAnchor}
+                  onClose={() => setWheelAnchor(null)}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                  transformOrigin={{ vertical: "top", horizontal: "left" }}
+                >
+                  <Box style={{ padding: 12, textAlign: "center" }}>
+                    <Typography variant="caption" color="textSecondary">
+                      Click keys to filter · adjacent + opposite-ring keys mix in
+                      harmony
+                    </Typography>
+                    <CamelotWheel
+                      selected={keyFilter}
+                      onToggle={toggleKeyFilter}
+                    />
+                    <Button
+                      size="small"
+                      onClick={() => setKeyFilter([])}
+                      disabled={keyFilter.length === 0}
                     >
-                      {key}
-                    </MenuItem>
-                  ))}
-                </Select>
+                      Clear keys
+                    </Button>
+                  </Box>
+                </Popover>
               </FormControl>
-              {wheel === "Musical" && (
+              {keyFilter.length > 0 && (
+                <div className={classes.chips} style={{ alignItems: "center" }}>
+                  {keyFilter.map((code) => {
+                    const c = camelotColor(code);
+                    return (
+                      <Chip
+                        key={code}
+                        size="small"
+                        label={code}
+                        onDelete={() => toggleKeyFilter(code)}
+                        className={classes.chip}
+                        style={c ? { backgroundColor: c.bg, color: c.text } : {}}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+              {true && (
                 <FormControl className={classes.filter}>
                   <InputLabel id="demo-simple-select-label">Quality</InputLabel>
                   <Select
@@ -812,10 +785,10 @@ let Playlist = (props) => {
                 {!isMobile && <StyledTableCell>Cover Art</StyledTableCell>}
                 <StyledTableCell>Track</StyledTableCell>
                 {!isMobile && <StyledTableCell>Artist</StyledTableCell>}
-                <StyledTableCell>{isMobile ? "Key" : "Musical Key"}</StyledTableCell>
+                <StyledTableCell>
+                  {isMobile ? "Key" : `Key (${wheel})`}
+                </StyledTableCell>
                 {!isMobile && <StyledTableCell>Quality</StyledTableCell>}
-                {!isTablet && <StyledTableCell>Camelot Key</StyledTableCell>}
-                {!isTablet && <StyledTableCell>Open Key</StyledTableCell>}
                 <StyledTableCell>BPM</StyledTableCell>
               </TableRow>
             </TableHead>
@@ -849,6 +822,7 @@ let Playlist = (props) => {
                     getKey={getKey}
                     isMobile={isMobile}
                     isTablet={isTablet}
+                    wheel={wheel}
                     harmonicAnchorId={harmonicAnchorId}
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
                     onToggleAnchor={toggleHarmonicAnchor}

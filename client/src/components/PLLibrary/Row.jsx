@@ -32,6 +32,21 @@ let Row = (props) => {
     const camelot = trackKey ? KeyMap[trackKey.key].camelot[trackKey.mode] : null;
     const keyColor = camelot ? camelotColor(camelot) : null;
 
+    // Label for the single key column, rendered in the selected notation. On
+    // mobile (no separate Quality column) the musical key includes Maj/Min.
+    let keyLabel = null;
+    if (trackKey) {
+      if (props.wheel === "Camelot") {
+        keyLabel = camelot;
+      } else if (props.wheel === "Open") {
+        keyLabel = KeyMap[trackKey.key].open[trackKey.mode];
+      } else {
+        keyLabel = `${KeyMap[trackKey.key].key}${
+          props.isMobile ? (trackKey.mode === 1 ? " Maj" : " Min") : ""
+        }`;
+      }
+    }
+
     // Harmonic-mixing highlight relative to the anchored track (if any).
     const isAnchor = props.harmonicAnchorId === item.track.id;
     const relation = harmonicRelation(
@@ -168,37 +183,11 @@ let Row = (props) => {
             </TableCell>
           )}
           <TableCell>
-            {trackKey
-              ? keyChip(
-                  `${KeyMap[trackKey.key].key}${
-                    props.isMobile
-                      ? trackKey.mode === 1
-                        ? " Maj"
-                        : " Min"
-                      : ""
-                  }`
-                )
-              : "N/A"}
+            {trackKey ? keyChip(keyLabel) : "N/A"}
           </TableCell>
           {!props.isMobile && (
             <TableCell>
-              {getKey(item.track.id) || getKey(item.track.id) === 0
-                ? getKey(item.track.id).mode === 1
-                  ? "Major"
-                  : "Minor"
-                : "N/A"}
-            </TableCell>
-          )}
-          {!props.isTablet && (
-            <TableCell>{camelot ? keyChip(camelot) : "N/A"}</TableCell>
-          )}
-          {!props.isTablet && (
-            <TableCell>
-              {getKey(item.track.id) || getKey(item.track.id) === 0
-                ? KeyMap[getKey(item.track.id).key].open[
-                    getKey(item.track.id).mode
-                  ]
-                : "N/A"}
+              {trackKey ? (trackKey.mode === 1 ? "Major" : "Minor") : "N/A"}
             </TableCell>
           )}
           <TableCell>
