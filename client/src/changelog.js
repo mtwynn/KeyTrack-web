@@ -21,7 +21,7 @@ const changelog = [
       },
       {
         type: "improvement",
-        desc: "Crate tiles now animate in with a staggered fade/slide when the library opens, and each tile's track-count chip sits at a consistent height (pinned to the bottom of the card) regardless of description length.",
+        desc: "Sleeker motion + breathing room: crate tiles stagger in when the library opens, the Crates/Folders content crossfades on tab switch, the select checkbox and favorite star pop when toggled, the 'Open (N)' count bumps as it changes, and folders expand/collapse more smoothly. The library controls also got more spacing, and each tile's track-count chip is pinned to a consistent height regardless of description length.",
       },
       {
         type: "bugfix",

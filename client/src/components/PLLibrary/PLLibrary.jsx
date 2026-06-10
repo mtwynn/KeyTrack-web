@@ -75,6 +75,23 @@ const useStyles = makeStyles((theme) => ({
   tileIn: {
     animation: "$tileIn 0.34s ease both",
   },
+  // Crossfade the content when switching the Crates / Folders tab.
+  "@keyframes contentFade": {
+    from: { opacity: 0 },
+    to: { opacity: 1 },
+  },
+  contentFade: {
+    animation: "$contentFade 0.28s ease both",
+  },
+  // Bump the "Open (N)" count when the selection size changes.
+  "@keyframes countBump": {
+    "0%": { transform: "scale(1)" },
+    "35%": { transform: "scale(1.35)" },
+    "100%": { transform: "scale(1)" },
+  },
+  countBump: {
+    animation: "$countBump 0.3s ease",
+  },
   // Floating, fully-rounded search pill (replaces the old dark search bar).
   searchPill: {
     display: "flex",
@@ -160,7 +177,9 @@ const useStyles = makeStyles((theme) => ({
     padding: 4,
     color: "#fff",
     backgroundColor: "rgba(0,0,0,0.35)",
+    transition: "transform 0.12s ease, background-color 0.15s ease",
     "&:hover": { backgroundColor: "rgba(0,0,0,0.5)" },
+    "&:active": { transform: "scale(0.82)" },
   },
   tileFav: {
     position: "absolute",
@@ -168,7 +187,18 @@ const useStyles = makeStyles((theme) => ({
     right: 6,
     padding: 4,
     backgroundColor: "rgba(0,0,0,0.35)",
+    transition: "transform 0.12s ease, background-color 0.15s ease",
     "&:hover": { backgroundColor: "rgba(0,0,0,0.5)" },
+    "&:active": { transform: "scale(0.82)" },
+  },
+  // Little pop applied to the star/checkbox icon the moment its state flips.
+  "@keyframes iconPop": {
+    "0%": { transform: "scale(1)" },
+    "45%": { transform: "scale(1.35)" },
+    "100%": { transform: "scale(1)" },
+  },
+  iconPop: {
+    animation: "$iconPop 0.28s ease",
   },
   tileLoading: {
     position: "absolute",
@@ -775,7 +805,10 @@ let PLLibrary = (props) => {
             <MusicNote style={{ color: "#fff", fontSize: 42, opacity: 0.85 }} />
           )}
           <Checkbox
-            className={classes.tileCheckbox}
+            key={selected.has(playlist.id) ? "on" : "off"}
+            className={`${classes.tileCheckbox} ${
+              selected.has(playlist.id) ? classes.iconPop : ""
+            }`}
             checked={selected.has(playlist.id)}
             onClick={(e) => {
               e.stopPropagation();
@@ -791,11 +824,17 @@ let PLLibrary = (props) => {
             title={meta.favorite ? "Unfavorite" : "Favorite"}
             aria-label="favorite crate"
           >
-            {meta.favorite ? (
-              <Star style={{ color: "#1ED760" }} fontSize="small" />
-            ) : (
-              <StarBorder style={{ color: "#fff" }} fontSize="small" />
-            )}
+            <span
+              key={meta.favorite ? "fav" : "unfav"}
+              className={meta.favorite ? classes.iconPop : ""}
+              style={{ display: "inline-flex" }}
+            >
+              {meta.favorite ? (
+                <Star style={{ color: "#1ED760" }} fontSize="small" />
+              ) : (
+                <StarBorder style={{ color: "#fff" }} fontSize="small" />
+              )}
+            </span>
           </IconButton>
           {loadingId === playlist.id && (
             <Box className={classes.tileLoading}>
@@ -1011,7 +1050,7 @@ let PLLibrary = (props) => {
           </>
         )}
       </Box>
-      <Collapse in={isExpanded(key)} timeout="auto" unmountOnExit>
+      <Collapse in={isExpanded(key)} timeout={320} unmountOnExit>
         <Box sx={{ padding: isMobile ? 1 : 2 }}>
           {crates.length === 0 ? (
             <Typography
@@ -1142,16 +1181,17 @@ let PLLibrary = (props) => {
       </Dialog>
 
       <Box
-        sx={{ padding: isMobile ? 1 : 2 }}
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
-          gap: 8,
+          rowGap: 12,
+          columnGap: 12,
+          padding: isMobile ? "14px 8px" : "20px 16px",
         }}
       >
-        <Box style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Box style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {/* Sort — a Button + Menu so it matches the Folders button. */}
           <Button
             variant="outlined"
@@ -1244,7 +1284,7 @@ let PLLibrary = (props) => {
             </>
           )}
         </Box>
-        <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Box style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {(() => {
             const shownIds = sortedCrates.map((c) => c.id);
             const allSelected =
@@ -1271,7 +1311,15 @@ let PLLibrary = (props) => {
             onClick={handleOpenSelected}
             style={{ textTransform: "none", borderRadius: 8, fontWeight: 600 }}
           >
-            Open ({selected.size})
+            Open (
+            <span
+              key={selected.size}
+              className={classes.countBump}
+              style={{ display: "inline-block" }}
+            >
+              {selected.size}
+            </span>
+            )
           </Button>
           {folderView && (
             <Button
@@ -1335,23 +1383,28 @@ let PLLibrary = (props) => {
         </Box>
       )}
 
-      {folderView ? (
-        <Box sx={{ padding: isMobile ? 0 : 1 }}>
-          {renderFolderGroup("__root__", "Unfiled", grouped.__root__, null)}
-          {folders.map((f) =>
-            renderFolderGroup(f.id, f.name, grouped[f.id] || [], f)
-          )}
-        </Box>
-      ) : (
-        <Box sx={{ padding: isMobile ? 1 : 2 }}>
-          {renderCrateGrid(
-            pagedCrates,
-            !showHidden && !favoritesOnly && cratePage === 0
-              ? renderLikedTile()
-              : null
-          )}
-        </Box>
-      )}
+      <div
+        key={folderView ? "folders" : "crates"}
+        className={classes.contentFade}
+      >
+        {folderView ? (
+          <Box sx={{ padding: isMobile ? 0 : 1 }}>
+            {renderFolderGroup("__root__", "Unfiled", grouped.__root__, null)}
+            {folders.map((f) =>
+              renderFolderGroup(f.id, f.name, grouped[f.id] || [], f)
+            )}
+          </Box>
+        ) : (
+          <Box sx={{ padding: isMobile ? 1 : 2 }}>
+            {renderCrateGrid(
+              pagedCrates,
+              !showHidden && !favoritesOnly && cratePage === 0
+                ? renderLikedTile()
+                : null
+            )}
+          </Box>
+        )}
+      </div>
 
       {!folderView && sortedCrates.length > 12 && (
         <TablePagination
