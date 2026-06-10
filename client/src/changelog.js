@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.18.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Your Spotify Liked Songs now appear as a crate at the top of the library \u2014 open it to analyze keys/BPM, filter, sort, and add tracks to a set just like any playlist.",
+      },
+    ],
+  },
+  {
     version: "1.17.0",
     date: "06/09/26",
     changes: [
