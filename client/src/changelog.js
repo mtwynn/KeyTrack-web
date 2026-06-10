@@ -21,7 +21,11 @@ const changelog = [
       },
       {
         type: "improvement",
-        desc: "Each crate tile now has an 'Open' button (bottom-right) to dig into just that crate, while tapping anywhere else on the tile selects it. On phones the sidebar nav moved into a tidy hamburger drawer instead of a cramped scrolling row.",
+        desc: "Each crate tile now has an 'Open' button (bottom-right) to dig into just that crate, while tapping anywhere else on the tile selects it; a 'Clear (N)' button next to 'Select all' deselects everything. On phones the sidebar nav moved into a tidy hamburger drawer instead of a cramped scrolling row.",
+      },
+      {
+        type: "improvement",
+        desc: "Now Playing moved out of the account drawer: it's a slim control with a refresh button in the top bar on desktop, and lives in the hamburger drawer on mobile. The account drawer no longer duplicates Sets / Hidden crates (those live in the nav).",
       },
       {
         type: "bugfix",

@@ -740,6 +740,9 @@ class App extends React.Component {
             </Hidden>
             <Wordmark variant="h6" />
             <Box style={{ flexGrow: 1 }} />
+            <Hidden smDown>
+              <CurrentSong token={this.state.access_token} compact />
+            </Hidden>
             <IconButton
               color="inherit"
               onClick={this.openSet}
@@ -810,12 +813,27 @@ class App extends React.Component {
             open={this.state.navDrawerOpen}
             onClose={() => this.setState({ navDrawerOpen: false })}
           >
-            <Box style={{ width: 260, paddingTop: 8 }} role="presentation">
+            <Box
+              style={{
+                width: 270,
+                paddingTop: 8,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+              role="presentation"
+            >
               <Box style={{ padding: '4px 16px 8px' }}>
                 <Wordmark variant="h6" />
               </Box>
               <Divider />
               {renderNavList(() => this.setState({ navDrawerOpen: false }))}
+              <Box style={{ marginTop: 'auto' }}>
+                <Divider />
+                <Box style={{ padding: 16 }}>
+                  <CurrentSong token={this.state.access_token} />
+                </Box>
+              </Box>
             </Box>
           </Drawer>
 
@@ -926,39 +944,7 @@ class App extends React.Component {
 
           <Divider />
 
-          <Box style={{ padding: '14px 0' }}>
-            <CurrentSong token={this.state.access_token} />
-          </Box>
-
-          <Divider />
-
           <List>
-            <ListItem
-              button
-              onClick={() =>
-                this.setState({ setOpen: true, drawerOpen: false })
-              }
-            >
-              <ListItemIcon>
-                <QueueMusic />
-              </ListItemIcon>
-              <ListItemText
-                primary="Set Builder"
-                secondary={
-                  this.state.set.length
-                    ? `${this.state.set.length} track${
-                        this.state.set.length > 1 ? 's' : ''
-                      }`
-                    : 'empty'
-                }
-              />
-            </ListItem>
-            <ListItem button onClick={this.openHiddenCrates}>
-              <ListItemIcon>
-                <VisibilityOff />
-              </ListItemIcon>
-              <ListItemText primary="Hidden crates" />
-            </ListItem>
             <ListItem>
               <ListItemIcon>
                 {isDark ? <Brightness7 /> : <Brightness4 />}

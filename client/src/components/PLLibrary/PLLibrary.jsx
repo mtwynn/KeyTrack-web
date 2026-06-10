@@ -51,6 +51,7 @@ import {
   SortByAlpha,
   FilterList,
   ArrowDropDown,
+  Close,
 } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
@@ -1310,6 +1311,16 @@ let PLLibrary = (props) => {
               </Button>
             );
           })()}
+          {selected.size > 0 && (
+            <Button
+              size="small"
+              onClick={clearSelection}
+              startIcon={<Close fontSize="small" />}
+              style={{ textTransform: "none", borderRadius: 8 }}
+            >
+              Clear ({selected.size})
+            </Button>
+          )}
           <Button
             size="small"
             variant="contained"
