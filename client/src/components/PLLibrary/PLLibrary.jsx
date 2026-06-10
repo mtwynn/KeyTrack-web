@@ -21,8 +21,10 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
+  Popover,
   Select,
   TablePagination,
+  TextField,
   useMediaQuery,
   useTheme,
 } from "@material-ui/core";
@@ -34,6 +36,7 @@ import {
   Star,
   StarBorder,
   VisibilityOff,
+  LocalOffer,
 } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
@@ -187,6 +190,31 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
+const GENRES = [
+  "House",
+  "Tech House",
+  "Deep House",
+  "Bass House",
+  "Progressive House",
+  "Techno",
+  "Trance",
+  "Dubstep",
+  "Melodic Dubstep",
+  "Drum & Bass",
+  "Trap",
+  "Future Bass",
+  "Hardstyle",
+  "Electro",
+  "Hip-Hop",
+  "Pop",
+  "R&B",
+  "Rock",
+  "Indie",
+  "Ambient",
+  "Lo-Fi",
+  "Other",
+];
+
 let PLLibrary = (props) => {
   const classes = useStyles();
   const theme = useTheme();
@@ -219,13 +247,13 @@ let PLLibrary = (props) => {
 
   const metaFor = (id) => crateMeta[id] || {};
 
-  const updateMeta = (playlist, partial) => {
+  const updateMeta = (id, partial) => {
     setCrateMetaState((prev) => ({
       ...prev,
-      [playlist.id]: { ...prev[playlist.id], ...partial },
+      [id]: { ...prev[id], ...partial },
     }));
     if (props.userId) {
-      setCrateMeta(props.userId, playlist.id, partial).catch((e) =>
+      setCrateMeta(props.userId, id, partial).catch((e) =>
         console.error("Failed to save crate metadata", e)
       );
     }
@@ -233,13 +261,45 @@ let PLLibrary = (props) => {
 
   const toggleFavorite = (e, playlist) => {
     e.stopPropagation();
-    updateMeta(playlist, { favorite: !metaFor(playlist.id).favorite });
+    updateMeta(playlist.id, { favorite: !metaFor(playlist.id).favorite });
   };
 
   const toggleHidden = (e, playlist) => {
     e.stopPropagation();
-    updateMeta(playlist, { hidden: !metaFor(playlist.id).hidden });
+    updateMeta(playlist.id, { hidden: !metaFor(playlist.id).hidden });
   };
+
+  // Tag/genre editing popover + library filter.
+  const [tagEdit, setTagEdit] = React.useState({ anchorEl: null, id: null });
+  const [tagInput, setTagInput] = React.useState("");
+  const [metaFilter, setMetaFilter] = React.useState([]);
+
+  const openTagEdit = (e, playlist) => {
+    e.stopPropagation();
+    setTagInput("");
+    setTagEdit({ anchorEl: e.currentTarget, id: playlist.id });
+  };
+
+  const addTag = (id, tag) => {
+    const t = tag.trim();
+    if (!t) return;
+    const cur = metaFor(id).tags || [];
+    if (!cur.includes(t)) updateMeta(id, { tags: [...cur, t] });
+    setTagInput("");
+  };
+
+  const removeTag = (id, tag) =>
+    updateMeta(id, { tags: (metaFor(id).tags || []).filter((t) => t !== tag) });
+
+  // All tags + genres in use, for the library filter.
+  const allTagsGenres = React.useMemo(() => {
+    const s = new Set();
+    Object.values(crateMeta).forEach((m) => {
+      (m.tags || []).forEach((t) => s.add(t));
+      (m.genres || []).forEach((g) => s.add(g));
+    });
+    return Array.from(s).sort();
+  }, [crateMeta]);
 
   // Sort + paginate the crate list so we only render a page at a time. In the
   // normal view, hidden crates are excluded and favorites are pinned to the top;
@@ -247,8 +307,14 @@ let PLLibrary = (props) => {
   const showHidden = props.showHidden;
   const sortedCrates = React.useMemo(() => {
     const arr = (searchItems || []).filter((pl) => {
-      const hidden = !!(crateMeta[pl.id] && crateMeta[pl.id].hidden);
-      return showHidden ? hidden : !hidden;
+      const m = crateMeta[pl.id] || {};
+      const hidden = !!m.hidden;
+      if (showHidden ? !hidden : hidden) return false;
+      if (metaFilter.length > 0) {
+        const vals = [...(m.tags || []), ...(m.genres || [])];
+        if (!metaFilter.some((f) => vals.includes(f))) return false;
+      }
+      return true;
     });
     arr.sort((a, b) => {
       if (!showHidden) {
@@ -267,7 +333,7 @@ let PLLibrary = (props) => {
       return (a.name || "").localeCompare(b.name || "");
     });
     return arr;
-  }, [searchItems, crateSort, crateMeta, showHidden]);
+  }, [searchItems, crateSort, crateMeta, showHidden, metaFilter]);
 
   const pagedCrates = sortedCrates.slice(
     cratePage * cratesPerPage,
@@ -276,7 +342,7 @@ let PLLibrary = (props) => {
 
   React.useEffect(() => {
     setCratePage(0);
-  }, [searchItems, crateSort, cratesPerPage]);
+  }, [searchItems, crateSort, cratesPerPage, metaFilter]);
 
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
@@ -599,18 +665,38 @@ let PLLibrary = (props) => {
           gap: 8,
         }}
       >
-        <FormControl size="small" style={{ minWidth: 160 }}>
-          <InputLabel>Sort crates by</InputLabel>
-          <Select
-            value={crateSort}
-            label="Sort crates by"
-            onChange={(e) => setCrateSort(e.target.value)}
-          >
-            <MenuItem value="name">Name</MenuItem>
-            <MenuItem value="tracks">Track count</MenuItem>
-            <MenuItem value="owner">Owner</MenuItem>
-          </Select>
-        </FormControl>
+        <Box style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <FormControl size="small" style={{ minWidth: 150 }}>
+            <InputLabel>Sort crates by</InputLabel>
+            <Select
+              value={crateSort}
+              label="Sort crates by"
+              onChange={(e) => setCrateSort(e.target.value)}
+            >
+              <MenuItem value="name">Name</MenuItem>
+              <MenuItem value="tracks">Track count</MenuItem>
+              <MenuItem value="owner">Owner</MenuItem>
+            </Select>
+          </FormControl>
+          {allTagsGenres.length > 0 && (
+            <FormControl size="small" style={{ minWidth: 170 }}>
+              <InputLabel>Filter by tag/genre</InputLabel>
+              <Select
+                multiple
+                value={metaFilter}
+                label="Filter by tag/genre"
+                onChange={(e) => setMetaFilter(e.target.value)}
+                renderValue={(sel) => sel.join(", ")}
+              >
+                {allTagsGenres.map((v) => (
+                  <MenuItem key={v} value={v}>
+                    {v}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+        </Box>
         <Typography variant="caption" color="textSecondary">
           {sortedCrates.length} crate{sortedCrates.length === 1 ? "" : "s"}
         </Typography>
@@ -688,7 +774,7 @@ let PLLibrary = (props) => {
                   </Typography>
                 )}
 
-                {/* Meta Info: Track Count */}
+                {/* Meta Info: Track Count + genre/tag chips */}
                 <Box className={classes.playlistMeta}>
                   <Chip
                     label={`${playlist.tracks.total} tracks`}
@@ -696,6 +782,22 @@ let PLLibrary = (props) => {
                     className={classes.trackChip}
                     icon={<MusicNote style={{ color: "#fff" }} />}
                   />
+                  {(metaFor(playlist.id).genres || []).map((g) => (
+                    <Chip
+                      key={`g-${g}`}
+                      label={g}
+                      size="small"
+                      variant="outlined"
+                    />
+                  ))}
+                  {(metaFor(playlist.id).tags || []).map((t) => (
+                    <Chip
+                      key={`t-${t}`}
+                      label={`#${t}`}
+                      size="small"
+                      variant="outlined"
+                    />
+                  ))}
                 </Box>
               </Box>
 
@@ -703,6 +805,14 @@ let PLLibrary = (props) => {
               <Box
                 style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
               >
+                <IconButton
+                  size="small"
+                  onClick={(e) => openTagEdit(e, playlist)}
+                  title="Tags & genres"
+                  aria-label="edit tags and genres"
+                >
+                  <LocalOffer fontSize="small" />
+                </IconButton>
                 <IconButton
                   size="small"
                   onClick={(e) => toggleFavorite(e, playlist)}
@@ -770,6 +880,75 @@ let PLLibrary = (props) => {
           labelRowsPerPage="Crates per page"
         />
       )}
+
+      <Popover
+        open={Boolean(tagEdit.anchorEl)}
+        anchorEl={tagEdit.anchorEl}
+        onClose={() => setTagEdit({ anchorEl: null, id: null })}
+        onClick={(e) => e.stopPropagation()}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        {tagEdit.id && (
+          <Box style={{ padding: 16, width: 280 }}>
+            <Typography
+              variant="subtitle2"
+              style={{ fontWeight: 700, marginBottom: 10 }}
+            >
+              Tags &amp; genres
+            </Typography>
+            <FormControl size="small" fullWidth style={{ marginBottom: 14 }}>
+              <InputLabel>Genres</InputLabel>
+              <Select
+                multiple
+                value={metaFor(tagEdit.id).genres || []}
+                label="Genres"
+                onChange={(e) =>
+                  updateMeta(tagEdit.id, { genres: e.target.value })
+                }
+                renderValue={(sel) => sel.join(", ")}
+              >
+                {GENRES.map((g) => (
+                  <MenuItem key={g} value={g}>
+                    {g}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              size="small"
+              fullWidth
+              label="Add tag"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addTag(tagEdit.id, tagInput);
+                }
+              }}
+              helperText="Press Enter to add"
+            />
+            <Box
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 4,
+                marginTop: 8,
+              }}
+            >
+              {(metaFor(tagEdit.id).tags || []).map((t) => (
+                <Chip
+                  key={t}
+                  size="small"
+                  label={`#${t}`}
+                  onDelete={() => removeTag(tagEdit.id, t)}
+                />
+              ))}
+            </Box>
+          </Box>
+        )}
+      </Popover>
 
       {showPlaylist ? (
         <Playlist

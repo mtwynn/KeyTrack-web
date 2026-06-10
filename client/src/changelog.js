@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.14.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Tag crates with your own labels and assign genres (multiple per crate), shown as chips on each crate. Filter the library by any tag or genre.",
+      },
+    ],
+  },
+  {
     version: "1.13.0",
     date: "06/09/26",
     changes: [
