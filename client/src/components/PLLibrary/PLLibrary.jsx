@@ -669,6 +669,15 @@ let PLLibrary = (props) => {
       }}
     >
       <CardContent className={classes.cardContent}>
+        <Checkbox
+          checked={selected.has(playlist.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSelect(playlist.id);
+          }}
+          title="Select for cross-search"
+          style={{ padding: 4, marginRight: 4, alignSelf: "center" }}
+        />
         <Avatar
           variant="square"
           src={playlist.images[0] ? playlist.images[0].url : undefined}
@@ -710,14 +719,6 @@ let PLLibrary = (props) => {
         </Box>
 
         <Box style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-          <Checkbox
-            size="small"
-            checked={selected.has(playlist.id)}
-            onClick={(e) => e.stopPropagation()}
-            onChange={() => toggleSelect(playlist.id)}
-            title="Select for cross-search"
-            style={{ padding: 4 }}
-          />
           <IconButton
             size="small"
             onClick={(e) => openTagEdit(e, playlist)}
