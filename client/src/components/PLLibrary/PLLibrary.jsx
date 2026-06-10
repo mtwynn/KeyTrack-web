@@ -15,6 +15,7 @@ import {
   makeStyles,
   Card,
   CardContent,
+  Grid,
   Typography,
   Box,
   Checkbox,
@@ -698,6 +699,8 @@ let PLLibrary = (props) => {
       className={classes.playlistCard}
       onClick={() => handlePlaylistOpen(playlist)}
       style={{
+        height: "100%",
+        marginBottom: 0,
         borderLeft: metaFor(playlist.id).favorite
           ? "4px solid #1ED760"
           : "4px solid transparent",
@@ -813,6 +816,18 @@ let PLLibrary = (props) => {
     </Card>
   );
 
+  // Lay crates out in a responsive grid so wide screens show two cards per
+  // row instead of one sparse full-width row with lots of empty space.
+  const renderCrateGrid = (crates) => (
+    <Grid container spacing={2}>
+      {crates.map((p) => (
+        <Grid item xs={12} md={6} key={p.id}>
+          {renderCrateCard(p)}
+        </Grid>
+      ))}
+    </Grid>
+  );
+
   const renderFolderGroup = (key, name, crates, folder) => (
     <Box key={key} style={{ marginBottom: 8 }}>
       <Box
@@ -870,7 +885,7 @@ let PLLibrary = (props) => {
               No crates
             </Typography>
           ) : (
-            crates.map(renderCrateCard)
+            renderCrateGrid(crates)
           )}
         </Box>
       </Collapse>
@@ -1036,7 +1051,7 @@ let PLLibrary = (props) => {
         }}
       >
         <Box style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <FormControl size="small" style={{ minWidth: 150 }}>
+          <FormControl variant="outlined" size="small" style={{ minWidth: 160 }}>
             <InputLabel>Sort crates by</InputLabel>
             <Select
               value={crateSort}
@@ -1049,7 +1064,7 @@ let PLLibrary = (props) => {
             </Select>
           </FormControl>
           {allTagsGenres.length > 0 && (
-            <FormControl size="small" style={{ minWidth: 170 }}>
+            <FormControl variant="outlined" size="small" style={{ minWidth: 180 }}>
               <InputLabel>Filter by tag/genre</InputLabel>
               <Select
                 multiple
@@ -1134,7 +1149,7 @@ let PLLibrary = (props) => {
         </Box>
       ) : (
         <Box sx={{ padding: isMobile ? 1 : 2 }}>
-          {pagedCrates.map(renderCrateCard)}
+          {renderCrateGrid(pagedCrates)}
         </Box>
       )}
 

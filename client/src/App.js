@@ -604,7 +604,15 @@ class App extends React.Component {
           </Toolbar>
         </AppBar>
 
-        <Container style={{ paddingTop: 24, paddingBottom: 130 }}>
+        <Container
+          maxWidth={false}
+          style={{
+            paddingTop: 24,
+            paddingBottom: 130,
+            maxWidth: 1400,
+            margin: "0 auto",
+          }}
+        >
           <Grid container spacing={2} justify="center">
             {this.renderTile(
               <LibraryMusic style={tileIcon} />,

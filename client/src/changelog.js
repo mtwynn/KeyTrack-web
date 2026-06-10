@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.24.0",
+    date: "06/10/26",
+    changes: [
+      {
+        type: "improvement",
+        desc: "Library layout refresh: the crate library now uses the full page width and lays crates out in a responsive two-per-row grid on desktop instead of one sparse full-width row each, and the 'Sort crates by' / tag-genre filter controls were restyled as clean outlined dropdowns.",
+      },
+    ],
+  },
+  {
     version: "1.23.0",
     date: "06/10/26",
     changes: [
