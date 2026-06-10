@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.16.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Each track now shows its release month/year, with a new 'Released' column. Sort a playlist by newest/oldest release, and filter by a release-year range.",
+      },
+    ],
+  },
+  {
     version: "1.15.0",
     date: "06/09/26",
     changes: [

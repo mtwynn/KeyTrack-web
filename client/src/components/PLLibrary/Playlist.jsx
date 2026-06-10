@@ -38,6 +38,7 @@ import { firebaseConfig } from "../../../src/config/firebaseConfig";
 import { doc, getDoc, getFirestore } from "firebase/firestore";
 
 import KeyMap from "../../utils/KeyMap";
+import { releaseSortKey, releaseYear } from "../../utils/release";
 import { useEffect } from "react";
 
 import Row from "./Row";
@@ -261,6 +262,9 @@ let Playlist = (props) => {
   const [keyFilter, setKeyFilter] = React.useState([]);
   const [minBpm, setMinBpm] = React.useState("");
   const [maxBpm, setMaxBpm] = React.useState("");
+  const [minYear, setMinYear] = React.useState("");
+  const [maxYear, setMaxYear] = React.useState("");
+  const [sortBy, setSortBy] = React.useState("key");
   const [showFilters, setShowFilters] = React.useState(!isMobile); // Collapsed on mobile by default
   let [searchItems, setSearchItems] = React.useState(allItems);
   let [chordProgressions, setChordProgressions] = React.useState({});
@@ -366,10 +370,16 @@ let Playlist = (props) => {
   const sortedItems = React.useMemo(() => {
     const arr = [...searchItems];
     arr.sort((a, b) => {
+      if (sortBy === "released-desc" || sortBy === "released-asc") {
+        const diff = releaseSortKey(a.track) - releaseSortKey(b.track);
+        return sortBy === "released-desc" ? -diff : diff;
+      }
       const aKey = getKey(a.track.id);
       const bKey = getKey(b.track.id);
       if (!aKey) return -1;
       if (!bKey) return 1;
+      if (sortBy === "bpm") return aKey.bpm - bKey.bpm;
+      // Default: Camelot key, then BPM.
       const aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
       const bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
       const cmp = aCamelot.localeCompare(bCamelot);
@@ -377,7 +387,7 @@ let Playlist = (props) => {
       return aKey.bpm - bKey.bpm;
     });
     return arr;
-  }, [searchItems, getKey]);
+  }, [searchItems, getKey, sortBy]);
 
   // Only the current page is rendered into the DOM.
   const pagedItems = React.useMemo(
@@ -409,7 +419,9 @@ let Playlist = (props) => {
       keyFilter.length === 0 &&
       search === "" &&
       minBpm === "" &&
-      maxBpm === ""
+      maxBpm === "" &&
+      minYear === "" &&
+      maxYear === ""
     ) {
       _.debounce(setSearchItems(allItems), 500);
     } else {
@@ -458,12 +470,27 @@ let Playlist = (props) => {
               return mappedBpm <= bpmNum;
             });
           }
+
+          if (minYear !== "") {
+            const y = parseInt(minYear, 10);
+            filteredItems = filteredItems.filter((item) => {
+              const ry = releaseYear(item.track);
+              return ry !== null && ry >= y;
+            });
+          }
+          if (maxYear !== "") {
+            const y = parseInt(maxYear, 10);
+            filteredItems = filteredItems.filter((item) => {
+              const ry = releaseYear(item.track);
+              return ry !== null && ry <= y;
+            });
+          }
           return filteredItems;
         }, 500)
       );
     }
     // `wheel` only changes the displayed notation, not which tracks match.
-  }, [search, keyFilter, minBpm, maxBpm]);
+  }, [search, keyFilter, minBpm, maxBpm, minYear, maxYear]);
 
   const handleFilterChange = (event, type) => {
     const {
@@ -476,6 +503,8 @@ let Playlist = (props) => {
       wheel: setWheel,
       minBpm: _.debounce(setMinBpm, 500),
       maxBpm: _.debounce(setMaxBpm, 500),
+      minYear: _.debounce(setMinYear, 500),
+      maxYear: _.debounce(setMaxYear, 500),
     };
 
     funcMap[type](setValue);
@@ -485,8 +514,12 @@ let Playlist = (props) => {
     setKeyFilter([]);
     setMinBpm("");
     setMaxBpm("");
-    document.getElementById("minBpm").value = "";
-    document.getElementById("maxBpm").value = "";
+    setMinYear("");
+    setMaxYear("");
+    ["minBpm", "maxBpm", "minYear", "maxYear"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
   };
 
   // TODO: Abstract this to new component
@@ -679,6 +712,49 @@ let Playlist = (props) => {
                 />
               </FormControl>
 
+              <FormControl className={classes.minFilter}>
+                <InputLabel id="demo-simple-select-label">Year:</InputLabel>
+              </FormControl>
+              <FormControl className={classes.minFilter}>
+                <InputLabel id="demo-simple-select-label">From</InputLabel>
+                <Input
+                  id="minYear"
+                  type="number"
+                  classes={{ root: classes.root }}
+                  onChange={(e) => handleFilterChange(e, "minYear")}
+                />
+              </FormControl>
+              <FormControl className={classes.toFilter}>
+                <InputLabel id="demo-simple-select-label">to</InputLabel>
+              </FormControl>
+              <FormControl className={classes.maxFilter}>
+                <InputLabel id="demo-simple-select-label">To</InputLabel>
+                <Input
+                  id="maxYear"
+                  type="number"
+                  classes={{ root: classes.root }}
+                  onChange={(e) => handleFilterChange(e, "maxYear")}
+                />
+              </FormControl>
+
+              <FormControl className={classes.filter}>
+                <InputLabel id="demo-simple-select-label">Sort by</InputLabel>
+                <Select
+                  value={sortBy}
+                  label="Sort by"
+                  onChange={(e) => setSortBy(e.target.value)}
+                  inputProps={{
+                    classes: { icon: classes.icon, root: classes.root },
+                  }}
+                  input={<Input />}
+                >
+                  <MenuItem value="key">Key</MenuItem>
+                  <MenuItem value="bpm">BPM</MenuItem>
+                  <MenuItem value="released-desc">Newest</MenuItem>
+                  <MenuItem value="released-asc">Oldest</MenuItem>
+                </Select>
+              </FormControl>
+
               <IconButton
                   aria-label="clear filters"
                   className={classes.button}
@@ -748,6 +824,7 @@ let Playlist = (props) => {
                 </StyledTableCell>
                 {!isMobile && <StyledTableCell>Quality</StyledTableCell>}
                 <StyledTableCell>BPM</StyledTableCell>
+                {!isTablet && <StyledTableCell>Released</StyledTableCell>}
               </TableRow>
             </TableHead>
             <TableBody>
