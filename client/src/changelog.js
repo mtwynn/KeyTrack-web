@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.12.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "The crate library now sorts (by name, track count, or owner) and paginates, so large libraries render a page at a time instead of all at once.",
+      },
+    ],
+  },
+  {
     version: "1.11.0",
     date: "06/09/26",
     changes: [
