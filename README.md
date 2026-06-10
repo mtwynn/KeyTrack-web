@@ -98,7 +98,7 @@ Play tracks **in the browser** via Spotify's Web Playback SDK, with a **slim Now
 
 ## 🤖 How this app was built
 
-Any work that I did with Claude will have a a `🤖 Generated with Claude Code` footer on its pull requests. All the features on this app from a product perspective are my own ideas or ideas that I have evolved from using similar DJ and music software, or pain points that I wanted to solve for myself as a DJ and artist.
+Any work that I did with Claude will have a `🤖 Generated with Claude Code` footer on its pull requests. All the features on this app from a product perspective are my own ideas or ideas that I have evolved from using similar DJ and music software, or pain points that I wanted to solve for myself as a DJ and artist.
 
 ---
 
