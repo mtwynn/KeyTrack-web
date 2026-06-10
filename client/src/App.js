@@ -43,6 +43,7 @@ import {
   ExitToApp,
   GraphicEq,
   LibraryMusic,
+  Menu as MenuIcon,
   MusicNote,
   QueueMusic,
   Receipt,
@@ -129,6 +130,7 @@ class App extends React.Component {
       openChangelog: false,
       showKeyCalculator: false,
       drawerOpen: false,
+      navDrawerOpen: false,
       loadingPlaylists: false,
       showHiddenCrates: false,
       // Library view filter driven by the "Favorites" sidebar item.
@@ -669,14 +671,19 @@ class App extends React.Component {
       },
     ];
 
-    const sidebarList = (
+    // Shared between the persistent desktop sidebar and the mobile nav drawer.
+    // `afterClick` lets the mobile drawer close itself once an item is tapped.
+    const renderNavList = (afterClick) => (
       <List component="nav" style={{ padding: 4 }}>
         {navItems.map((it) => (
           <ListItem
             button
             key={it.key}
             selected={!!it.active}
-            onClick={it.onClick}
+            onClick={() => {
+              it.onClick();
+              if (afterClick) afterClick();
+            }}
             style={{ borderRadius: 8, marginBottom: 2 }}
           >
             <ListItemIcon
@@ -701,7 +708,10 @@ class App extends React.Component {
         <Divider style={{ margin: '8px 0' }} />
         <ListItem
           button
-          onClick={() => this.setState({ openChangelog: true })}
+          onClick={() => {
+            this.setState({ openChangelog: true });
+            if (afterClick) afterClick();
+          }}
           style={{ borderRadius: 8 }}
         >
           <ListItemIcon style={{ minWidth: 40 }}>
@@ -716,6 +726,18 @@ class App extends React.Component {
       <>
         <AppBar position="static" color="default" elevation={1}>
           <Toolbar>
+            <Hidden mdUp>
+              <IconButton
+                edge="start"
+                color="inherit"
+                onClick={() => this.setState({ navDrawerOpen: true })}
+                title="Menu"
+                aria-label="open navigation"
+                style={{ marginRight: 4 }}
+              >
+                <MenuIcon />
+              </IconButton>
+            </Hidden>
             <Wordmark variant="h6" />
             <Box style={{ flexGrow: 1 }} />
             <IconButton
@@ -778,50 +800,26 @@ class App extends React.Component {
                 top: 16,
               }}
             >
-              {sidebarList}
+              {renderNavList()}
             </Paper>
           </Hidden>
 
-          <Box style={{ flex: 1, minWidth: 0 }}>
-            <Hidden mdUp>
-              <Paper
-                variant="outlined"
-                style={{
-                  borderRadius: 12,
-                  marginBottom: 12,
-                  overflowX: 'auto',
-                }}
-              >
-                <Box
-                  style={{
-                    display: 'flex',
-                    gap: 4,
-                    padding: 6,
-                    minWidth: 'max-content',
-                  }}
-                >
-                  {navItems.map((it) => (
-                    <Button
-                      key={it.key}
-                      size="small"
-                      onClick={it.onClick}
-                      startIcon={it.icon}
-                      variant={it.active ? 'contained' : 'text'}
-                      color={it.active ? 'primary' : 'default'}
-                      style={{
-                        textTransform: 'none',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {it.label}
-                      {it.badge ? ` (${it.badge})` : ''}
-                    </Button>
-                  ))}
-                </Box>
-              </Paper>
-            </Hidden>
+          {/* Mobile: nav lives in a slide-out drawer (hamburger in the bar). */}
+          <Drawer
+            anchor="left"
+            open={this.state.navDrawerOpen}
+            onClose={() => this.setState({ navDrawerOpen: false })}
+          >
+            <Box style={{ width: 260, paddingTop: 8 }} role="presentation">
+              <Box style={{ padding: '4px 16px 8px' }}>
+                <Wordmark variant="h6" />
+              </Box>
+              <Divider />
+              {renderNavList(() => this.setState({ navDrawerOpen: false }))}
+            </Box>
+          </Drawer>
 
+          <Box style={{ flex: 1, minWidth: 0 }}>
             {this.state.showPlaylists ? (
               <FadeIn transitionDuration={400}>
                 <PLLibrary

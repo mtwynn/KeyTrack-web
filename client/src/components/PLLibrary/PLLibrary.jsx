@@ -783,18 +783,22 @@ let PLLibrary = (props) => {
     const meta = metaFor(playlist.id);
     const img = playlist.images[0] ? playlist.images[0].url : null;
     const desc = cleanDescription(playlist.description);
+    const isSelected = selected.has(playlist.id);
     return (
       <Card
         key={playlist.id}
         className={classes.tileCard}
-        onClick={() => handlePlaylistOpen(playlist)}
+        onClick={() => toggleSelect(playlist.id)}
         style={{
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          border: meta.favorite
+          border: isSelected
+            ? "2px solid #1ED760"
+            : meta.favorite
             ? "1px solid #1ED760"
             : "1px solid rgba(128,128,128,0.18)",
+          backgroundColor: isSelected ? "rgba(30,215,96,0.08)" : undefined,
         }}
       >
         <Box
@@ -899,18 +903,20 @@ let PLLibrary = (props) => {
             />
           </IconButton>
           <Box style={{ flex: 1 }} />
-          <IconButton
+          <Button
             size="small"
             className={classes.openButton}
+            startIcon={<MenuOpen fontSize="small" />}
             onClick={(e) => {
               e.stopPropagation();
               handlePlaylistOpen(playlist);
             }}
-            title="Open crate"
+            title="Open crate for digging"
             aria-label="open crate"
+            style={{ textTransform: "none", fontWeight: 600 }}
           >
-            <MenuOpen />
-          </IconButton>
+            Open
+          </Button>
         </Box>
       </Card>
     );
@@ -988,18 +994,20 @@ let PLLibrary = (props) => {
       </CardContent>
       <Box className={classes.tileActions}>
         <Box style={{ flex: 1 }} />
-        <IconButton
+        <Button
           size="small"
           className={classes.openButton}
+          startIcon={<MenuOpen fontSize="small" />}
           onClick={(e) => {
             e.stopPropagation();
             handleOpenLikedSongs();
           }}
           title="Open Liked Songs"
           aria-label="open liked songs"
+          style={{ textTransform: "none", fontWeight: 600 }}
         >
-          <MenuOpen />
-        </IconButton>
+          Open
+        </Button>
       </Box>
     </Card>
   );

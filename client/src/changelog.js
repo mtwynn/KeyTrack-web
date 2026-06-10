@@ -17,7 +17,15 @@ const changelog = [
       },
       {
         type: "improvement",
-        desc: "Crates and Folders are now a tab toggle at the top of the Library. The old 'Search all crates' button is gone — instead select any crates (or 'Select all') and hit 'Open (N)' to open them as one combined view; opening a big selection can be cancelled by clicking outside the loader.",
+        desc: "Crates and Folders are now a tab toggle at the top of the Library. The old 'Search all crates' button is gone — instead tap a crate to select it (or 'Select all') and hit 'Open (N)' to open them as one combined view; opening a big selection can be cancelled by clicking outside the loader.",
+      },
+      {
+        type: "improvement",
+        desc: "Each crate tile now has an 'Open' button (bottom-right) to dig into just that crate, while tapping anywhere else on the tile selects it. On phones the sidebar nav moved into a tidy hamburger drawer instead of a cramped scrolling row.",
+      },
+      {
+        type: "bugfix",
+        desc: "The Key Calculator can now be closed on mobile — it opens full-screen there and previously had no close button (or backdrop) to dismiss it.",
       },
       {
         type: "improvement",

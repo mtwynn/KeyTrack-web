@@ -5,9 +5,11 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  IconButton,
   Typography,
   useMediaQuery,
 } from "@material-ui/core";
+import { Close } from "@material-ui/icons";
 import { useTheme } from "@material-ui/core/styles";
 
 import CamelotWheel from "../components/PLLibrary/CamelotWheel";
@@ -46,7 +48,22 @@ let KeyCalculator = (props) => {
       disableEnforceFocus
       disableScrollLock
     >
-      <DialogTitle>Key Calculator</DialogTitle>
+      <DialogTitle
+        disableTypography
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingBottom: 8,
+        }}
+      >
+        <Typography variant="h6" style={{ fontWeight: 700 }}>
+          Key Calculator
+        </Typography>
+        <IconButton aria-label="close" onClick={onClose} size="small">
+          <Close />
+        </IconButton>
+      </DialogTitle>
       <DialogContent>
         <Typography
           variant="caption"
