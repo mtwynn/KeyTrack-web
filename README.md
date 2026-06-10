@@ -34,8 +34,6 @@ It's a project I hold very dear to me, and I hope it's helpful to you! :)
 
 At its core, KeyTrack answers the question every DJ asks while digging: *"what mixes with this?"* It pulls Spotify's audio analysis for your tracks, translates it into the language DJs actually use — Camelot keys, BPM, energy — and gives you the tools to find, organize, and sequence music harmonically. Here's the full picture.
 
-> **📸 Screenshots:** each section below has a slot for an image. Drop PNGs into `docs/screenshots/` using the filenames noted (see [`docs/screenshots/README.md`](docs/screenshots/README.md)) and they'll render automatically.
-
 ---
 
 ### 🎹 Read any track's key, BPM & notation
