@@ -23,6 +23,7 @@ import {
 } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 import KeyMap from "../../utils/KeyMap";
+import { camelotColor, compatibleCamelot } from "../../utils/harmonic";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -141,6 +142,25 @@ const Recommendations = (props) => {
   const [loading, setLoading] = React.useState(false);
   const [adding, setAdding] = React.useState({});
   const [addingAll, setAddingAll] = React.useState(false);
+  // Seed used to rank recommendations: { camelot, bpm }.
+  const [seed, setSeed] = React.useState(null);
+
+  // Seed for ranking. If the user has anchored a track, mix around that exact
+  // key. Otherwise pick a RANDOM track from the crate as the seed — the goal of
+  // recommendations is diversity, so each refresh explores a different corner of
+  // the crate's harmonic space rather than always converging on its dominant key.
+  const deriveSeed = () => {
+    if (props.seedCamelot) {
+      return { camelot: props.seedCamelot, bpm: props.seedBpm || null };
+    }
+    const tracks = (props.playlistKeys || []).filter(Boolean);
+    if (tracks.length === 0) return { camelot: null, bpm: null };
+    const pick = tracks[Math.floor(Math.random() * tracks.length)];
+    return {
+      camelot: KeyMap[pick.key].camelot[pick.mode],
+      bpm: pick.tempo ? Math.round(pick.tempo) : null,
+    };
+  };
 
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
@@ -178,25 +198,6 @@ const Recommendations = (props) => {
     return { trackIds, trackNames };
   };
 
-  // Select a unique random track from artist's top tracks
-  const selectUniqueTrack = (topTracks, playlistTrackIds, playlistTrackNames) => {
-    if (!topTracks || topTracks.length === 0) return null;
-
-    // Filter out tracks already in playlist
-    const availableTracks = topTracks.filter((track) => {
-      const nameMatch = playlistTrackNames.has(track.name.toLowerCase().trim());
-      const idMatch = playlistTrackIds.has(track.id);
-      return !nameMatch && !idMatch;
-    });
-
-    // If no unique tracks available, return null
-    if (availableTracks.length === 0) return null;
-
-    // Pick random track from available
-    const randomIndex = Math.floor(Math.random() * availableTracks.length);
-    return availableTracks[randomIndex];
-  };
-
   // Fetch recommendations using artist top tracks
   const fetchRecommendations = async () => {
     setLoading(true);
@@ -231,47 +232,64 @@ const Recommendations = (props) => {
       const topTracksResults = await Promise.all(topTracksPromises);
       console.log("Fetched top tracks for", topTracksResults.length, "artists");
 
-      // Step 5: Select one unique random track from each artist's top tracks
-      const selectedRecommendations = [];
-      
-      topTracksResults.forEach((result, index) => {
-        const topTracks = result.tracks || [];
-        const uniqueTrack = selectUniqueTrack(
-          topTracks,
-          playlistTrackIds,
-          playlistTrackNames
-        );
-
-        if (uniqueTrack) {
-          console.log(`Selected track from artist ${index + 1}:`, uniqueTrack.name);
-          selectedRecommendations.push(uniqueTrack);
-        } else {
-          console.log(`No unique tracks available for artist ${index + 1}`);
-        }
+      // Step 5: Collect ALL unique candidate tracks across artists (excluding
+      // tracks already in the playlist), to give ranking a real pool.
+      const seenIds = new Set(playlistTrackIds);
+      const candidates = [];
+      topTracksResults.forEach((result) => {
+        (result.tracks || []).forEach((track) => {
+          if (!track.id || seenIds.has(track.id)) return;
+          if (playlistTrackNames.has(track.name.toLowerCase().trim())) return;
+          seenIds.add(track.id);
+          candidates.push(track);
+        });
       });
 
-      console.log("Total recommendations found:", selectedRecommendations.length);
-      setRecommendations(selectedRecommendations);
+      if (candidates.length === 0) {
+        setRecommendations([]);
+        setRecommendationsMetadata({});
+        setLoading(false);
+        return;
+      }
 
-      // Step 6: Fetch audio features for recommended tracks
-      if (selectedRecommendations.length > 0) {
-        const trackIds = selectedRecommendations.map((track) => track.id);
-        const audioFeatures = await spotifyWebApi.getAudioFeaturesForTracks(
-          trackIds
-        );
-
-        const metadataMap = {};
-        audioFeatures.audio_features.forEach((feature) => {
-          if (feature) {
-            metadataMap[feature.id] = {
-              key: feature.key,
-              mode: feature.mode,
-              tempo: feature.tempo,
-            };
+      // Step 6: Audio features for all candidates (batched by 100).
+      const metadataMap = {};
+      for (let i = 0; i < candidates.length; i += 100) {
+        const batchIds = candidates.slice(i, i + 100).map((t) => t.id);
+        const res = await spotifyWebApi.getAudioFeaturesForTracks(batchIds);
+        (res.audio_features || []).forEach((f) => {
+          if (f) {
+            metadataMap[f.id] = { key: f.key, mode: f.mode, tempo: f.tempo };
           }
         });
-        setRecommendationsMetadata(metadataMap);
       }
+
+      // Step 7: Rank by harmonic + BPM compatibility to the seed, take the top.
+      const theSeed = deriveSeed();
+      setSeed(theSeed);
+      const ranked = candidates
+        .map((track) => {
+          const m = metadataMap[track.id];
+          const code = m ? KeyMap[m.key].camelot[m.mode] : null;
+          const bpm = m ? Math.round(m.tempo) : null;
+          const compatible =
+            theSeed.camelot && code
+              ? compatibleCamelot(theSeed.camelot).has(code)
+              : false;
+          const bpmDelta =
+            theSeed.bpm != null && bpm != null
+              ? Math.abs(bpm - theSeed.bpm)
+              : 9999;
+          return { track, compatible, bpmDelta };
+        })
+        .sort((a, b) => {
+          if (a.compatible !== b.compatible) return a.compatible ? -1 : 1;
+          return a.bpmDelta - b.bpmDelta;
+        })
+        .slice(0, 12);
+
+      setRecommendations(ranked.map((r) => r.track));
+      setRecommendationsMetadata(metadataMap);
     } catch (error) {
       console.error("Error fetching recommendations:", error);
       setRecommendations([]);
@@ -345,6 +363,9 @@ const Recommendations = (props) => {
       key: KeyMap[trackData.key]?.key || "N/A",
       mode: trackData.mode === 1 ? "Major" : "Minor",
       bpm: Math.round(trackData.tempo),
+      camelot: KeyMap[trackData.key]
+        ? KeyMap[trackData.key].camelot[trackData.mode]
+        : null,
     };
   };
 
@@ -407,6 +428,19 @@ const Recommendations = (props) => {
           </Box>
         ) : (
           <>
+            {seed && seed.camelot && (
+              <Typography
+                variant="caption"
+                color="textSecondary"
+                style={{ display: "block", padding: "0 8px 8px" }}
+              >
+                Ranked for mixing with {seed.camelot}
+                {seed.bpm ? ` · ~${seed.bpm} BPM` : ""}{" "}
+                {props.seedCamelot
+                  ? "(your anchored key)"
+                  : "(random seed — refresh for new picks)"}
+              </Typography>
+            )}
             <Grid container spacing={1}>
               {recommendations.map((track) => {
                 const metadata = getTrackMetadata(track.id);
@@ -439,15 +473,45 @@ const Recommendations = (props) => {
                         {metadata && (
                           <Box className={classes.metadata}>
                             <Chip
-                              label={`${metadata.key} ${metadata.mode}`}
+                              label={
+                                metadata.camelot
+                                  ? `${metadata.key} ${metadata.mode} · ${metadata.camelot}`
+                                  : `${metadata.key} ${metadata.mode}`
+                              }
                               size="small"
                               className={classes.chip}
+                              style={
+                                metadata.camelot
+                                  ? {
+                                      backgroundColor: camelotColor(
+                                        metadata.camelot
+                                      ).bg,
+                                      color: camelotColor(metadata.camelot).text,
+                                    }
+                                  : {}
+                              }
                             />
                             <Chip
                               label={`${metadata.bpm} BPM`}
                               size="small"
                               className={classes.chip}
                             />
+                            {seed &&
+                              seed.camelot &&
+                              metadata.camelot &&
+                              compatibleCamelot(seed.camelot).has(
+                                metadata.camelot
+                              ) && (
+                                <Chip
+                                  label="✓ mixes"
+                                  size="small"
+                                  className={classes.chip}
+                                  style={{
+                                    backgroundColor: "#1ED760",
+                                    color: "#fff",
+                                  }}
+                                />
+                              )}
                           </Box>
                         )}
                       </CardContent>
