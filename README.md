@@ -4,89 +4,105 @@
 
 **Harmonic mixing intelligence for your Spotify crates.**
 
-KeyTrack reads the key, BPM, and energy of every track in your Spotify playlists and turns them into a DJ-friendly workspace — Camelot colors, harmonic-match highlighting, set building, and crate organization, all in the browser.
+KeyTrack turns your Spotify library into a DJ's workspace — it reads the key, BPM, and energy of every track and lays them out so you can mix in key, dig through crates, and build sets, all in the browser.
 
 ![Version](https://img.shields.io/badge/version-1.26.0-1ED760.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20MUI-61dafb.svg)
 ![Spotify](https://img.shields.io/badge/powered%20by-Spotify-1ED760.svg)
 
+<!-- 🎬 HERO GIF: drop a short screen-recording at docs/screenshots/demo.gif (e.g. opening the library, anchoring a key, watching matches light up). It will render right here. -->
+![KeyTrack in action](docs/screenshots/demo.gif)
+
 </div>
 
 ---
 
-> **📸 Screenshots:** the placeholders below point at `docs/screenshots/`. Drop matching PNGs in that folder (see [`docs/screenshots/README.md`](docs/screenshots/README.md)) and they'll render here.
+## 💡 Why I built KeyTrack
 
-![KeyTrack home — sidebar nav and cover-art crate tiles](docs/screenshots/home.png)
+<!-- ✍️ Tam — write your story here. A few prompts if helpful: what you spin, what frustrated you about existing tools, why harmonic mixing mattered enough to build this, and what you wanted that nothing else gave you. -->
+
+> _A note from the author — coming soon._
 
 ---
 
-## ✨ What it does
+## 🎚️ What KeyTrack can do
 
-### 🎹 Key, BPM & notation
-- **Automatic key + BPM detection** from Spotify's audio features for every track.
-- **Three key notations** — switch any column between **Musical** (C, A♭m…), **Camelot** (8B, 5A…), and **Open Key**.
-- **Interactive Camelot wheel / Key Calculator** — tap a key to see all three notations and its harmonic matches at once. No login required.
+At its core, KeyTrack answers the question every DJ asks while digging: *"what mixes with this?"* It pulls Spotify's audio analysis for your tracks, translates it into the language DJs actually use — Camelot keys, BPM, energy — and gives you the tools to find, organize, and sequence music harmonically. Here's the full picture.
+
+> **📸 Screenshots:** each section below has a slot for an image. Drop PNGs into `docs/screenshots/` using the filenames noted (see [`docs/screenshots/README.md`](docs/screenshots/README.md)) and they'll render automatically.
+
+---
+
+### 🎹 Read any track's key, BPM & notation
+
+KeyTrack detects the **musical key and tempo** of every track from Spotify's audio features, then lets you read keys in whichever system you think in. Flip any key column between **Musical** (C, A♭m…), **Camelot** (8B, 5A…), and **Open Key** notation on the fly — no mental conversion required.
+
+The standalone **Key Calculator** is an interactive Camelot wheel: tap a key and instantly see it in all three notations alongside its harmonic neighbors. It works without even logging in.
 
 ![Key Calculator — interactive Camelot wheel](docs/screenshots/key-calculator.png)
 
-### 🎚️ Harmonic mixing
-- **Camelot-colored keys** across the whole library so compatible tracks read at a glance.
-- **Anchor a track** to highlight every harmonic match (same key, ±1, relative major/minor) and dim the clashes.
-- **Energy meter** per track, plus sortable **Energy / Danceability / Valence**.
+---
+
+### 🔥 Mix in key, at a glance
+
+Every key in your library is **color-coded by its Camelot position**, so compatible tracks visually rhyme. **Anchor a track** and KeyTrack lights up every harmonic match — same key, ±1 on the wheel, and the relative major/minor — while dimming the clashes. Pair that with the per-track **energy meter** and you can build a flow that's both in key and on vibe.
 
 ![Harmonic highlighting in a crate](docs/screenshots/harmonic-mixing.png)
 
-### 🗂️ Crate library
-- **Cover-art crate tiles** in a responsive, full-width grid.
-- **Crates / Folders tabs**, plus **sort, filter, search, and pagination**.
-- **Tags + genres**, **favorite / hide**, and **true KeyTrack folders** (stored per user).
-- **Liked Songs** surfaced as a virtual crate.
-- **Tap to select** crates (or *Select all*) → **Open (N)** to dig across many crates at once; cancel anytime.
+---
+
+### 🗂️ Organize your crates the way you dig
+
+Your playlists become a visual, cover-art **crate library** you can actually navigate. Switch between **Crates and Folders**, **sort / filter / search**, and tame big libraries with pagination. Make it yours with **tags, genres, favorites, hiding**, and **true folders**, and reach your **Liked Songs** as a crate of their own. Need to dig wide? **Tap crates to select them** (or *Select all*) and **open many at once** as a single combined view.
 
 ![Crate library — tiles, tabs and controls](docs/screenshots/library.png)
 
-### 🧬 Crate analysis
-- **Crate DNA** — key distribution (Camelot bars), a BPM histogram, and a summary (track count, BPM range, dominant key, major/minor split, average energy/dance/valence).
-- **Release-date** column with sort + filter.
-- **Smart recommendations** — suggestions ranked by **harmonic + BPM compatibility** to your anchored key (or a random seed for discovery), not a random grab-bag.
+---
+
+### 🧬 Understand a crate at a glance
+
+Open **Crate DNA** to see a crate's character in seconds: its **key distribution** as Camelot bars, a **BPM histogram**, and a summary of track count, BPM range, dominant key, the major/minor split, and average energy, danceability, and valence. Sort and filter by **energy / vibe** or **release date** to zero in on exactly the right records.
 
 ![Crate DNA visualization](docs/screenshots/crate-dna.png)
 
-### 🧰 Set building
-- **Set Builder** — assemble an ordered set across *any* playlists, with **key + BPM transition validation** flagging rough cuts.
-- **Save, load & rename** named sets (persisted to Firestore).
+---
 
-![Set Builder with transition validation](docs/screenshots/set-builder.png)
+### 💡 Get recommendations that actually mix
 
-### 🎵 Playback & UX
-- **In-browser Spotify playback** (Web Playback SDK) with a **slim Now Playing** control in the top bar.
-- **Light / dark theme**, a **left sidebar** on desktop and a **hamburger drawer** on mobile.
-- Sleek micro-animations and an in-app **changelog**.
+KeyTrack's **smart recommendations** don't just throw similar artists at you — they're **ranked by harmonic and BPM compatibility** to your anchored key (or seeded randomly when you're exploring), so suggestions are tracks you could genuinely drop next.
+
+![Smart recommendations](docs/screenshots/recommendations.png)
 
 ---
 
-## 🤖 How this app was built — a transparency note
+### 🧰 Build and validate your set
 
-KeyTrack grew through three waves of authorship. Every commit is on the record, so here's who — or what — wrote it, computed from the merged PR history.
+The **Set Builder** lets you assemble an ordered set pulling from *any* of your playlists. As you sequence, KeyTrack **validates each key + BPM transition** and flags the rough cuts before you ever hear them. **Save, load, and rename** named sets so your prep carries between sessions.
 
-| Author | PRs | Share | What they shipped |
-|---|---:|---:|---|
-| ✍️ **Tam Nguyen** — by hand | 6 | 16% | The original app: table filters, chord progressions, logout, SoundCloud, changelog |
-| ⚡ **Cursor** — AI pair-programming | 7 | 18% | Recommendations v1, a mobile pass, collapsible filters, musical-key UI, UI fixes |
-| 🤖 **Claude Code** — AI agent | 26 | 66% | Everything from v1.3.0 → v1.26.0, plus this README |
+![Set Builder with transition validation](docs/screenshots/set-builder.png)
 
-**Visual share of the 39 feature PRs:**
+---
 
-```
-✍️  Tam Nguyen   ███░░░░░░░░░░░░░░░░░░   16%   (6 PRs)
-⚡  Cursor       ████░░░░░░░░░░░░░░░░░   18%   (7 PRs)
-🤖  Claude Code  █████████████░░░░░░░░   66%   (26 PRs)
-```
+### 🎵 Listen and work without leaving the page
 
-Claude Code authored everything from **#30 onward** — seamless token refresh, harmonic mixing, the Camelot wheel, the Set Builder, the full crate-management suite (sort/filter/favorite/hide/tags/genres/folders), Liked Songs, Crate DNA, energy/vibe, smarter recommendations, sortable columns, and the complete library redesign. Each of those PRs carries a `🤖 Generated with Claude Code` footer. (One additional PR, #1, was an automated Dependabot bump.)
+Play tracks **in the browser** via Spotify's Web Playback SDK, with a **slim Now Playing** control always in reach. The app ships with a **light/dark theme**, a desktop sidebar that becomes a mobile hamburger drawer, sleek micro-animations, and an in-app changelog.
 
-> The point of this project wasn't to hand everything to an AI — it's a human-built app whose taste and direction stayed with its author while AI did the heavy lifting. KeyTrack is what that collaboration looks like in the open.
+![Playback and Now Playing](docs/screenshots/playback.png)
+
+---
+
+## 🤖 How this app was built
+
+KeyTrack started as a hand-built side project in 2020 and was rebuilt into the app it is today with AI assistance. Rather than count commits, here's the honest timeline of **when it was coded by hand vs. with AI help**:
+
+| When | How it was built | What happened |
+|---|---|---|
+| **May 2020 – Jan 2022** | ✍️ **By hand** (no AI) | The original KeyTrack: Spotify login, the track table, key/BPM detection, filtering, chord progressions, and logout |
+| **Nov 2025** | ⚡ **Hand + first AI assist** (Cursor) | A burst of additions — SoundCloud, a changelog, and a Cursor-assisted pass on recommendations, mobile layout, collapsible filters, and the musical-key UI |
+| **Jun 2026** | 🤖 **AI agent** (Claude Code) | The modern app, v1.3.0 → v1.26.0: harmonic mixing, the Camelot wheel, the Set Builder, the full crate-management suite, folders, Crate DNA, energy/vibe, smarter recommendations, and the complete library redesign |
+
+Work done with Claude Code carries a `🤖 Generated with Claude Code` footer on its pull requests, so the line between hand-written and AI-assisted is fully traceable in the history. The taste and direction stayed with the author throughout — KeyTrack is what that human-and-AI collaboration looks like in the open.
 
 ---
 
