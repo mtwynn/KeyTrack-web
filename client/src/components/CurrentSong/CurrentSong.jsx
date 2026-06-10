@@ -6,9 +6,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  IconButton,
   Typography,
 } from "@material-ui/core";
-import { Refresh } from "@material-ui/icons";
+import { Refresh, MusicNote } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 
 import KeyMap from "../../utils/KeyMap";
@@ -80,6 +81,62 @@ let CurrentSong = (props) => {
   };
 
   const color = camelot ? camelotColor(camelot) : null;
+  const playing = name !== "Nothing playing";
+
+  // Slim inline variant for the desktop top bar: tiny art + track + key/BPM
+  // and a small refresh button.
+  if (props.compact) {
+    return (
+      <Box
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          maxWidth: 300,
+          paddingLeft: 8,
+          borderLeft: "1px solid rgba(128,128,128,0.25)",
+        }}
+      >
+        {playing && image ? (
+          <Avatar variant="rounded" src={image} style={{ width: 28, height: 28 }} />
+        ) : (
+          <MusicNote
+            fontSize="small"
+            style={{ color: "rgba(128,128,128,0.7)" }}
+          />
+        )}
+        <Box style={{ minWidth: 0, maxWidth: 170 }}>
+          <Typography
+            variant="caption"
+            noWrap
+            style={{ fontWeight: 600, lineHeight: 1.15, display: "block" }}
+            title={playing ? name : "Nothing playing"}
+          >
+            {playing ? name : "Nothing playing"}
+          </Typography>
+          {playing && camelot && (
+            <Typography
+              variant="caption"
+              color="textSecondary"
+              noWrap
+              style={{ lineHeight: 1.15, display: "block" }}
+            >
+              {camelot} · {bpm} BPM
+            </Typography>
+          )}
+        </Box>
+        <IconButton
+          size="small"
+          onClick={getNowPlaying}
+          disabled={!props.token || loading}
+          title="Refresh now playing"
+          aria-label="refresh now playing"
+        >
+          {loading ? <CircularProgress size={15} /> : <Refresh fontSize="small" />}
+        </IconButton>
+      </Box>
+    );
+  }
 
   return (
     <Box style={{ width: "100%" }}>
@@ -134,6 +191,7 @@ let CurrentSong = (props) => {
 
 CurrentSong.propTypes = {
   token: PropTypes.string,
+  compact: PropTypes.bool,
 };
 
 export default CurrentSong;

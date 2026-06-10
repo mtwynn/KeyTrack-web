@@ -1,5 +1,57 @@
 const changelog = [
   {
+    version: "1.25.0",
+    date: "06/10/26",
+    changes: [
+      {
+        type: "improvement",
+        desc: "Home redesign: the two oversized hero cards are gone, replaced by a left sidebar (Library, Key Calculator, Sets, Favorites, Hidden crates) and a reworked top bar — the KeyTrack logo now sits on the left, with quick Set Builder (count badge), dark-mode, and account/avatar actions on the right.",
+      },
+      {
+        type: "improvement",
+        desc: "Crates now display as cover-art tiles in a responsive grid (the artwork is the card), with the Liked Songs crate as the first tile and a new Favorites view to pin starred crates.",
+      },
+      {
+        type: "improvement",
+        desc: "Polished the library controls: the search bar is now a clean floating rounded field (renamed 'Search Crates'), and the Sort / Filter dropdowns were restyled as icon buttons matching the Folders button.",
+      },
+      {
+        type: "improvement",
+        desc: "Crates and Folders are now a tab toggle at the top of the Library. The old 'Search all crates' button is gone — instead tap a crate to select it (or 'Select all') and hit 'Open (N)' to open them as one combined view; opening a big selection can be cancelled by clicking outside the loader.",
+      },
+      {
+        type: "improvement",
+        desc: "Each crate tile now has an 'Open' button (bottom-right) to dig into just that crate, while tapping anywhere else on the tile selects it; a 'Clear (N)' button next to 'Select all' deselects everything. On phones the sidebar nav moved into a tidy hamburger drawer instead of a cramped scrolling row.",
+      },
+      {
+        type: "improvement",
+        desc: "Now Playing moved out of the account drawer: it's a slim control with a refresh button in the top bar on desktop, and lives in the hamburger drawer on mobile. The account drawer no longer duplicates Sets / Hidden crates (those live in the nav).",
+      },
+      {
+        type: "bugfix",
+        desc: "The Key Calculator can now be closed on mobile — it opens full-screen there and previously had no close button (or backdrop) to dismiss it.",
+      },
+      {
+        type: "improvement",
+        desc: "Sleeker motion + breathing room: crate tiles stagger in when the library opens, the Crates/Folders content crossfades on tab switch, the select checkbox and favorite star pop when toggled, the 'Open (N)' count bumps as it changes, and folders expand/collapse more smoothly. The library controls also got more spacing, and each tile's track-count chip is pinned to a consistent height regardless of description length.",
+      },
+      {
+        type: "bugfix",
+        desc: "Crate descriptions no longer show raw HTML — Spotify's embedded tags/entities (e.g. <a href=\"spotify:genre:...\">) are now stripped and decoded into clean text.",
+      },
+    ],
+  },
+  {
+    version: "1.24.0",
+    date: "06/10/26",
+    changes: [
+      {
+        type: "improvement",
+        desc: "Library layout refresh: the crate library now uses the full page width and lays crates out in a responsive two-per-row grid on desktop instead of one sparse full-width row each, and the 'Sort crates by' / tag-genre filter controls were restyled as clean outlined dropdowns.",
+      },
+    ],
+  },
+  {
     version: "1.23.0",
     date: "06/10/26",
     changes: [

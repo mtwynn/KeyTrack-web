@@ -6,6 +6,7 @@ import Spotify from 'spotify-web-api-js';
 import {
   AppBar,
   Avatar,
+  Badge,
   Box,
   Button,
   Card,
@@ -17,6 +18,7 @@ import {
   Divider,
   Drawer,
   Grid,
+  Hidden,
   IconButton,
   Dialog,
   DialogActions,
@@ -27,6 +29,7 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Paper,
   Switch,
   Toolbar,
   Typography,
@@ -45,6 +48,7 @@ import {
   QueueMusic,
   Receipt,
   SettingsApplications,
+  Star,
   Tune,
   VisibilityOff,
 } from '@material-ui/icons';
@@ -126,8 +130,11 @@ class App extends React.Component {
       openChangelog: false,
       showKeyCalculator: false,
       drawerOpen: false,
+      navDrawerOpen: false,
       loadingPlaylists: false,
       showHiddenCrates: false,
+      // Library view filter driven by the "Favorites" sidebar item.
+      favoritesOnly: false,
       // App-level set so it spans playlists. Entries are { item, key }.
       set: [],
       setOpen: false,
@@ -165,6 +172,8 @@ class App extends React.Component {
     this.loadSet = this.loadSet.bind(this);
     this.openHiddenCrates = this.openHiddenCrates.bind(this);
     this.exitHidden = this.exitHidden.bind(this);
+    this.openLibrary = this.openLibrary.bind(this);
+    this.openFavorites = this.openFavorites.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
     this.scheduleTokenRefresh = this.scheduleTokenRefresh.bind(this);
@@ -306,6 +315,7 @@ class App extends React.Component {
       this.setState({
         showPlaylists: true,
         showHiddenCrates: false,
+        favoritesOnly: false,
         pllibrary: allPlaylists,
       });
     } catch (error) {
@@ -362,14 +372,41 @@ class App extends React.Component {
   // Open the library showing only hidden crates (reached from the menu).
   async openHiddenCrates() {
     this.setState({ drawerOpen: false });
-    if (!this.state.showPlaylists) {
+    if (!this.state.pllibrary) {
       await this.getUserPlaylists();
     }
-    this.setState({ showHiddenCrates: true });
+    this.setState({ showHiddenCrates: true, favoritesOnly: false });
   }
 
   exitHidden() {
     this.setState({ showHiddenCrates: false });
+  }
+
+  // Sidebar "Library": always lands on the full crate list (loading on first
+  // open). Unlike the old toggle tile, navigating here never closes the view.
+  async openLibrary() {
+    this.setState({ drawerOpen: false });
+    if (!this.state.pllibrary) {
+      await this.getUserPlaylists();
+    }
+    this.setState({
+      showPlaylists: true,
+      favoritesOnly: false,
+      showHiddenCrates: false,
+    });
+  }
+
+  // Sidebar "Favorites": the library scoped to favorited crates.
+  async openFavorites() {
+    this.setState({ drawerOpen: false });
+    if (!this.state.pllibrary) {
+      await this.getUserPlaylists();
+    }
+    this.setState({
+      showPlaylists: true,
+      favoritesOnly: true,
+      showHiddenCrates: false,
+    });
   }
 
   toggleTheme() {
@@ -584,50 +621,229 @@ class App extends React.Component {
     );
   }
 
-  // Logged-in dashboard: a minimal top bar (wordmark + hamburger) and the
-  // primary action tiles. Secondary controls + Current Song live in the drawer.
+  // Logged-in dashboard: a top bar (wordmark left + quick actions right) and a
+  // left sidebar that navigates between Library, Key Calculator, Sets,
+  // Favorites and Hidden crates. Account/Current Song still live in the drawer.
   renderHome(version) {
-    const tileIcon = { fontSize: 40, color: '#1ED760' };
+    const isDark = this.state.themeMode === 'dark';
+    const userInitial = this.state.user_name
+      ? this.state.user_name.charAt(0).toUpperCase()
+      : '?';
+
+    const navItems = [
+      {
+        key: 'library',
+        icon: <LibraryMusic />,
+        label: 'Library',
+        onClick: this.openLibrary,
+        active:
+          this.state.showPlaylists &&
+          !this.state.favoritesOnly &&
+          !this.state.showHiddenCrates,
+      },
+      {
+        key: 'keycalc',
+        icon: <Tune />,
+        label: 'Key Calculator',
+        onClick: this.openKeyCalculator,
+        active: this.state.showKeyCalculator,
+      },
+      {
+        key: 'sets',
+        icon: <QueueMusic />,
+        label: 'Sets',
+        onClick: this.openSet,
+        badge: this.state.set.length || null,
+      },
+      {
+        key: 'favorites',
+        icon: <Star />,
+        label: 'Favorites',
+        onClick: this.openFavorites,
+        active: this.state.showPlaylists && this.state.favoritesOnly,
+      },
+      {
+        key: 'hidden',
+        icon: <VisibilityOff />,
+        label: 'Hidden crates',
+        onClick: this.openHiddenCrates,
+        active: this.state.showHiddenCrates,
+      },
+    ];
+
+    // Shared between the persistent desktop sidebar and the mobile nav drawer.
+    // `afterClick` lets the mobile drawer close itself once an item is tapped.
+    const renderNavList = (afterClick) => (
+      <List component="nav" style={{ padding: 4 }}>
+        {navItems.map((it) => (
+          <ListItem
+            button
+            key={it.key}
+            selected={!!it.active}
+            onClick={() => {
+              it.onClick();
+              if (afterClick) afterClick();
+            }}
+            style={{ borderRadius: 8, marginBottom: 2 }}
+          >
+            <ListItemIcon
+              style={{ minWidth: 40, color: it.active ? '#1ED760' : 'inherit' }}
+            >
+              {it.badge ? (
+                <Badge badgeContent={it.badge} color="primary">
+                  {it.icon}
+                </Badge>
+              ) : (
+                it.icon
+              )}
+            </ListItemIcon>
+            <ListItemText
+              primary={it.label}
+              primaryTypographyProps={{
+                style: { fontWeight: it.active ? 700 : 500 },
+              }}
+            />
+          </ListItem>
+        ))}
+        <Divider style={{ margin: '8px 0' }} />
+        <ListItem
+          button
+          onClick={() => {
+            this.setState({ openChangelog: true });
+            if (afterClick) afterClick();
+          }}
+          style={{ borderRadius: 8 }}
+        >
+          <ListItemIcon style={{ minWidth: 40 }}>
+            <Receipt />
+          </ListItemIcon>
+          <ListItemText primary="Changelog" secondary={version} />
+        </ListItem>
+      </List>
+    );
+
     return (
       <>
         <AppBar position="static" color="default" elevation={1}>
           <Toolbar>
-            <Wordmark variant="h6" style={{ flexGrow: 1 }} />
+            <Hidden mdUp>
+              <IconButton
+                edge="start"
+                color="inherit"
+                onClick={() => this.setState({ navDrawerOpen: true })}
+                title="Menu"
+                aria-label="open navigation"
+                style={{ marginRight: 4 }}
+              >
+                <MenuIcon />
+              </IconButton>
+            </Hidden>
+            <Wordmark variant="h6" />
+            <Box style={{ flexGrow: 1 }} />
+            <Hidden smDown>
+              <CurrentSong token={this.state.access_token} compact />
+            </Hidden>
+            <IconButton
+              color="inherit"
+              onClick={this.openSet}
+              title="Set Builder"
+              aria-label="set builder"
+            >
+              <Badge badgeContent={this.state.set.length} color="primary">
+                <QueueMusic />
+              </Badge>
+            </IconButton>
+            <IconButton
+              color="inherit"
+              onClick={this.toggleTheme}
+              title="Toggle dark mode"
+              aria-label="toggle theme"
+            >
+              {isDark ? <Brightness7 /> : <Brightness4 />}
+            </IconButton>
             <IconButton
               edge="end"
-              color="inherit"
-              aria-label="menu"
               onClick={() => this.setState({ drawerOpen: true })}
+              title="Account"
+              aria-label="account"
             >
-              <MenuIcon />
+              <Avatar
+                style={{
+                  width: 32,
+                  height: 32,
+                  fontSize: 15,
+                  backgroundColor: '#1ED760',
+                  color: '#fff',
+                }}
+              >
+                {userInitial}
+              </Avatar>
             </IconButton>
           </Toolbar>
         </AppBar>
 
-        <Container style={{ paddingTop: 24, paddingBottom: 130 }}>
-          <Grid container spacing={2} justify="center">
-            {this.renderTile(
-              <LibraryMusic style={tileIcon} />,
-              this.state.showPlaylists ? 'Close Library' : 'Playlist Library',
-              'Analyze your crates',
-              this.getUserPlaylists,
-              this.state.showPlaylists,
-              false,
-              this.state.loadingPlaylists
-            )}
-            {this.renderTile(
-              <Tune style={tileIcon} />,
-              'Key Calculator',
-              'Convert any key',
-              this.openKeyCalculator,
-              false,
-              true
-            )}
-          </Grid>
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 16,
+            maxWidth: 1500,
+            margin: '0 auto',
+            padding: '16px 16px 130px',
+          }}
+        >
+          <Hidden smDown>
+            <Paper
+              variant="outlined"
+              style={{
+                width: 220,
+                flex: 'none',
+                borderRadius: 12,
+                position: 'sticky',
+                top: 16,
+              }}
+            >
+              {renderNavList()}
+            </Paper>
+          </Hidden>
 
-          {this.state.showPlaylists && (
-            <Box style={{ marginTop: 24 }}>
-              <FadeIn transitionDuration={600}>
+          {/* Mobile: nav lives in a slide-out drawer (hamburger in the bar). */}
+          <Drawer
+            anchor="left"
+            open={this.state.navDrawerOpen}
+            onClose={() => this.setState({ navDrawerOpen: false })}
+          >
+            <Box
+              style={{
+                width: 270,
+                paddingTop: 8,
+                // Clear the fixed bottom Spotify player so Now Playing isn't
+                // hidden behind it on mobile.
+                paddingBottom: 110,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                overflowY: 'auto',
+              }}
+              role="presentation"
+            >
+              <Box style={{ padding: '4px 16px 8px' }}>
+                <Wordmark variant="h6" />
+              </Box>
+              <Divider />
+              {renderNavList(() => this.setState({ navDrawerOpen: false }))}
+              <Box style={{ marginTop: 'auto' }}>
+                <Divider />
+                <Box style={{ padding: 16 }}>
+                  <CurrentSong token={this.state.access_token} />
+                </Box>
+              </Box>
+            </Box>
+          </Drawer>
+
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            {this.state.showPlaylists ? (
+              <FadeIn transitionDuration={400}>
                 <PLLibrary
                   token={this.state.access_token}
                   pllibrary={this.state.pllibrary}
@@ -638,11 +854,53 @@ class App extends React.Component {
                   setCount={this.state.set.length}
                   showHidden={this.state.showHiddenCrates}
                   onExitHidden={this.exitHidden}
+                  favoritesOnly={this.state.favoritesOnly}
                 />
               </FadeIn>
-            </Box>
-          )}
-        </Container>
+            ) : (
+              <Box style={{ textAlign: 'center', padding: '72px 20px' }}>
+                <LibraryMusic style={{ fontSize: 56, color: '#1ED760' }} />
+                <Typography
+                  variant="h6"
+                  style={{ marginTop: 12, fontWeight: 700 }}
+                >
+                  Welcome to KeyTrack
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="textSecondary"
+                  style={{ maxWidth: 440, margin: '8px auto 20px' }}
+                >
+                  Open your Library to analyze crates by key, BPM and energy — or
+                  jump straight into the Key Calculator.
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<LibraryMusic />}
+                  onClick={this.openLibrary}
+                  disabled={this.state.loadingPlaylists}
+                  style={{
+                    borderRadius: 24,
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    marginRight: 8,
+                  }}
+                >
+                  {this.state.loadingPlaylists ? 'Loading…' : 'Open Library'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<Tune />}
+                  onClick={this.openKeyCalculator}
+                  style={{ borderRadius: 24, textTransform: 'none' }}
+                >
+                  Key Calculator
+                </Button>
+              </Box>
+            )}
+          </Box>
+        </Box>
       </>
     );
   }
@@ -690,39 +948,7 @@ class App extends React.Component {
 
           <Divider />
 
-          <Box style={{ padding: '14px 0' }}>
-            <CurrentSong token={this.state.access_token} />
-          </Box>
-
-          <Divider />
-
           <List>
-            <ListItem
-              button
-              onClick={() =>
-                this.setState({ setOpen: true, drawerOpen: false })
-              }
-            >
-              <ListItemIcon>
-                <QueueMusic />
-              </ListItemIcon>
-              <ListItemText
-                primary="Set Builder"
-                secondary={
-                  this.state.set.length
-                    ? `${this.state.set.length} track${
-                        this.state.set.length > 1 ? 's' : ''
-                      }`
-                    : 'empty'
-                }
-              />
-            </ListItem>
-            <ListItem button onClick={this.openHiddenCrates}>
-              <ListItemIcon>
-                <VisibilityOff />
-              </ListItemIcon>
-              <ListItemText primary="Hidden crates" />
-            </ListItem>
             <ListItem>
               <ListItemIcon>
                 {isDark ? <Brightness7 /> : <Brightness4 />}

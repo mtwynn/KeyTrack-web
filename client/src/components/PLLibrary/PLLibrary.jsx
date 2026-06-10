@@ -2,19 +2,17 @@ import React, { Fragment } from "react";
 import _ from "underscore";
 
 import {
-  AppBar,
-  Avatar,
   Button,
   IconButton,
   CircularProgress,
   Dialog,
   Input,
   InputAdornment,
-  Toolbar,
   Paper,
   makeStyles,
   Card,
   CardContent,
+  Grid,
   Typography,
   Box,
   Checkbox,
@@ -22,9 +20,13 @@ import {
   Collapse,
   FormControl,
   InputLabel,
+  ListItemText,
+  Menu,
   MenuItem,
   Popover,
   Select,
+  Tab,
+  Tabs,
   TablePagination,
   TextField,
   useMediaQuery,
@@ -46,6 +48,10 @@ import {
   Edit,
   Delete,
   Favorite,
+  SortByAlpha,
+  FilterList,
+  ArrowDropDown,
+  Close,
 } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
@@ -61,21 +67,42 @@ import {
 } from "../../utils/folders";
 
 const useStyles = makeStyles((theme) => ({
-  appBar: {
-    position: "sticky",
-    backgroundColor: "#191414",
-    borderRadius: "8px 8px 0 0",
+  // Staggered entrance for crate tiles when the grid mounts (library open,
+  // folder expand, new page). Reordering reuses elements so it doesn't replay.
+  "@keyframes tileIn": {
+    from: { opacity: 0, transform: "translateY(14px)" },
+    to: { opacity: 1, transform: "translateY(0)" },
   },
-  search: {
+  tileIn: {
+    animation: "$tileIn 0.34s ease both",
+  },
+  // Crossfade the content when switching the Crates / Folders tab.
+  "@keyframes contentFade": {
+    from: { opacity: 0 },
+    to: { opacity: 1 },
+  },
+  contentFade: {
+    animation: "$contentFade 0.28s ease both",
+  },
+  // Bump the "Open (N)" count when the selection size changes.
+  "@keyframes countBump": {
+    "0%": { transform: "scale(1)" },
+    "35%": { transform: "scale(1.35)" },
+    "100%": { transform: "scale(1)" },
+  },
+  countBump: {
+    animation: "$countBump 0.3s ease",
+  },
+  // Floating, fully-rounded search pill (replaces the old dark search bar).
+  searchPill: {
+    display: "flex",
+    alignItems: "center",
     flex: 1,
-    color: "white",
-    marginRight: theme.spacing(3),
-    marginLeft: theme.spacing(3),
-    borderWidth: "10px",
-    [theme.breakpoints.down('sm')]: {
-      marginRight: theme.spacing(1),
-      marginLeft: theme.spacing(1),
-    },
+    minWidth: 200,
+    borderRadius: 28,
+    padding: "4px 8px 4px 18px",
+    border: "1px solid rgba(128,128,128,0.28)",
+    backgroundColor: theme.palette.background.paper,
   },
   root: {
     display: "inline-block",
@@ -92,89 +119,11 @@ const useStyles = makeStyles((theme) => ({
   colorPrimary: {
     color: "#1ED760",
   },
-  playlistCard: {
-    marginBottom: theme.spacing(2),
-    cursor: "pointer",
-    transition: "all 0.2s ease-in-out",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: theme.shadows[4],
-      backgroundColor: "#f0fff4",
-    },
-    [theme.breakpoints.down('sm')]: {
-      marginBottom: theme.spacing(1),
-    },
-  },
-  cardContent: {
-    display: "flex",
-    alignItems: "center",
-    padding: theme.spacing(2),
-    "&:last-child": {
-      paddingBottom: theme.spacing(2),
-    },
-    [theme.breakpoints.down('sm')]: {
-      padding: theme.spacing(1.5),
-      flexDirection: "column",
-      alignItems: "flex-start",
-    },
-  },
-  albumArt: {
-    width: 80,
-    height: 80,
-    marginRight: theme.spacing(2),
-    [theme.breakpoints.down('sm')]: {
-      width: 60,
-      height: 60,
-      marginRight: 0,
-      marginBottom: theme.spacing(1),
-    },
-  },
-  playlistInfo: {
-    flex: 1,
-    minWidth: 0,
-    [theme.breakpoints.down('sm')]: {
-      width: "100%",
-    },
-  },
-  playlistHeader: {
-    display: "flex",
-    alignItems: "baseline",
-    marginBottom: theme.spacing(0.5),
-    gap: theme.spacing(1.5),
-    [theme.breakpoints.down('sm')]: {
-      flexWrap: "wrap",
-      gap: theme.spacing(0.5),
-    },
-  },
   playlistTitle: {
     fontWeight: 600,
-    fontSize: "1.1rem",
+    fontSize: "1.05rem",
     [theme.breakpoints.down('sm')]: {
       fontSize: "1rem",
-    },
-  },
-  playlistDescription: {
-    color: theme.palette.text.secondary,
-    fontSize: "0.8rem",
-    marginBottom: theme.spacing(1),
-    textAlign: "left",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    display: "-webkit-box",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical",
-    [theme.breakpoints.down('sm')]: {
-      fontSize: "0.75rem",
-      WebkitLineClamp: 1,
-    },
-  },
-  playlistMeta: {
-    display: "flex",
-    alignItems: "center",
-    gap: theme.spacing(1),
-    [theme.breakpoints.down('sm')]: {
-      flexWrap: "wrap",
-      gap: theme.spacing(0.5),
     },
   },
   ownerText: {
@@ -196,14 +145,121 @@ const useStyles = makeStyles((theme) => ({
     },
   },
   openButton: {
-    marginLeft: theme.spacing(2),
     color: "#1ED760",
-    [theme.breakpoints.down('sm')]: {
-      marginLeft: 0,
-      alignSelf: "center",
+  },
+  // --- Cover-art tile layout ---
+  tileCard: {
+    cursor: "pointer",
+    borderRadius: 12,
+    overflow: "hidden",
+    transition: "all 0.18s ease-in-out",
+    "&:hover": {
+      transform: "translateY(-3px)",
+      boxShadow: theme.shadows[6],
     },
   },
+  tileCover: {
+    position: "relative",
+    height: 130,
+    backgroundColor: "#191414",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    [theme.breakpoints.down("sm")]: {
+      height: 110,
+    },
+  },
+  tileCheckbox: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    padding: 4,
+    color: "#fff",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    transition: "transform 0.12s ease, background-color 0.15s ease",
+    "&:hover": { backgroundColor: "rgba(0,0,0,0.5)" },
+    "&:active": { transform: "scale(0.82)" },
+  },
+  tileFav: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    padding: 4,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    transition: "transform 0.12s ease, background-color 0.15s ease",
+    "&:hover": { backgroundColor: "rgba(0,0,0,0.5)" },
+    "&:active": { transform: "scale(0.82)" },
+  },
+  // Little pop applied to the star/checkbox icon the moment its state flips.
+  "@keyframes iconPop": {
+    "0%": { transform: "scale(1)" },
+    "45%": { transform: "scale(1.35)" },
+    "100%": { transform: "scale(1)" },
+  },
+  iconPop: {
+    animation: "$iconPop 0.28s ease",
+  },
+  tileLoading: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  tileBody: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    padding: theme.spacing(1.5),
+    "&:last-child": { paddingBottom: theme.spacing(1) },
+  },
+  tileDesc: {
+    color: theme.palette.text.secondary,
+    fontSize: "0.78rem",
+    margin: theme.spacing(0.5, 0),
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+  },
+  // Pinned to the bottom of the body so the track-count chip sits at a
+  // consistent height across every tile regardless of description length.
+  tileMeta: {
+    marginTop: "auto",
+    paddingTop: theme.spacing(1),
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.spacing(0.5),
+  },
+  tileActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 2,
+    padding: theme.spacing(0.5, 1),
+    borderTop: "1px solid rgba(128,128,128,0.15)",
+  },
 }));
+
+// Spotify returns playlist descriptions containing HTML entities and anchor
+// tags (e.g. `<a href="spotify:genre:edm_dance">dance</a>`). Strip the tags and
+// decode the entities so the UI shows clean, readable text. Using a textarea's
+// value to decode is safe — it never executes markup.
+const decodeEl =
+  typeof document !== "undefined" ? document.createElement("textarea") : null;
+function cleanDescription(desc) {
+  if (!desc) return "";
+  let text = desc.replace(/<[^>]*>/g, "");
+  if (decodeEl) {
+    decodeEl.innerHTML = text;
+    text = decodeEl.value;
+  }
+  return text.trim();
+}
 
 const GENRES = [
   "House",
@@ -239,6 +295,9 @@ let PLLibrary = (props) => {
   const [loadingId, setLoadingId] = React.useState(null);
   const [loadingAll, setLoadingAll] = React.useState(false);
   const [allProgress, setAllProgress] = React.useState({ done: 0, total: 0 });
+  // Set when the user dismisses the "Search all crates" loader; in-flight and
+  // queued fetches check this and bail so a big library doesn't trap them.
+  const cancelAllRef = React.useRef(false);
   // Crates selected (by id) to scope "Search all crates" to a subset.
   const [selected, setSelected] = React.useState(() => new Set());
 
@@ -300,6 +359,13 @@ let PLLibrary = (props) => {
   const [tagEdit, setTagEdit] = React.useState({ anchorEl: null, id: null });
   const [tagInput, setTagInput] = React.useState("");
   const [metaFilter, setMetaFilter] = React.useState([]);
+  // Anchors for the Sort / Filter dropdown menus (Button + Menu controls).
+  const [sortAnchor, setSortAnchor] = React.useState(null);
+  const [filterAnchor, setFilterAnchor] = React.useState(null);
+  const toggleMetaFilter = (v) =>
+    setMetaFilter((prev) =>
+      prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
+    );
 
   const openTagEdit = (e, playlist) => {
     e.stopPropagation();
@@ -332,11 +398,14 @@ let PLLibrary = (props) => {
   // normal view, hidden crates are excluded and favorites are pinned to the top;
   // the hidden view (from the menu) shows only hidden crates.
   const showHidden = props.showHidden;
+  const favoritesOnly = props.favoritesOnly;
   const sortedCrates = React.useMemo(() => {
     const arr = (searchItems || []).filter((pl) => {
       const m = crateMeta[pl.id] || {};
       const hidden = !!m.hidden;
       if (showHidden ? !hidden : hidden) return false;
+      // "Favorites" view: only crates the user has starred.
+      if (favoritesOnly && !showHidden && !m.favorite) return false;
       if (metaFilter.length > 0) {
         const vals = [...(m.tags || []), ...(m.genres || [])];
         if (!metaFilter.some((f) => vals.includes(f))) return false;
@@ -360,7 +429,7 @@ let PLLibrary = (props) => {
       return (a.name || "").localeCompare(b.name || "");
     });
     return arr;
-  }, [searchItems, crateSort, crateMeta, showHidden, metaFilter]);
+  }, [searchItems, crateSort, crateMeta, showHidden, favoritesOnly, metaFilter]);
 
   const pagedCrates = sortedCrates.slice(
     cratePage * cratesPerPage,
@@ -369,7 +438,7 @@ let PLLibrary = (props) => {
 
   React.useEffect(() => {
     setCratePage(0);
-  }, [searchItems, crateSort, cratesPerPage, metaFilter]);
+  }, [searchItems, crateSort, cratesPerPage, metaFilter, favoritesOnly]);
 
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
@@ -549,24 +618,36 @@ let PLLibrary = (props) => {
     return results;
   };
 
-  const handleSearchAllCrates = async () => {
-    // If crates are selected, search just those; otherwise all non-hidden crates
-    // (hidden crates are abstracted away and never feed the cross-search).
-    const playlists = (props.pllibrary || []).filter((pl) => {
-      if (selected.size > 0) return selected.has(pl.id);
-      return !(crateMeta[pl.id] && crateMeta[pl.id].hidden);
-    });
+  // Dismiss the cross-search loader and abort the remaining fetches.
+  const cancelSearchAll = () => {
+    cancelAllRef.current = true;
+    setLoadingAll(false);
+  };
+
+  const handleOpenSelected = async () => {
+    // Open the selected crates as one combined view ("Select all" selects them
+    // all). Hidden crates never feed this even if somehow selected.
+    const playlists = (props.pllibrary || []).filter(
+      (pl) => selected.has(pl.id) && !(crateMeta[pl.id] && crateMeta[pl.id].hidden)
+    );
     if (playlists.length === 0) return;
 
+    cancelAllRef.current = false;
     setAllProgress({ done: 0, total: playlists.length });
     setLoadingAll(true);
     try {
       const perPlaylist = await mapWithLimit(playlists, 4, async (pl) => {
+        // Skip queued/in-flight work once the user has cancelled.
+        if (cancelAllRef.current) return { tracks: [], features: [] };
         const tracks = await fetchAllTracks(pl.id);
+        if (cancelAllRef.current) return { tracks: [], features: [] };
         const features = await fetchFeatures(tracks.map((t) => t.track.id));
         setAllProgress((p) => ({ ...p, done: p.done + 1 }));
         return { tracks, features };
       });
+
+      // The user dismissed the loader mid-run — discard partial results.
+      if (cancelAllRef.current) return;
 
       // Aggregate + dedupe by track id.
       const seen = new Set();
@@ -584,7 +665,11 @@ let PLLibrary = (props) => {
         });
       });
 
-      setPlaylistName(`All Crates · ${allTracks.length} tracks`);
+      setPlaylistName(
+        `${playlists.length} crate${playlists.length === 1 ? "" : "s"} · ${
+          allTracks.length
+        } tracks`
+      );
       setPlaylistId("__all_crates__");
       setPlaylistOwnerId(null); // hides owner-only Recommendations
       setCurrPlaylist(allTracks);
@@ -692,70 +777,113 @@ let PLLibrary = (props) => {
     return groups;
   }, [sortedCrates, folders, crateMeta]);
 
-  const renderCrateCard = (playlist) => (
-    <Card
-      key={playlist.id}
-      className={classes.playlistCard}
-      onClick={() => handlePlaylistOpen(playlist)}
-      style={{
-        borderLeft: metaFor(playlist.id).favorite
-          ? "4px solid #1ED760"
-          : "4px solid transparent",
-      }}
-    >
-      <CardContent className={classes.cardContent}>
-        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+  // A crate rendered as a cover-art tile: the playlist artwork as a banner
+  // (with the cross-search checkbox + favorite star overlaid), then title /
+  // owner / cleaned description / track + tag chips, and a footer action row.
+  const renderCrateCard = (playlist) => {
+    const meta = metaFor(playlist.id);
+    const img = playlist.images[0] ? playlist.images[0].url : null;
+    const desc = cleanDescription(playlist.description);
+    const isSelected = selected.has(playlist.id);
+    return (
+      <Card
+        key={playlist.id}
+        className={classes.tileCard}
+        onClick={() => toggleSelect(playlist.id)}
+        style={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          border: isSelected
+            ? "2px solid #1ED760"
+            : meta.favorite
+            ? "1px solid #1ED760"
+            : "1px solid rgba(128,128,128,0.18)",
+          backgroundColor: isSelected ? "rgba(30,215,96,0.08)" : undefined,
+        }}
+      >
+        <Box
+          className={classes.tileCover}
+          style={img ? { backgroundImage: `url(${img})` } : {}}
+        >
+          {!img && (
+            <MusicNote style={{ color: "#fff", fontSize: 42, opacity: 0.85 }} />
+          )}
           <Checkbox
+            key={selected.has(playlist.id) ? "on" : "off"}
+            className={`${classes.tileCheckbox} ${
+              selected.has(playlist.id) ? classes.iconPop : ""
+            }`}
             checked={selected.has(playlist.id)}
             onClick={(e) => {
               e.stopPropagation();
               toggleSelect(playlist.id);
             }}
             title="Select for cross-search"
-            style={{ padding: 4 }}
+            size="small"
           />
-          <Avatar
-            variant="square"
-            src={playlist.images[0] ? playlist.images[0].url : undefined}
-            className={classes.albumArt}
+          <IconButton
+            className={classes.tileFav}
+            size="small"
+            onClick={(e) => toggleFavorite(e, playlist)}
+            title={meta.favorite ? "Unfavorite" : "Favorite"}
+            aria-label="favorite crate"
           >
-            <MusicNote />
-          </Avatar>
-        </div>
-
-        <Box className={classes.playlistInfo}>
-          <Box className={classes.playlistHeader}>
-            <Typography className={classes.playlistTitle}>
-              {playlist.name}
-            </Typography>
-            <Typography className={classes.ownerText}>
-              by {playlist.owner.display_name}
-            </Typography>
-          </Box>
-
-          {playlist.description && (
-            <Typography className={classes.playlistDescription}>
-              {playlist.description}
-            </Typography>
+            <span
+              key={meta.favorite ? "fav" : "unfav"}
+              className={meta.favorite ? classes.iconPop : ""}
+              style={{ display: "inline-flex" }}
+            >
+              {meta.favorite ? (
+                <Star style={{ color: "#1ED760" }} fontSize="small" />
+              ) : (
+                <StarBorder style={{ color: "#fff" }} fontSize="small" />
+              )}
+            </span>
+          </IconButton>
+          {loadingId === playlist.id && (
+            <Box className={classes.tileLoading}>
+              <CircularProgress size={28} style={{ color: "#fff" }} />
+            </Box>
           )}
+        </Box>
 
-          <Box className={classes.playlistMeta}>
+        <CardContent className={classes.tileBody}>
+          <Typography
+            className={classes.playlistTitle}
+            noWrap
+            title={playlist.name}
+          >
+            {playlist.name}
+          </Typography>
+          <Typography className={classes.ownerText} noWrap>
+            by {playlist.owner.display_name}
+          </Typography>
+          {desc && (
+            <Typography className={classes.tileDesc}>{desc}</Typography>
+          )}
+          <Box className={classes.tileMeta}>
             <Chip
               label={`${playlist.tracks.total} tracks`}
               size="small"
               className={classes.trackChip}
               icon={<MusicNote style={{ color: "#fff" }} />}
             />
-            {(metaFor(playlist.id).genres || []).map((g) => (
+            {(meta.genres || []).map((g) => (
               <Chip key={`g-${g}`} label={g} size="small" variant="outlined" />
             ))}
-            {(metaFor(playlist.id).tags || []).map((t) => (
-              <Chip key={`t-${t}`} label={`#${t}`} size="small" variant="outlined" />
+            {(meta.tags || []).map((t) => (
+              <Chip
+                key={`t-${t}`}
+                label={`#${t}`}
+                size="small"
+                variant="outlined"
+              />
             ))}
           </Box>
-        </Box>
+        </CardContent>
 
-        <Box style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+        <Box className={classes.tileActions}>
           <IconButton
             size="small"
             onClick={(e) => openTagEdit(e, playlist)}
@@ -766,50 +894,122 @@ let PLLibrary = (props) => {
           </IconButton>
           <IconButton
             size="small"
-            onClick={(e) => toggleFavorite(e, playlist)}
-            title={metaFor(playlist.id).favorite ? "Unfavorite" : "Favorite"}
-            aria-label="favorite crate"
-          >
-            {metaFor(playlist.id).favorite ? (
-              <Star style={{ color: "#1ED760" }} />
-            ) : (
-              <StarBorder />
-            )}
-          </IconButton>
-          <IconButton
-            size="small"
             onClick={(e) => toggleHidden(e, playlist)}
-            title={metaFor(playlist.id).hidden ? "Unhide" : "Hide"}
+            title={meta.hidden ? "Unhide" : "Hide"}
             aria-label="hide crate"
           >
             <VisibilityOff
               fontSize="small"
-              style={{
-                color: metaFor(playlist.id).hidden ? "#1ED760" : undefined,
-              }}
+              style={{ color: meta.hidden ? "#1ED760" : undefined }}
             />
           </IconButton>
-          {loadingId === playlist.id ? (
-            <CircularProgress
-              classes={{ colorPrimary: classes.colorPrimary }}
-              size={24}
-              style={{ margin: 8 }}
-            />
-          ) : (
-            !isMobile && (
-              <IconButton
-                className={classes.openButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePlaylistOpen(playlist);
-                }}
-              >
-                <MenuOpen />
-              </IconButton>
-            )
-          )}
+          <Box style={{ flex: 1 }} />
+          <Button
+            size="small"
+            className={classes.openButton}
+            startIcon={<MenuOpen fontSize="small" />}
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePlaylistOpen(playlist);
+            }}
+            title="Open crate for digging"
+            aria-label="open crate"
+            style={{ textTransform: "none", fontWeight: 600 }}
+          >
+            Open
+          </Button>
         </Box>
+      </Card>
+    );
+  };
+
+  // Lay crates out as a responsive grid of cover tiles — denser and more
+  // visual than the old full-width rows, and it actually uses the page width.
+  // `leadingTile` (e.g. Liked Songs) occupies the first cell so it flows with
+  // the crates instead of sitting alone on its own row.
+  const renderCrateGrid = (crates, leadingTile) => (
+    <Grid container spacing={2}>
+      {leadingTile && (
+        <Grid
+          item
+          xs={12}
+          sm={6}
+          md={4}
+          lg={3}
+          className={classes.tileIn}
+          style={{ animationDelay: "0ms" }}
+        >
+          {leadingTile}
+        </Grid>
+      )}
+      {crates.map((p, i) => (
+        <Grid
+          item
+          xs={12}
+          sm={6}
+          md={4}
+          lg={3}
+          key={p.id}
+          className={classes.tileIn}
+          style={{
+            animationDelay: `${Math.min(i + (leadingTile ? 1 : 0), 14) * 35}ms`,
+          }}
+        >
+          {renderCrateCard(p)}
+        </Grid>
+      ))}
+    </Grid>
+  );
+
+  // The Liked Songs virtual crate, styled as a cover tile (matching the grid)
+  // so it sits at the top as the first card.
+  const renderLikedTile = () => (
+    <Card
+      className={classes.tileCard}
+      onClick={handleOpenLikedSongs}
+      style={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        border: "1px solid #1ED760",
+      }}
+    >
+      <Box
+        className={classes.tileCover}
+        style={{ background: "linear-gradient(135deg,#450af5,#c4efd9)" }}
+      >
+        <Favorite style={{ color: "#fff", fontSize: 42 }} />
+        {loadingId === "__liked__" && (
+          <Box className={classes.tileLoading}>
+            <CircularProgress size={28} style={{ color: "#fff" }} />
+          </Box>
+        )}
+      </Box>
+      <CardContent className={classes.tileBody}>
+        <Typography className={classes.playlistTitle} noWrap>
+          Liked Songs
+        </Typography>
+        <Typography className={classes.ownerText} noWrap>
+          Your Spotify Liked Songs
+        </Typography>
       </CardContent>
+      <Box className={classes.tileActions}>
+        <Box style={{ flex: 1 }} />
+        <Button
+          size="small"
+          className={classes.openButton}
+          startIcon={<MenuOpen fontSize="small" />}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenLikedSongs();
+          }}
+          title="Open Liked Songs"
+          aria-label="open liked songs"
+          style={{ textTransform: "none", fontWeight: 600 }}
+        >
+          Open
+        </Button>
+      </Box>
     </Card>
   );
 
@@ -859,7 +1059,7 @@ let PLLibrary = (props) => {
           </>
         )}
       </Box>
-      <Collapse in={isExpanded(key)} timeout="auto" unmountOnExit>
+      <Collapse in={isExpanded(key)} timeout={320} unmountOnExit>
         <Box sx={{ padding: isMobile ? 1 : 2 }}>
           {crates.length === 0 ? (
             <Typography
@@ -870,7 +1070,7 @@ let PLLibrary = (props) => {
               No crates
             </Typography>
           ) : (
-            crates.map(renderCrateCard)
+            renderCrateGrid(crates)
           )}
         </Box>
       </Collapse>
@@ -902,62 +1102,64 @@ let PLLibrary = (props) => {
           Loading crate…
         </Typography>
       </Dialog>
-      <AppBar className={classes.appBar}>
-        <Toolbar>
+      <Box
+        sx={{ padding: isMobile ? 1 : 2 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <Paper elevation={0} className={classes.searchPill}>
           <Input
-            classes={{
-              root: classes.search,
-              focused: classes.inputFocused,
-            }}
-            type={"text"}
+            disableUnderline
+            fullWidth
+            type="text"
             onChange={handleChange}
-            placeholder="Search Playlists"
+            placeholder="Search Crates"
             endAdornment={
               <InputAdornment position="end">
-                <Search />
+                <Search style={{ color: theme.palette.text.secondary }} />
               </InputAdornment>
             }
           />
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<Search />}
-            onClick={handleSearchAllCrates}
-            disabled={!props.pllibrary || props.pllibrary.length === 0}
-            style={{
-              color: "#fff",
-              borderColor: "rgba(255,255,255,0.5)",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
+        </Paper>
+      </Box>
+
+      {/* Crates / Folders tab toggle (normal Library view only). */}
+      {!showHidden && !favoritesOnly && (
+        <Box sx={{ paddingLeft: isMobile ? 1 : 2, paddingRight: isMobile ? 1 : 2 }}>
+          <Tabs
+            value={folderView ? 1 : 0}
+            onChange={(e, v) => setFolderView(v === 1)}
+            indicatorColor="primary"
+            textColor="primary"
+            variant={isMobile ? "fullWidth" : "standard"}
+            style={{ borderBottom: "1px solid rgba(128,128,128,0.18)" }}
           >
-            {selected.size > 0
-              ? `Search selected (${selected.size})`
-              : isMobile
-              ? "All crates"
-              : "Search all crates"}
-          </Button>
-          {selected.size > 0 && (
-            <Button
-              size="small"
-              onClick={clearSelection}
-              style={{ color: "#fff", whiteSpace: "nowrap", flexShrink: 0 }}
-            >
-              Clear
-            </Button>
-          )}
-        </Toolbar>
-      </AppBar>
+            <Tab
+              label="Crates"
+              style={{ textTransform: "none", fontWeight: 700, minWidth: 120 }}
+            />
+            <Tab
+              label="Folders"
+              style={{ textTransform: "none", fontWeight: 700, minWidth: 120 }}
+            />
+          </Tabs>
+        </Box>
+      )}
 
       <Dialog
         open={loadingAll}
+        onClose={cancelSearchAll}
         PaperProps={{
           style: {
             padding: "28px 44px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: 16,
+            gap: 14,
             borderRadius: 12,
           },
         }}
@@ -975,115 +1177,175 @@ let PLLibrary = (props) => {
         <Typography variant="body1" style={{ fontWeight: 600 }}>
           Loading all crates… {allProgress.done}/{allProgress.total}
         </Typography>
+        <Button
+          size="small"
+          onClick={cancelSearchAll}
+          style={{ textTransform: "none" }}
+        >
+          Cancel
+        </Button>
+        <Typography variant="caption" color="textSecondary">
+          or click outside to cancel
+        </Typography>
       </Dialog>
 
-      {/* Liked Songs as a virtual crate */}
-      <Box sx={{ padding: isMobile ? 1 : 2 }} style={{ paddingBottom: 0 }}>
-        <Card
-          className={classes.playlistCard}
-          onClick={handleOpenLikedSongs}
-          style={{ borderLeft: "4px solid #1ED760" }}
-        >
-          <CardContent className={classes.cardContent}>
-            <Avatar
-              variant="square"
-              className={classes.albumArt}
-              style={{ background: "linear-gradient(135deg,#450af5,#c4efd9)" }}
-            >
-              <Favorite style={{ color: "#fff" }} />
-            </Avatar>
-            <Box className={classes.playlistInfo}>
-              <Box className={classes.playlistHeader}>
-                <Typography className={classes.playlistTitle}>
-                  Liked Songs
-                </Typography>
-              </Box>
-              <Typography className={classes.playlistDescription}>
-                Your Spotify Liked Songs
-              </Typography>
-            </Box>
-            {loadingId === "__liked__" ? (
-              <CircularProgress
-                classes={{ colorPrimary: classes.colorPrimary }}
-                size={24}
-                className={classes.openButton}
-              />
-            ) : (
-              !isMobile && (
-                <IconButton
-                  className={classes.openButton}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenLikedSongs();
-                  }}
-                >
-                  <MenuOpen />
-                </IconButton>
-              )
-            )}
-          </CardContent>
-        </Card>
-      </Box>
-
       <Box
-        sx={{ padding: isMobile ? 1 : 2 }}
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
-          gap: 8,
+          rowGap: 12,
+          columnGap: 12,
+          padding: isMobile ? "14px 8px" : "20px 16px",
         }}
       >
-        <Box style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <FormControl size="small" style={{ minWidth: 150 }}>
-            <InputLabel>Sort crates by</InputLabel>
-            <Select
-              value={crateSort}
-              label="Sort crates by"
-              onChange={(e) => setCrateSort(e.target.value)}
-            >
-              <MenuItem value="name">Name</MenuItem>
-              <MenuItem value="tracks">Track count</MenuItem>
-              <MenuItem value="owner">Owner</MenuItem>
-            </Select>
-          </FormControl>
+        <Box style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {/* Sort — a Button + Menu so it matches the Folders button. */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<SortByAlpha style={{ color: "#1ED760" }} />}
+            endIcon={<ArrowDropDown />}
+            onClick={(e) => setSortAnchor(e.currentTarget)}
+            style={{ textTransform: "none", borderRadius: 8 }}
+          >
+            <span style={{ color: theme.palette.text.secondary, fontWeight: 400 }}>
+              Sort:&nbsp;
+            </span>
+            {{ name: "Name", tracks: "Track count", owner: "Owner" }[crateSort]}
+          </Button>
+          <Menu
+            anchorEl={sortAnchor}
+            open={Boolean(sortAnchor)}
+            onClose={() => setSortAnchor(null)}
+            getContentAnchorEl={null}
+            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          >
+            {[
+              ["name", "Name"],
+              ["tracks", "Track count"],
+              ["owner", "Owner"],
+            ].map(([val, label]) => (
+              <MenuItem
+                key={val}
+                selected={crateSort === val}
+                onClick={() => {
+                  setCrateSort(val);
+                  setSortAnchor(null);
+                }}
+              >
+                {label}
+              </MenuItem>
+            ))}
+          </Menu>
+
           {allTagsGenres.length > 0 && (
-            <FormControl size="small" style={{ minWidth: 170 }}>
-              <InputLabel>Filter by tag/genre</InputLabel>
-              <Select
-                multiple
-                value={metaFilter}
-                label="Filter by tag/genre"
-                onChange={(e) => setMetaFilter(e.target.value)}
-                renderValue={(sel) => sel.join(", ")}
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<FilterList style={{ color: "#1ED760" }} />}
+                endIcon={<ArrowDropDown />}
+                onClick={(e) => setFilterAnchor(e.currentTarget)}
+                style={{ textTransform: "none", borderRadius: 8 }}
+              >
+                <span
+                  style={{ color: theme.palette.text.secondary, fontWeight: 400 }}
+                >
+                  Filter:&nbsp;
+                </span>
+                {metaFilter.length === 0
+                  ? "All"
+                  : metaFilter.length === 1
+                  ? metaFilter[0]
+                  : `${metaFilter.length} selected`}
+              </Button>
+              <Menu
+                anchorEl={filterAnchor}
+                open={Boolean(filterAnchor)}
+                onClose={() => setFilterAnchor(null)}
+                getContentAnchorEl={null}
+                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
               >
                 {allTagsGenres.map((v) => (
-                  <MenuItem key={v} value={v}>
-                    {v}
+                  <MenuItem key={v} onClick={() => toggleMetaFilter(v)} dense>
+                    <Checkbox
+                      checked={metaFilter.includes(v)}
+                      size="small"
+                      style={{ padding: 4, marginRight: 6 }}
+                    />
+                    <ListItemText primary={v} />
                   </MenuItem>
                 ))}
-              </Select>
-            </FormControl>
+                {metaFilter.length > 0 && (
+                  <MenuItem
+                    onClick={() => {
+                      setMetaFilter([]);
+                      setFilterAnchor(null);
+                    }}
+                    style={{ color: theme.palette.text.secondary }}
+                  >
+                    Clear filters
+                  </MenuItem>
+                )}
+              </Menu>
+            </>
           )}
         </Box>
-        <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Box style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {(() => {
+            const shownIds = sortedCrates.map((c) => c.id);
+            const allSelected =
+              shownIds.length > 0 && shownIds.every((id) => selected.has(id));
+            return (
+              <Button
+                size="small"
+                onClick={() =>
+                  allSelected ? clearSelection() : setSelected(new Set(shownIds))
+                }
+                disabled={shownIds.length === 0}
+                style={{ textTransform: "none", borderRadius: 8 }}
+              >
+                {allSelected ? "Deselect all" : "Select all"}
+              </Button>
+            );
+          })()}
+          {selected.size > 0 && (
+            <Button
+              size="small"
+              onClick={clearSelection}
+              startIcon={<Close fontSize="small" />}
+              style={{ textTransform: "none", borderRadius: 8 }}
+            >
+              Clear ({selected.size})
+            </Button>
+          )}
           <Button
             size="small"
-            variant={folderView ? "contained" : "outlined"}
-            color={folderView ? "primary" : "default"}
-            startIcon={<Folder />}
-            onClick={() => setFolderView((v) => !v)}
-            style={{ textTransform: "none" }}
+            variant="contained"
+            color="primary"
+            startIcon={<MenuOpen />}
+            disabled={selected.size === 0}
+            onClick={handleOpenSelected}
+            style={{ textTransform: "none", borderRadius: 8, fontWeight: 600 }}
           >
-            Folders
+            Open (
+            <span
+              key={selected.size}
+              className={classes.countBump}
+              style={{ display: "inline-block" }}
+            >
+              {selected.size}
+            </span>
+            )
           </Button>
           {folderView && (
             <Button
               size="small"
               startIcon={<CreateNewFolder />}
               onClick={handleNewFolder}
-              style={{ textTransform: "none" }}
+              style={{ textTransform: "none", borderRadius: 8 }}
             >
               New folder
             </Button>
@@ -1117,26 +1379,51 @@ let PLLibrary = (props) => {
         </Box>
       )}
 
-      {sortedCrates.length === 0 && (
-        <Box sx={{ padding: isMobile ? 1 : 2 }}>
-          <Typography variant="body2" color="textSecondary">
-            {showHidden ? "No hidden crates." : "No crates to show."}
+      {favoritesOnly && !showHidden && (
+        <Box sx={{ padding: isMobile ? 1 : 2 }} style={{ paddingTop: 0 }}>
+          <Typography variant="subtitle2" style={{ fontWeight: 700 }}>
+            ★ Favorite crates
+          </Typography>
+          <Typography variant="caption" color="textSecondary">
+            Star a crate to pin it here.
           </Typography>
         </Box>
       )}
 
-      {folderView ? (
-        <Box sx={{ padding: isMobile ? 0 : 1 }}>
-          {renderFolderGroup("__root__", "Unfiled", grouped.__root__, null)}
-          {folders.map((f) =>
-            renderFolderGroup(f.id, f.name, grouped[f.id] || [], f)
-          )}
-        </Box>
-      ) : (
+      {sortedCrates.length === 0 && (
         <Box sx={{ padding: isMobile ? 1 : 2 }}>
-          {pagedCrates.map(renderCrateCard)}
+          <Typography variant="body2" color="textSecondary">
+            {showHidden
+              ? "No hidden crates."
+              : favoritesOnly
+              ? "No favorite crates yet — tap the ★ on a crate to add one."
+              : "No crates to show."}
+          </Typography>
         </Box>
       )}
+
+      <div
+        key={folderView ? "folders" : "crates"}
+        className={classes.contentFade}
+      >
+        {folderView ? (
+          <Box sx={{ padding: isMobile ? 0 : 1 }}>
+            {renderFolderGroup("__root__", "Unfiled", grouped.__root__, null)}
+            {folders.map((f) =>
+              renderFolderGroup(f.id, f.name, grouped[f.id] || [], f)
+            )}
+          </Box>
+        ) : (
+          <Box sx={{ padding: isMobile ? 1 : 2 }}>
+            {renderCrateGrid(
+              pagedCrates,
+              !showHidden && !favoritesOnly && cratePage === 0
+                ? renderLikedTile()
+                : null
+            )}
+          </Box>
+        )}
+      </div>
 
       {!folderView && sortedCrates.length > 12 && (
         <TablePagination
