@@ -1,207 +1,162 @@
-# 🎵 KeyTrack
+<div align="center">
 
-A web application for analyzing and organizing your Spotify playlists with key, BPM, and musical metadata.
+# 🎧 KeyTrack
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)
+**Harmonic mixing intelligence for your Spotify crates.**
+
+KeyTrack reads the key, BPM, and energy of every track in your Spotify playlists and turns them into a DJ-friendly workspace — Camelot colors, harmonic-match highlighting, set building, and crate organization, all in the browser.
+
+![Version](https://img.shields.io/badge/version-1.26.0-1ED760.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20MUI-61dafb.svg)
+![Spotify](https://img.shields.io/badge/powered%20by-Spotify-1ED760.svg)
 
-## ✨ Features
-
-- 🎹 **Key Detection** - Automatically detect the musical key of tracks
-- ⏱️ **BPM Analysis** - View tempo information for harmonic mixing
-- 🎚️ **Multiple Key Notations** - Switch between Musical, Camelot, and Open Key systems
-- 🎵 **Integrated Player** - Play tracks directly in the browser with Spotify Web Playback
-- 🔍 **Advanced Filtering** - Filter playlists by key, quality (major/minor), and BPM range
-- 🎼 **Chord Progressions** - Store and view chord progressions for each track
+</div>
 
 ---
 
-## 🚀 Local Development
+> **📸 Screenshots:** the placeholders below point at `docs/screenshots/`. Drop matching PNGs in that folder (see [`docs/screenshots/README.md`](docs/screenshots/README.md)) and they'll render here.
+
+![KeyTrack home — sidebar nav and cover-art crate tiles](docs/screenshots/home.png)
+
+---
+
+## ✨ What it does
+
+### 🎹 Key, BPM & notation
+- **Automatic key + BPM detection** from Spotify's audio features for every track.
+- **Three key notations** — switch any column between **Musical** (C, A♭m…), **Camelot** (8B, 5A…), and **Open Key**.
+- **Interactive Camelot wheel / Key Calculator** — tap a key to see all three notations and its harmonic matches at once. No login required.
+
+![Key Calculator — interactive Camelot wheel](docs/screenshots/key-calculator.png)
+
+### 🎚️ Harmonic mixing
+- **Camelot-colored keys** across the whole library so compatible tracks read at a glance.
+- **Anchor a track** to highlight every harmonic match (same key, ±1, relative major/minor) and dim the clashes.
+- **Energy meter** per track, plus sortable **Energy / Danceability / Valence**.
+
+![Harmonic highlighting in a crate](docs/screenshots/harmonic-mixing.png)
+
+### 🗂️ Crate library
+- **Cover-art crate tiles** in a responsive, full-width grid.
+- **Crates / Folders tabs**, plus **sort, filter, search, and pagination**.
+- **Tags + genres**, **favorite / hide**, and **true KeyTrack folders** (stored per user).
+- **Liked Songs** surfaced as a virtual crate.
+- **Tap to select** crates (or *Select all*) → **Open (N)** to dig across many crates at once; cancel anytime.
+
+![Crate library — tiles, tabs and controls](docs/screenshots/library.png)
+
+### 🧬 Crate analysis
+- **Crate DNA** — key distribution (Camelot bars), a BPM histogram, and a summary (track count, BPM range, dominant key, major/minor split, average energy/dance/valence).
+- **Release-date** column with sort + filter.
+- **Smart recommendations** — suggestions ranked by **harmonic + BPM compatibility** to your anchored key (or a random seed for discovery), not a random grab-bag.
+
+![Crate DNA visualization](docs/screenshots/crate-dna.png)
+
+### 🧰 Set building
+- **Set Builder** — assemble an ordered set across *any* playlists, with **key + BPM transition validation** flagging rough cuts.
+- **Save, load & rename** named sets (persisted to Firestore).
+
+![Set Builder with transition validation](docs/screenshots/set-builder.png)
+
+### 🎵 Playback & UX
+- **In-browser Spotify playback** (Web Playback SDK) with a **slim Now Playing** control in the top bar.
+- **Light / dark theme**, a **left sidebar** on desktop and a **hamburger drawer** on mobile.
+- Sleek micro-animations and an in-app **changelog**.
+
+---
+
+## 🤖 How this app was built — a transparency note
+
+KeyTrack grew through three waves of authorship. Every commit is on the record, so here's who — or what — wrote it, computed from the merged PR history.
+
+| Author | PRs | Share | What they shipped |
+|---|---:|---:|---|
+| ✍️ **Tam Nguyen** — by hand | 6 | 16% | The original app: table filters, chord progressions, logout, SoundCloud, changelog |
+| ⚡ **Cursor** — AI pair-programming | 7 | 18% | Recommendations v1, a mobile pass, collapsible filters, musical-key UI, UI fixes |
+| 🤖 **Claude Code** — AI agent | 26 | 66% | Everything from v1.3.0 → v1.26.0, plus this README |
+
+**Visual share of the 39 feature PRs:**
+
+```
+✍️  Tam Nguyen   ███░░░░░░░░░░░░░░░░░░   16%   (6 PRs)
+⚡  Cursor       ████░░░░░░░░░░░░░░░░░   18%   (7 PRs)
+🤖  Claude Code  █████████████░░░░░░░░   66%   (26 PRs)
+```
+
+Claude Code authored everything from **#30 onward** — seamless token refresh, harmonic mixing, the Camelot wheel, the Set Builder, the full crate-management suite (sort/filter/favorite/hide/tags/genres/folders), Liked Songs, Crate DNA, energy/vibe, smarter recommendations, sortable columns, and the complete library redesign. Each of those PRs carries a `🤖 Generated with Claude Code` footer. (One additional PR, #1, was an automated Dependabot bump.)
+
+> The point of this project wasn't to hand everything to an AI — it's a human-built app whose taste and direction stayed with its author while AI did the heavy lifting. KeyTrack is what that collaboration looks like in the open.
+
+---
+
+## 🚀 Local development
 
 ### Prerequisites
+- **Node.js** v16+
+- A **Spotify Developer** account, and **Spotify Premium** (required by the Web Playback SDK)
 
-- Node.js (v16+)
-- npm or yarn
-- Spotify Developer account
-- Spotify Premium (required for Web Playback API)
+### 1. Register a Spotify app
+At the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), create an app and add this **Redirect URI**:
 
-### Setup Instructions
-
-#### 1. Set Environment Variables
-
-Export your Spotify credentials from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard):
-
-```bash
-export SPOTIFY_ID=<spotify_id_from_dev_dashboard>
-export SPOTIFY_SECRET=<spotify_secret_from_dev_dashboard>
+```
+http://127.0.0.1:8888/callback
 ```
 
-#### 2. Start the Backend Server
+> ⚠️ Spotify rejects `http://localhost` as an "insecure" redirect — use `127.0.0.1`.
 
-Open a terminal window and run:
+Note your **Client ID** and **Client Secret**.
 
+### 2. Configure the backend
 ```bash
 cd local-server
-npm install  # First time only
-npm start
+cp .env.example .env        # then fill in SPOTIFY_ID and SPOTIFY_SECRET
+npm install                 # first time only
+npm start                   # serves on http://127.0.0.1:8888
 ```
 
-The server will start on `http://localhost:8888`
-
-#### 3. Start the Frontend Client
-
-Open a **new** terminal window and run:
-
+### 3. Start the frontend
+In a **new** terminal:
 ```bash
 cd client
-npm install  # First time only
-npm start
+npm install                 # first time only
+npm start                   # serves on http://localhost:3000
 ```
 
-The client will start on `http://localhost:3000`
+### 4. Use it
+1. Open `http://localhost:3000`
+2. Click **Log in with Spotify** (the **Key Calculator** works without logging in)
+3. Open your **Library**, dig through crates by key / BPM / energy, build sets, and play tracks in-browser
 
-#### 4. Login and Use the App
+---
 
-1. Navigate to `http://localhost:3000`
-2. Click the **Spotify logo** to authenticate
-3. Open your playlist library
-4. View track metadata (key, BPM, mode, etc.)
-5. Click any song to play it through the integrated player
+## 🛠️ Tech stack
+
+**Frontend** — React (Create React App), Material-UI v4, `spotify-web-api-js`, `react-spotify-web-playback`, Firebase / Firestore (saved sets + crate metadata), deployed to **Netlify**.
+
+**Backend** — Node.js + Express handling the Spotify OAuth flow, deployed to **Heroku** (auto-deploys on merge to `master`).
 
 ---
 
 ## 🌐 Deployment
 
-### Frontend Deployment (Netlify)
-
-Deploy the React frontend to Netlify:
-
-#### 1. Build the Production Bundle
-
+**Frontend (Netlify)** — continuous deployment from `master` via [`client/netlify.toml`](client/netlify.toml). Manual deploy:
 ```bash
-cd client
-npm run build
+cd client && npm run build && netlify deploy --prod   # publish dir: ./build
 ```
 
-#### 2. Install Netlify CLI
-
-If not already installed:
-
-```bash
-npm install -g netlify-cli
-```
-
-#### 3. Deploy to Production
-
-```bash
-netlify deploy --prod
-```
-
-When prompted for the **publish directory**, specify:
-
-```
-./build
-```
-
----
-
-### Backend Deployment (Heroku)
-
-The backend server is configured for **automatic deployment** via Heroku.
-
-#### ⚡ Auto-Deploy (Recommended)
-
-The backend **automatically deploys** when code is merged to the `master` branch:
-
-1. Make your changes and commit to a feature branch
-2. Create a pull request to merge into `master`
-3. Once merged, **Heroku automatically deploys** the updated backend! 🎉
-
-**No manual deployment needed** - just merge to `master` and Heroku handles the rest.
-
-#### Manual Deploy (if needed)
-
-If you need to deploy manually:
-
-```bash
-cd local-server
-heroku login
-heroku git:remote -a your-app-name
-git push heroku master
-```
-
-**Note:** The auto-deploy is configured to watch the `master` branch in the connected GitHub repository.
-
----
-
-## 🛠️ Tech Stack
-
-### Frontend
-- **React 18** - UI framework
-- **Material-UI** - Component library
-- **Spotify Web Playback SDK** - In-browser music player
-- **Firebase** - User data storage
-- **Axios** - HTTP client
-
-### Backend
-- **Node.js** - Runtime environment
-- **Express** - Web framework
-- **Spotify Web API** - Authentication and data fetching
-
----
-
-## 📝 Configuration
-
-### Spotify Developer Dashboard
-
-1. Create a new app at [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
-2. Add redirect URIs:
-   - `http://localhost:8888/spotify/callback` (local development)
-   - `https://your-app.herokuapp.com/spotify/callback` (production)
-3. Note your **Client ID** and **Client Secret**
-
-### Environment Variables
-
-For production deployment, set these environment variables:
-
-- `SPOTIFY_ID` - Your Spotify Client ID
-- `SPOTIFY_SECRET` - Your Spotify Client Secret
-- `NODE_ENV` - Set to `production` for production builds
+**Backend (Heroku)** — auto-deploys when `master` updates. For production set `SPOTIFY_ID`, `SPOTIFY_SECRET`, and `NODE_ENV=production`, and register the production `https://<your-app>/callback` redirect URI in the Spotify dashboard.
 
 ---
 
 ## 📄 License
 
-MIT License - feel free to use this project for your own purposes!
-
----
+MIT — see [`LICENSE`](local-server/LICENSE). Use it, fork it, mix with it.
 
 ## 👤 Author
 
-**Tam Nguyen**
-
-Powered by Spotify 🎵
+**Tam Nguyen** · built with Spotify 🎵, Cursor ⚡, and Claude Code 🤖
 
 ---
 
-## 🐛 Troubleshooting
-
-### "Device not found" error
-- Ensure you have Spotify Premium
-- The player needs to initialize before playing tracks
-- Try refreshing the page if the issue persists
-
-### Songs not playing
-- Check that you're logged in with a Premium account
-- Verify the Spotify Web Playback SDK has loaded
-- Check browser console for errors
-
-### Backend connection issues
-- Verify environment variables are set correctly
-- Ensure the backend server is running on port 8888
-- Check that redirect URIs match in Spotify Dashboard
-
----
-
-**Happy mixing! 🎧✨**
-
+<div align="center"><b>Happy mixing! 🎧✨</b></div>
