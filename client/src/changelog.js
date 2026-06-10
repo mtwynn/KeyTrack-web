@@ -9,7 +9,11 @@ const changelog = [
       },
       {
         type: "improvement",
-        desc: "Crates now display as cover-art tiles in a responsive grid (the artwork is the card), with a new Favorites view to pin starred crates.",
+        desc: "Crates now display as cover-art tiles in a responsive grid (the artwork is the card), with the Liked Songs crate as the first tile and a new Favorites view to pin starred crates.",
+      },
+      {
+        type: "improvement",
+        desc: "Polished the library controls: the playlist search is now a clean floating rounded search bar, and the Sort / Filter crate dropdowns were restyled as rounded pills with icons.",
       },
       {
         type: "bugfix",

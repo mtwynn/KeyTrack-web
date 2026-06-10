@@ -2,15 +2,13 @@ import React, { Fragment } from "react";
 import _ from "underscore";
 
 import {
-  AppBar,
-  Avatar,
   Button,
   IconButton,
   CircularProgress,
   Dialog,
   Input,
   InputAdornment,
-  Toolbar,
+  OutlinedInput,
   Paper,
   makeStyles,
   Card,
@@ -47,6 +45,8 @@ import {
   Edit,
   Delete,
   Favorite,
+  SortByAlpha,
+  FilterList,
 } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
@@ -62,21 +62,21 @@ import {
 } from "../../utils/folders";
 
 const useStyles = makeStyles((theme) => ({
-  appBar: {
-    position: "sticky",
-    backgroundColor: "#191414",
-    borderRadius: "8px 8px 0 0",
-  },
-  search: {
+  // Floating, fully-rounded search pill (replaces the old dark search bar).
+  searchPill: {
+    display: "flex",
+    alignItems: "center",
     flex: 1,
-    color: "white",
-    marginRight: theme.spacing(3),
-    marginLeft: theme.spacing(3),
-    borderWidth: "10px",
-    [theme.breakpoints.down('sm')]: {
-      marginRight: theme.spacing(1),
-      marginLeft: theme.spacing(1),
-    },
+    minWidth: 200,
+    borderRadius: 28,
+    padding: "4px 8px 4px 18px",
+    border: "1px solid rgba(128,128,128,0.28)",
+    backgroundColor: theme.palette.background.paper,
+  },
+  // Rounded-pill outlined input used by the Sort / Filter selects so they
+  // read as clean controls instead of notched-label form fields.
+  pill: {
+    borderRadius: 22,
   },
   root: {
     display: "inline-block",
@@ -93,80 +93,11 @@ const useStyles = makeStyles((theme) => ({
   colorPrimary: {
     color: "#1ED760",
   },
-  playlistCard: {
-    marginBottom: theme.spacing(2),
-    cursor: "pointer",
-    transition: "all 0.2s ease-in-out",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: theme.shadows[4],
-      backgroundColor: "#f0fff4",
-    },
-    [theme.breakpoints.down('sm')]: {
-      marginBottom: theme.spacing(1),
-    },
-  },
-  cardContent: {
-    display: "flex",
-    alignItems: "center",
-    padding: theme.spacing(2),
-    "&:last-child": {
-      paddingBottom: theme.spacing(2),
-    },
-    [theme.breakpoints.down('sm')]: {
-      padding: theme.spacing(1.5),
-      flexDirection: "column",
-      alignItems: "flex-start",
-    },
-  },
-  albumArt: {
-    width: 80,
-    height: 80,
-    marginRight: theme.spacing(2),
-    [theme.breakpoints.down('sm')]: {
-      width: 60,
-      height: 60,
-      marginRight: 0,
-      marginBottom: theme.spacing(1),
-    },
-  },
-  playlistInfo: {
-    flex: 1,
-    minWidth: 0,
-    [theme.breakpoints.down('sm')]: {
-      width: "100%",
-    },
-  },
-  playlistHeader: {
-    display: "flex",
-    alignItems: "baseline",
-    marginBottom: theme.spacing(0.5),
-    gap: theme.spacing(1.5),
-    [theme.breakpoints.down('sm')]: {
-      flexWrap: "wrap",
-      gap: theme.spacing(0.5),
-    },
-  },
   playlistTitle: {
     fontWeight: 600,
-    fontSize: "1.1rem",
+    fontSize: "1.05rem",
     [theme.breakpoints.down('sm')]: {
       fontSize: "1rem",
-    },
-  },
-  playlistDescription: {
-    color: theme.palette.text.secondary,
-    fontSize: "0.8rem",
-    marginBottom: theme.spacing(1),
-    textAlign: "left",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    display: "-webkit-box",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical",
-    [theme.breakpoints.down('sm')]: {
-      fontSize: "0.75rem",
-      WebkitLineClamp: 1,
     },
   },
   ownerText: {
@@ -919,6 +850,56 @@ let PLLibrary = (props) => {
     </Grid>
   );
 
+  // The Liked Songs virtual crate, styled as a cover tile (matching the grid)
+  // so it sits at the top as the first card.
+  const renderLikedTile = () => (
+    <Card
+      className={classes.tileCard}
+      onClick={handleOpenLikedSongs}
+      style={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        border: "1px solid #1ED760",
+      }}
+    >
+      <Box
+        className={classes.tileCover}
+        style={{ background: "linear-gradient(135deg,#450af5,#c4efd9)" }}
+      >
+        <Favorite style={{ color: "#fff", fontSize: 42 }} />
+        {loadingId === "__liked__" && (
+          <Box className={classes.tileLoading}>
+            <CircularProgress size={28} style={{ color: "#fff" }} />
+          </Box>
+        )}
+      </Box>
+      <CardContent className={classes.tileBody}>
+        <Typography className={classes.playlistTitle} noWrap>
+          Liked Songs
+        </Typography>
+        <Typography className={classes.ownerText} noWrap>
+          Your Spotify Liked Songs
+        </Typography>
+      </CardContent>
+      <Box className={classes.tileActions}>
+        <Box style={{ flex: 1 }} />
+        <IconButton
+          size="small"
+          className={classes.openButton}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenLikedSongs();
+          }}
+          title="Open Liked Songs"
+          aria-label="open liked songs"
+        >
+          <MenuOpen />
+        </IconButton>
+      </Box>
+    </Card>
+  );
+
   const renderFolderGroup = (key, name, crates, folder) => (
     <Box key={key} style={{ marginBottom: 8 }}>
       <Box
@@ -1008,52 +989,59 @@ let PLLibrary = (props) => {
           Loading crate…
         </Typography>
       </Dialog>
-      <AppBar className={classes.appBar}>
-        <Toolbar>
+      <Box
+        sx={{ padding: isMobile ? 1 : 2 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <Paper elevation={0} className={classes.searchPill}>
           <Input
-            classes={{
-              root: classes.search,
-              focused: classes.inputFocused,
-            }}
-            type={"text"}
+            disableUnderline
+            fullWidth
+            type="text"
             onChange={handleChange}
-            placeholder="Search Playlists"
+            placeholder="Search playlists"
             endAdornment={
               <InputAdornment position="end">
-                <Search />
+                <Search style={{ color: theme.palette.text.secondary }} />
               </InputAdornment>
             }
           />
+        </Paper>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<Search />}
+          onClick={handleSearchAllCrates}
+          disabled={!props.pllibrary || props.pllibrary.length === 0}
+          style={{
+            borderRadius: 28,
+            textTransform: "none",
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+          }}
+        >
+          {selected.size > 0
+            ? `Search selected (${selected.size})`
+            : isMobile
+            ? "All crates"
+            : "Search all crates"}
+        </Button>
+        {selected.size > 0 && (
           <Button
-            variant="outlined"
             size="small"
-            startIcon={<Search />}
-            onClick={handleSearchAllCrates}
-            disabled={!props.pllibrary || props.pllibrary.length === 0}
-            style={{
-              color: "#fff",
-              borderColor: "rgba(255,255,255,0.5)",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
+            onClick={clearSelection}
+            style={{ whiteSpace: "nowrap", flexShrink: 0 }}
           >
-            {selected.size > 0
-              ? `Search selected (${selected.size})`
-              : isMobile
-              ? "All crates"
-              : "Search all crates"}
+            Clear
           </Button>
-          {selected.size > 0 && (
-            <Button
-              size="small"
-              onClick={clearSelection}
-              style={{ color: "#fff", whiteSpace: "nowrap", flexShrink: 0 }}
-            >
-              Clear
-            </Button>
-          )}
-        </Toolbar>
-      </AppBar>
+        )}
+      </Box>
 
       <Dialog
         open={loadingAll}
@@ -1083,53 +1071,16 @@ let PLLibrary = (props) => {
         </Typography>
       </Dialog>
 
-      {/* Liked Songs as a virtual crate */}
-      <Box sx={{ padding: isMobile ? 1 : 2 }} style={{ paddingBottom: 0 }}>
-        <Card
-          className={classes.playlistCard}
-          onClick={handleOpenLikedSongs}
-          style={{ borderLeft: "4px solid #1ED760" }}
-        >
-          <CardContent className={classes.cardContent}>
-            <Avatar
-              variant="square"
-              className={classes.albumArt}
-              style={{ background: "linear-gradient(135deg,#450af5,#c4efd9)" }}
-            >
-              <Favorite style={{ color: "#fff" }} />
-            </Avatar>
-            <Box className={classes.playlistInfo}>
-              <Box className={classes.playlistHeader}>
-                <Typography className={classes.playlistTitle}>
-                  Liked Songs
-                </Typography>
-              </Box>
-              <Typography className={classes.playlistDescription}>
-                Your Spotify Liked Songs
-              </Typography>
-            </Box>
-            {loadingId === "__liked__" ? (
-              <CircularProgress
-                classes={{ colorPrimary: classes.colorPrimary }}
-                size={24}
-                className={classes.openButton}
-              />
-            ) : (
-              !isMobile && (
-                <IconButton
-                  className={classes.openButton}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenLikedSongs();
-                  }}
-                >
-                  <MenuOpen />
-                </IconButton>
-              )
-            )}
-          </CardContent>
-        </Card>
-      </Box>
+      {/* Liked Songs as a virtual crate — a cover tile at the top. */}
+      {!showHidden && !favoritesOnly && (
+        <Box sx={{ padding: isMobile ? 1 : 2 }} style={{ paddingBottom: 0 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={4} lg={3}>
+              {renderLikedTile()}
+            </Grid>
+          </Grid>
+        </Box>
+      )}
 
       <Box
         sx={{ padding: isMobile ? 1 : 2 }}
@@ -1142,12 +1093,23 @@ let PLLibrary = (props) => {
         }}
       >
         <Box style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <FormControl variant="outlined" size="small" style={{ minWidth: 160 }}>
-            <InputLabel>Sort crates by</InputLabel>
+          <FormControl size="small">
             <Select
               value={crateSort}
-              label="Sort crates by"
               onChange={(e) => setCrateSort(e.target.value)}
+              input={
+                <OutlinedInput
+                  margin="dense"
+                  classes={{ root: classes.pill, notchedOutline: classes.pill }}
+                />
+              }
+              renderValue={(v) => (
+                <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <SortByAlpha fontSize="small" style={{ color: "#1ED760" }} />
+                  Sort:&nbsp;
+                  {{ name: "Name", tracks: "Track count", owner: "Owner" }[v]}
+                </Box>
+              )}
             >
               <MenuItem value="name">Name</MenuItem>
               <MenuItem value="tracks">Track count</MenuItem>
@@ -1155,14 +1117,30 @@ let PLLibrary = (props) => {
             </Select>
           </FormControl>
           {allTagsGenres.length > 0 && (
-            <FormControl variant="outlined" size="small" style={{ minWidth: 180 }}>
-              <InputLabel>Filter by tag/genre</InputLabel>
+            <FormControl size="small">
               <Select
                 multiple
+                displayEmpty
                 value={metaFilter}
-                label="Filter by tag/genre"
                 onChange={(e) => setMetaFilter(e.target.value)}
-                renderValue={(sel) => sel.join(", ")}
+                input={
+                  <OutlinedInput
+                    margin="dense"
+                    classes={{
+                      root: classes.pill,
+                      notchedOutline: classes.pill,
+                    }}
+                  />
+                }
+                renderValue={(sel) => (
+                  <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <FilterList
+                      fontSize="small"
+                      style={{ color: "#1ED760" }}
+                    />
+                    {sel.length ? sel.join(", ") : "Filter by tag/genre"}
+                  </Box>
+                )}
               >
                 {allTagsGenres.map((v) => (
                   <MenuItem key={v} value={v}>
