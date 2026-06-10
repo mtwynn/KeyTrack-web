@@ -28,6 +28,8 @@ With the rise of AI and agentic coding, I was able to use Cursor in 2025 to buil
 
 It's a project I hold very dear to me, and I hope it's helpful to you! :)
 
+Side note: Everything below here is written by Claude, at my guidance of course. 
+
 ---
 
 ## 🎚️ What KeyTrack can do
