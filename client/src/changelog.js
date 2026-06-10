@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.21.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Energy & vibe: a new Energy column (colored meter per track), sort by Energy / Danceability / Valence, an Energy filter (Chill / Medium / Hype), and average energy/dance/valence in the Crate DNA summary.",
+      },
+    ],
+  },
+  {
     version: "1.20.0",
     date: "06/09/26",
     changes: [

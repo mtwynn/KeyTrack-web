@@ -265,6 +265,7 @@ let Playlist = (props) => {
   const [minYear, setMinYear] = React.useState("");
   const [maxYear, setMaxYear] = React.useState("");
   const [sortBy, setSortBy] = React.useState("key");
+  const [energyFilter, setEnergyFilter] = React.useState("any");
   const [showDNA, setShowDNA] = React.useState(false);
   const [showFilters, setShowFilters] = React.useState(!isMobile); // Collapsed on mobile by default
   let [searchItems, setSearchItems] = React.useState(allItems);
@@ -330,7 +331,14 @@ let Playlist = (props) => {
       if (!id) return undefined;
       const result = keysById.get(id);
       return result
-        ? { key: result.key, mode: result.mode, bpm: result.tempo }
+        ? {
+            key: result.key,
+            mode: result.mode,
+            bpm: result.tempo,
+            energy: result.energy,
+            danceability: result.danceability,
+            valence: result.valence,
+          }
         : null;
     },
     [keysById]
@@ -377,6 +385,12 @@ let Playlist = (props) => {
       if (!aKey) return -1;
       if (!bKey) return 1;
       if (sortBy === "bpm") return aKey.bpm - bKey.bpm;
+      // Energy / danceability / valence: highest first.
+      if (sortBy === "energy") return (bKey.energy || 0) - (aKey.energy || 0);
+      if (sortBy === "danceability")
+        return (bKey.danceability || 0) - (aKey.danceability || 0);
+      if (sortBy === "valence")
+        return (bKey.valence || 0) - (aKey.valence || 0);
       // Default: Camelot key, then BPM.
       const aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
       const bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
@@ -405,7 +419,8 @@ let Playlist = (props) => {
       minBpm === "" &&
       maxBpm === "" &&
       minYear === "" &&
-      maxYear === ""
+      maxYear === "" &&
+      energyFilter === "any"
     ) {
       _.debounce(setSearchItems(allItems), 500);
     } else {
@@ -469,12 +484,22 @@ let Playlist = (props) => {
               return ry !== null && ry <= y;
             });
           }
+          if (energyFilter !== "any") {
+            filteredItems = filteredItems.filter((item) => {
+              const tk = getKey(item.track.id);
+              const e = tk ? tk.energy : null;
+              if (e == null) return false;
+              if (energyFilter === "low") return e < 0.4;
+              if (energyFilter === "med") return e >= 0.4 && e <= 0.7;
+              return e > 0.7;
+            });
+          }
           return filteredItems;
         }, 500)
       );
     }
     // `wheel` only changes the displayed notation, not which tracks match.
-  }, [search, keyFilter, minBpm, maxBpm, minYear, maxYear]);
+  }, [search, keyFilter, minBpm, maxBpm, minYear, maxYear, energyFilter]);
 
   const handleFilterChange = (event, type) => {
     const {
@@ -500,6 +525,7 @@ let Playlist = (props) => {
     setMaxBpm("");
     setMinYear("");
     setMaxYear("");
+    setEnergyFilter("any");
     ["minBpm", "maxBpm", "minYear", "maxYear"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.value = "";
@@ -736,6 +762,26 @@ let Playlist = (props) => {
                   <MenuItem value="bpm">BPM</MenuItem>
                   <MenuItem value="released-desc">Newest</MenuItem>
                   <MenuItem value="released-asc">Oldest</MenuItem>
+                  <MenuItem value="energy">Energy</MenuItem>
+                  <MenuItem value="danceability">Danceability</MenuItem>
+                  <MenuItem value="valence">Valence (happy)</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl className={classes.filter}>
+                <InputLabel id="demo-simple-select-label">Energy</InputLabel>
+                <Select
+                  value={energyFilter}
+                  label="Energy"
+                  onChange={(e) => setEnergyFilter(e.target.value)}
+                  inputProps={{
+                    classes: { icon: classes.icon, root: classes.root },
+                  }}
+                  input={<Input />}
+                >
+                  <MenuItem value="any">Any energy</MenuItem>
+                  <MenuItem value="low">Chill</MenuItem>
+                  <MenuItem value="med">Medium</MenuItem>
+                  <MenuItem value="high">Hype</MenuItem>
                 </Select>
               </FormControl>
 
@@ -822,6 +868,7 @@ let Playlist = (props) => {
                 {!isMobile && <StyledTableCell>Quality</StyledTableCell>}
                 <StyledTableCell>BPM</StyledTableCell>
                 {!isTablet && <StyledTableCell>Released</StyledTableCell>}
+                {!isTablet && <StyledTableCell>Energy</StyledTableCell>}
               </TableRow>
             </TableHead>
             <TableBody>

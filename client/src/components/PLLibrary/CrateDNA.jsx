@@ -12,6 +12,10 @@ const CrateDNA = ({ items, getKey }) => {
     const bpms = [];
     let major = 0;
     let minor = 0;
+    let energy = 0;
+    let dance = 0;
+    let valence = 0;
+    let vibeN = 0;
     (items || []).forEach((item) => {
       const k = item && item.track && getKey(item.track.id);
       if (!k) return;
@@ -20,8 +24,22 @@ const CrateDNA = ({ items, getKey }) => {
       bpms.push(Math.round(k.bpm));
       if (k.mode === 1) major += 1;
       else minor += 1;
+      if (k.energy != null) {
+        energy += k.energy;
+        dance += k.danceability || 0;
+        valence += k.valence || 0;
+        vibeN += 1;
+      }
     });
-    return { keyCounts, bpms, major, minor };
+    return {
+      keyCounts,
+      bpms,
+      major,
+      minor,
+      energy: vibeN ? energy / vibeN : null,
+      dance: vibeN ? dance / vibeN : null,
+      valence: vibeN ? valence / vibeN : null,
+    };
   }, [items, getKey]);
 
   const total = data.major + data.minor;
@@ -76,6 +94,14 @@ const CrateDNA = ({ items, getKey }) => {
             (data.minor / total) * 100
           )}% min`}
         />
+        {data.energy != null && (
+          <Chip
+            size="small"
+            label={`Energy ${Math.round(data.energy * 100)}% · Dance ${Math.round(
+              data.dance * 100
+            )}% · Valence ${Math.round(data.valence * 100)}%`}
+          />
+        )}
       </Box>
 
       <Typography variant="overline" color="textSecondary">
