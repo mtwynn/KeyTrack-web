@@ -30,7 +30,7 @@ import {
 } from "@material-ui/core";
 
 import { useTheme } from "@material-ui/core/styles";
-import { ArrowUpward, Close, Search, Delete, DonutLarge, FilterList, ExpandMore, ExpandLess, QueueMusic } from "@material-ui/icons";
+import { ArrowUpward, Close, Search, Delete, DonutLarge, FilterList, ExpandMore, ExpandLess, QueueMusic, Equalizer } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 
 import { initializeApp } from "firebase/app";
@@ -43,6 +43,7 @@ import { useEffect } from "react";
 import Row from "./Row";
 import Recommendations from "./Recommendations";
 import KeyFilterPicker from "./KeyFilterPicker";
+import CrateDNA from "./CrateDNA";
 
 initializeApp(firebaseConfig);
 
@@ -264,6 +265,7 @@ let Playlist = (props) => {
   const [minYear, setMinYear] = React.useState("");
   const [maxYear, setMaxYear] = React.useState("");
   const [sortBy, setSortBy] = React.useState("key");
+  const [showDNA, setShowDNA] = React.useState(false);
   const [showFilters, setShowFilters] = React.useState(!isMobile); // Collapsed on mobile by default
   let [searchItems, setSearchItems] = React.useState(allItems);
   // Track whose key is "anchored" for harmonic-mixing highlighting (or null).
@@ -757,6 +759,19 @@ let Playlist = (props) => {
           overflowX: isMobile ? "auto" : "visible",
           overflowY: "visible"
         }}>
+          <Box style={{ padding: "8px 16px" }}>
+            <Button
+              size="small"
+              startIcon={<Equalizer />}
+              onClick={() => setShowDNA((v) => !v)}
+              style={{ textTransform: "none" }}
+            >
+              {showDNA ? "Hide" : "Show"} Crate DNA
+            </Button>
+            <Collapse in={showDNA} timeout="auto" unmountOnExit>
+              <CrateDNA items={allItems} getKey={getKey} />
+            </Collapse>
+          </Box>
           {harmonicAnchorCamelot && (
             <Box
               style={{

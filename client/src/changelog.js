@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.20.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Crate DNA: a 'Show Crate DNA' panel in each playlist with the key distribution (Camelot bars), a BPM histogram, and a summary (track count, BPM range, dominant key, major/minor split) \u2014 a quick read on a crate's character.",
+      },
+    ],
+  },
+  {
     version: "1.19.0",
     date: "06/09/26",
     changes: [
