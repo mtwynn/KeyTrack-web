@@ -156,6 +156,32 @@ let Row = (props) => {
           {formatReleaseDate(item.track)}
         </TableCell>
       )}
+      {!props.isTablet && (
+        <TableCell>
+          {trackKey && trackKey.energy != null ? (
+            <div
+              title={`Energy ${Math.round(trackKey.energy * 100)}%`}
+              style={{
+                width: 46,
+                height: 6,
+                background: "rgba(128,128,128,0.2)",
+                borderRadius: 3,
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.round(trackKey.energy * 100)}%`,
+                  height: 6,
+                  borderRadius: 3,
+                  background: `hsl(${(1 - trackKey.energy) * 200}, 75%, 48%)`,
+                }}
+              />
+            </div>
+          ) : (
+            "—"
+          )}
+        </TableCell>
+      )}
     </TableRow>
   );
 };
