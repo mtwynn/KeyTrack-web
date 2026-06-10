@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.26.0",
+    date: "06/10/26",
+    changes: [
+      {
+        type: "improvement",
+        desc: "Trimmed the top bar: removed the duplicate Set Builder and dark-mode buttons (Sets lives in the nav, dark mode in the account menu) so the slim Now Playing control sits cleanly at the right next to your avatar.",
+      },
+    ],
+  },
+  {
     version: "1.25.0",
     date: "06/10/26",
     changes: [

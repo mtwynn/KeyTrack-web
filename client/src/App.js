@@ -625,7 +625,6 @@ class App extends React.Component {
   // left sidebar that navigates between Library, Key Calculator, Sets,
   // Favorites and Hidden crates. Account/Current Song still live in the drawer.
   renderHome(version) {
-    const isDark = this.state.themeMode === 'dark';
     const userInitial = this.state.user_name
       ? this.state.user_name.charAt(0).toUpperCase()
       : '?';
@@ -744,28 +743,11 @@ class App extends React.Component {
               <CurrentSong token={this.state.access_token} compact />
             </Hidden>
             <IconButton
-              color="inherit"
-              onClick={this.openSet}
-              title="Set Builder"
-              aria-label="set builder"
-            >
-              <Badge badgeContent={this.state.set.length} color="primary">
-                <QueueMusic />
-              </Badge>
-            </IconButton>
-            <IconButton
-              color="inherit"
-              onClick={this.toggleTheme}
-              title="Toggle dark mode"
-              aria-label="toggle theme"
-            >
-              {isDark ? <Brightness7 /> : <Brightness4 />}
-            </IconButton>
-            <IconButton
               edge="end"
               onClick={() => this.setState({ drawerOpen: true })}
               title="Account"
               aria-label="account"
+              style={{ marginLeft: 8 }}
             >
               <Avatar
                 style={{
