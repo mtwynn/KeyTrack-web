@@ -17,6 +17,7 @@ import {
   CardContent,
   Typography,
   Box,
+  Checkbox,
   Chip,
   Collapse,
   FormControl,
@@ -237,6 +238,18 @@ let PLLibrary = (props) => {
   const [loadingId, setLoadingId] = React.useState(null);
   const [loadingAll, setLoadingAll] = React.useState(false);
   const [allProgress, setAllProgress] = React.useState({ done: 0, total: 0 });
+  // Crates selected (by id) to scope "Search all crates" to a subset.
+  const [selected, setSelected] = React.useState(() => new Set());
+
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelected(new Set());
   const [showPlaylist, setShowPlaylist] = React.useState(false);
   const [currPlaylist, setCurrPlaylist] = React.useState(null);
   const [playlistKeys, setPlaylistKeys] = React.useState(null);
@@ -536,10 +549,12 @@ let PLLibrary = (props) => {
   };
 
   const handleSearchAllCrates = async () => {
-    // Hidden crates are abstracted away — they don't feed the cross-search.
-    const playlists = (props.pllibrary || []).filter(
-      (pl) => !(crateMeta[pl.id] && crateMeta[pl.id].hidden)
-    );
+    // If crates are selected, search just those; otherwise all non-hidden crates
+    // (hidden crates are abstracted away and never feed the cross-search).
+    const playlists = (props.pllibrary || []).filter((pl) => {
+      if (selected.size > 0) return selected.has(pl.id);
+      return !(crateMeta[pl.id] && crateMeta[pl.id].hidden);
+    });
     if (playlists.length === 0) return;
 
     setAllProgress({ done: 0, total: playlists.length });
@@ -695,6 +710,14 @@ let PLLibrary = (props) => {
         </Box>
 
         <Box style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          <Checkbox
+            size="small"
+            checked={selected.has(playlist.id)}
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => toggleSelect(playlist.id)}
+            title="Select for cross-search"
+            style={{ padding: 4 }}
+          />
           <IconButton
             size="small"
             onClick={(e) => openTagEdit(e, playlist)}
@@ -870,8 +893,21 @@ let PLLibrary = (props) => {
               flexShrink: 0,
             }}
           >
-            {isMobile ? "All crates" : "Search all crates"}
+            {selected.size > 0
+              ? `Search selected (${selected.size})`
+              : isMobile
+              ? "All crates"
+              : "Search all crates"}
           </Button>
+          {selected.size > 0 && (
+            <Button
+              size="small"
+              onClick={clearSelection}
+              style={{ color: "#fff", whiteSpace: "nowrap", flexShrink: 0 }}
+            >
+              Clear
+            </Button>
+          )}
         </Toolbar>
       </AppBar>
 

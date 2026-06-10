@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.17.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Select specific crates (checkbox on each) to scope the cross-search \u2014 the 'Search all crates' button becomes 'Search selected (N)' and only searches those. With none selected it still searches all (non-hidden) crates.",
+      },
+    ],
+  },
+  {
     version: "1.16.0",
     date: "06/09/26",
     changes: [
