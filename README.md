@@ -26,7 +26,7 @@ I followed a Spotify Developer API tutorial on YouTube, then designed and create
 
 With the rise of AI and agentic coding, I was able to use Cursor in 2025 to build out a recommendations feature and redesign parts of the UI. And with Claude in 2026, I was able to do a full UI revamp and introduce a ton of new features I've always wanted to see.
 
-It's a project I hold very dear to me, and I hope it's helpful to you. 🎧
+It's a project I hold very dear to me, and I hope it's helpful to you! :)
 
 ---
 
