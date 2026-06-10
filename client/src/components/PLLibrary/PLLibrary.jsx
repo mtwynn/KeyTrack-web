@@ -18,6 +18,11 @@ import {
   Typography,
   Box,
   Chip,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  TablePagination,
   useMediaQuery,
   useTheme,
 } from "@material-ui/core";
@@ -191,6 +196,35 @@ let PLLibrary = (props) => {
   const [playlistOwnerId, setPlaylistOwnerId] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [searchItems, setSearchItems] = React.useState(props.pllibrary);
+  const [crateSort, setCrateSort] = React.useState("name");
+  const [cratePage, setCratePage] = React.useState(0);
+  const [cratesPerPage, setCratesPerPage] = React.useState(24);
+
+  // Sort + paginate the crate list so we only render a page at a time.
+  const sortedCrates = React.useMemo(() => {
+    const arr = [...(searchItems || [])];
+    arr.sort((a, b) => {
+      if (crateSort === "tracks") {
+        return (b.tracks?.total || 0) - (a.tracks?.total || 0);
+      }
+      if (crateSort === "owner") {
+        return (a.owner?.display_name || "").localeCompare(
+          b.owner?.display_name || ""
+        );
+      }
+      return (a.name || "").localeCompare(b.name || "");
+    });
+    return arr;
+  }, [searchItems, crateSort]);
+
+  const pagedCrates = sortedCrates.slice(
+    cratePage * cratesPerPage,
+    cratePage * cratesPerPage + cratesPerPage
+  );
+
+  React.useEffect(() => {
+    setCratePage(0);
+  }, [searchItems, crateSort, cratesPerPage]);
 
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
@@ -500,8 +534,35 @@ let PLLibrary = (props) => {
         </Typography>
       </Dialog>
 
+      <Box
+        sx={{ padding: isMobile ? 1 : 2 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 8,
+        }}
+      >
+        <FormControl size="small" style={{ minWidth: 160 }}>
+          <InputLabel>Sort crates by</InputLabel>
+          <Select
+            value={crateSort}
+            label="Sort crates by"
+            onChange={(e) => setCrateSort(e.target.value)}
+          >
+            <MenuItem value="name">Name</MenuItem>
+            <MenuItem value="tracks">Track count</MenuItem>
+            <MenuItem value="owner">Owner</MenuItem>
+          </Select>
+        </FormControl>
+        <Typography variant="caption" color="textSecondary">
+          {sortedCrates.length} crate{sortedCrates.length === 1 ? "" : "s"}
+        </Typography>
+      </Box>
+
       <Box sx={{ padding: isMobile ? 1 : 2 }}>
-        {searchItems.map((playlist) => (
+        {pagedCrates.map((playlist) => (
           <Card
             key={playlist.id}
             className={classes.playlistCard}
@@ -571,6 +632,22 @@ let PLLibrary = (props) => {
           </Card>
         ))}
       </Box>
+
+      {sortedCrates.length > 12 && (
+        <TablePagination
+          component="div"
+          count={sortedCrates.length}
+          page={cratePage}
+          onChangePage={(e, p) => setCratePage(p)}
+          rowsPerPage={cratesPerPage}
+          onChangeRowsPerPage={(e) => {
+            setCratesPerPage(parseInt(e.target.value, 10));
+            setCratePage(0);
+          }}
+          rowsPerPageOptions={[12, 24, 48]}
+          labelRowsPerPage="Crates per page"
+        />
+      )}
 
       {showPlaylist ? (
         <Playlist
