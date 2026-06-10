@@ -251,6 +251,9 @@ let PLLibrary = (props) => {
   const [loadingId, setLoadingId] = React.useState(null);
   const [loadingAll, setLoadingAll] = React.useState(false);
   const [allProgress, setAllProgress] = React.useState({ done: 0, total: 0 });
+  // Set when the user dismisses the "Search all crates" loader; in-flight and
+  // queued fetches check this and bail so a big library doesn't trap them.
+  const cancelAllRef = React.useRef(false);
   // Crates selected (by id) to scope "Search all crates" to a subset.
   const [selected, setSelected] = React.useState(() => new Set());
 
@@ -564,6 +567,12 @@ let PLLibrary = (props) => {
     return results;
   };
 
+  // Dismiss the cross-search loader and abort the remaining fetches.
+  const cancelSearchAll = () => {
+    cancelAllRef.current = true;
+    setLoadingAll(false);
+  };
+
   const handleSearchAllCrates = async () => {
     // If crates are selected, search just those; otherwise all non-hidden crates
     // (hidden crates are abstracted away and never feed the cross-search).
@@ -573,15 +582,22 @@ let PLLibrary = (props) => {
     });
     if (playlists.length === 0) return;
 
+    cancelAllRef.current = false;
     setAllProgress({ done: 0, total: playlists.length });
     setLoadingAll(true);
     try {
       const perPlaylist = await mapWithLimit(playlists, 4, async (pl) => {
+        // Skip queued/in-flight work once the user has cancelled.
+        if (cancelAllRef.current) return { tracks: [], features: [] };
         const tracks = await fetchAllTracks(pl.id);
+        if (cancelAllRef.current) return { tracks: [], features: [] };
         const features = await fetchFeatures(tracks.map((t) => t.track.id));
         setAllProgress((p) => ({ ...p, done: p.done + 1 }));
         return { tracks, features };
       });
+
+      // The user dismissed the loader mid-run — discard partial results.
+      if (cancelAllRef.current) return;
 
       // Aggregate + dedupe by track id.
       const seen = new Set();
@@ -1052,13 +1068,14 @@ let PLLibrary = (props) => {
 
       <Dialog
         open={loadingAll}
+        onClose={cancelSearchAll}
         PaperProps={{
           style: {
             padding: "28px 44px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: 16,
+            gap: 14,
             borderRadius: 12,
           },
         }}
@@ -1075,6 +1092,16 @@ let PLLibrary = (props) => {
         />
         <Typography variant="body1" style={{ fontWeight: 600 }}>
           Loading all crates… {allProgress.done}/{allProgress.total}
+        </Typography>
+        <Button
+          size="small"
+          onClick={cancelSearchAll}
+          style={{ textTransform: "none" }}
+        >
+          Cancel
+        </Button>
+        <Typography variant="caption" color="textSecondary">
+          or click outside to cancel
         </Typography>
       </Dialog>
 
