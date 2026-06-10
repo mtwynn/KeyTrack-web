@@ -183,8 +183,7 @@ const CrateDNA = ({ items, getKey }) => {
               style={{
                 width: "100%",
                 background: "#1ED760",
-                height: `${(count / maxBin) * 100}%`,
-                minHeight: 2,
+                height: Math.max(2, Math.round((count / maxBin) * 64)),
                 borderRadius: "3px 3px 0 0",
               }}
             />
