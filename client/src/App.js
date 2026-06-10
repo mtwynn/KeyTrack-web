@@ -817,9 +817,13 @@ class App extends React.Component {
               style={{
                 width: 270,
                 paddingTop: 8,
+                // Clear the fixed bottom Spotify player so Now Playing isn't
+                // hidden behind it on mobile.
+                paddingBottom: 110,
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
+                overflowY: 'auto',
               }}
               role="presentation"
             >
