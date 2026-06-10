@@ -5,7 +5,7 @@ const changelog = [
     changes: [
       {
         type: "feature",
-        desc: "Smarter recommendations: suggested tracks are now ranked by harmonic + BPM compatibility to a seed key — your anchored track if one is set, otherwise the crate's dominant key — instead of being picked at random. Each suggestion shows a colored Camelot chip and a '✓ mixes' badge when it's a clean transition from the seed.",
+        desc: "Smarter recommendations: suggested tracks are now ranked by harmonic + BPM compatibility to a seed key. If you've anchored a track, suggestions mix around that exact key; otherwise a random seed track is chosen so each refresh explores a different corner of the crate. Each suggestion shows a colored Camelot chip and a '✓ mixes' badge when it's a clean transition from the seed.",
       },
     ],
   },

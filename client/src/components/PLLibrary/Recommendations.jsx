@@ -145,26 +145,20 @@ const Recommendations = (props) => {
   // Seed used to rank recommendations: { camelot, bpm }.
   const [seed, setSeed] = React.useState(null);
 
-  // Seed for ranking: the harmonic anchor (if one is set), otherwise the crate's
-  // dominant key + average BPM.
+  // Seed for ranking. If the user has anchored a track, mix around that exact
+  // key. Otherwise pick a RANDOM track from the crate as the seed — the goal of
+  // recommendations is diversity, so each refresh explores a different corner of
+  // the crate's harmonic space rather than always converging on its dominant key.
   const deriveSeed = () => {
     if (props.seedCamelot) {
       return { camelot: props.seedCamelot, bpm: props.seedBpm || null };
     }
-    const counts = {};
-    let bpmSum = 0;
-    let n = 0;
-    (props.playlistKeys || []).forEach((f) => {
-      if (!f) return;
-      const code = KeyMap[f.key].camelot[f.mode];
-      counts[code] = (counts[code] || 0) + 1;
-      bpmSum += f.tempo;
-      n += 1;
-    });
-    const dom = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    const tracks = (props.playlistKeys || []).filter(Boolean);
+    if (tracks.length === 0) return { camelot: null, bpm: null };
+    const pick = tracks[Math.floor(Math.random() * tracks.length)];
     return {
-      camelot: dom ? dom[0] : null,
-      bpm: n ? Math.round(bpmSum / n) : null,
+      camelot: KeyMap[pick.key].camelot[pick.mode],
+      bpm: pick.tempo ? Math.round(pick.tempo) : null,
     };
   };
 
@@ -444,7 +438,7 @@ const Recommendations = (props) => {
                 {seed.bpm ? ` · ~${seed.bpm} BPM` : ""}{" "}
                 {props.seedCamelot
                   ? "(your anchored key)"
-                  : "(crate's dominant key)"}
+                  : "(random seed — refresh for new picks)"}
               </Typography>
             )}
             <Grid container spacing={1}>
