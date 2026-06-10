@@ -13,7 +13,7 @@ const changelog = [
       },
       {
         type: "improvement",
-        desc: "Polished the library controls: the playlist search is now a clean floating rounded search bar, and the Sort / Filter crate dropdowns were restyled as rounded pills with icons.",
+        desc: "Polished the library controls: the playlist search is now a clean floating rounded search bar, and the Sort / Filter crate dropdowns were restyled as icon buttons that match the Folders button. Loading a big cross-search (Search all crates) can now be cancelled by clicking outside the loader.",
       },
       {
         type: "bugfix",

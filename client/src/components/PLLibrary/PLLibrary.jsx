@@ -8,7 +8,6 @@ import {
   Dialog,
   Input,
   InputAdornment,
-  OutlinedInput,
   Paper,
   makeStyles,
   Card,
@@ -21,6 +20,8 @@ import {
   Collapse,
   FormControl,
   InputLabel,
+  ListItemText,
+  Menu,
   MenuItem,
   Popover,
   Select,
@@ -47,6 +48,7 @@ import {
   Favorite,
   SortByAlpha,
   FilterList,
+  ArrowDropDown,
 } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
@@ -72,11 +74,6 @@ const useStyles = makeStyles((theme) => ({
     padding: "4px 8px 4px 18px",
     border: "1px solid rgba(128,128,128,0.28)",
     backgroundColor: theme.palette.background.paper,
-  },
-  // Rounded-pill outlined input used by the Sort / Filter selects so they
-  // read as clean controls instead of notched-label form fields.
-  pill: {
-    borderRadius: 22,
   },
   root: {
     display: "inline-block",
@@ -315,6 +312,13 @@ let PLLibrary = (props) => {
   const [tagEdit, setTagEdit] = React.useState({ anchorEl: null, id: null });
   const [tagInput, setTagInput] = React.useState("");
   const [metaFilter, setMetaFilter] = React.useState([]);
+  // Anchors for the Sort / Filter dropdown menus (Button + Menu controls).
+  const [sortAnchor, setSortAnchor] = React.useState(null);
+  const [filterAnchor, setFilterAnchor] = React.useState(null);
+  const toggleMetaFilter = (v) =>
+    setMetaFilter((prev) =>
+      prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
+    );
 
   const openTagEdit = (e, playlist) => {
     e.stopPropagation();
@@ -1116,62 +1120,96 @@ let PLLibrary = (props) => {
         }}
       >
         <Box style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <FormControl size="small">
-            <Select
-              value={crateSort}
-              onChange={(e) => setCrateSort(e.target.value)}
-              input={
-                <OutlinedInput
-                  margin="dense"
-                  classes={{ root: classes.pill, notchedOutline: classes.pill }}
-                />
-              }
-              renderValue={(v) => (
-                <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <SortByAlpha fontSize="small" style={{ color: "#1ED760" }} />
-                  Sort:&nbsp;
-                  {{ name: "Name", tracks: "Track count", owner: "Owner" }[v]}
-                </Box>
-              )}
-            >
-              <MenuItem value="name">Name</MenuItem>
-              <MenuItem value="tracks">Track count</MenuItem>
-              <MenuItem value="owner">Owner</MenuItem>
-            </Select>
-          </FormControl>
+          {/* Sort — a Button + Menu so it matches the Folders button. */}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<SortByAlpha style={{ color: "#1ED760" }} />}
+            endIcon={<ArrowDropDown />}
+            onClick={(e) => setSortAnchor(e.currentTarget)}
+            style={{ textTransform: "none", borderRadius: 8 }}
+          >
+            <span style={{ color: theme.palette.text.secondary, fontWeight: 400 }}>
+              Sort:&nbsp;
+            </span>
+            {{ name: "Name", tracks: "Track count", owner: "Owner" }[crateSort]}
+          </Button>
+          <Menu
+            anchorEl={sortAnchor}
+            open={Boolean(sortAnchor)}
+            onClose={() => setSortAnchor(null)}
+            getContentAnchorEl={null}
+            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          >
+            {[
+              ["name", "Name"],
+              ["tracks", "Track count"],
+              ["owner", "Owner"],
+            ].map(([val, label]) => (
+              <MenuItem
+                key={val}
+                selected={crateSort === val}
+                onClick={() => {
+                  setCrateSort(val);
+                  setSortAnchor(null);
+                }}
+              >
+                {label}
+              </MenuItem>
+            ))}
+          </Menu>
+
           {allTagsGenres.length > 0 && (
-            <FormControl size="small">
-              <Select
-                multiple
-                displayEmpty
-                value={metaFilter}
-                onChange={(e) => setMetaFilter(e.target.value)}
-                input={
-                  <OutlinedInput
-                    margin="dense"
-                    classes={{
-                      root: classes.pill,
-                      notchedOutline: classes.pill,
-                    }}
-                  />
-                }
-                renderValue={(sel) => (
-                  <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <FilterList
-                      fontSize="small"
-                      style={{ color: "#1ED760" }}
-                    />
-                    {sel.length ? sel.join(", ") : "Filter by tag/genre"}
-                  </Box>
-                )}
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<FilterList style={{ color: "#1ED760" }} />}
+                endIcon={<ArrowDropDown />}
+                onClick={(e) => setFilterAnchor(e.currentTarget)}
+                style={{ textTransform: "none", borderRadius: 8 }}
+              >
+                <span
+                  style={{ color: theme.palette.text.secondary, fontWeight: 400 }}
+                >
+                  Filter:&nbsp;
+                </span>
+                {metaFilter.length === 0
+                  ? "All"
+                  : metaFilter.length === 1
+                  ? metaFilter[0]
+                  : `${metaFilter.length} selected`}
+              </Button>
+              <Menu
+                anchorEl={filterAnchor}
+                open={Boolean(filterAnchor)}
+                onClose={() => setFilterAnchor(null)}
+                getContentAnchorEl={null}
+                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
               >
                 {allTagsGenres.map((v) => (
-                  <MenuItem key={v} value={v}>
-                    {v}
+                  <MenuItem key={v} onClick={() => toggleMetaFilter(v)} dense>
+                    <Checkbox
+                      checked={metaFilter.includes(v)}
+                      size="small"
+                      style={{ padding: 4, marginRight: 6 }}
+                    />
+                    <ListItemText primary={v} />
                   </MenuItem>
                 ))}
-              </Select>
-            </FormControl>
+                {metaFilter.length > 0 && (
+                  <MenuItem
+                    onClick={() => {
+                      setMetaFilter([]);
+                      setFilterAnchor(null);
+                    }}
+                    style={{ color: theme.palette.text.secondary }}
+                  >
+                    Clear filters
+                  </MenuItem>
+                )}
+              </Menu>
+            </>
           )}
         </Box>
         <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1181,7 +1219,7 @@ let PLLibrary = (props) => {
             color={folderView ? "primary" : "default"}
             startIcon={<Folder />}
             onClick={() => setFolderView((v) => !v)}
-            style={{ textTransform: "none" }}
+            style={{ textTransform: "none", borderRadius: 8 }}
           >
             Folders
           </Button>
@@ -1190,7 +1228,7 @@ let PLLibrary = (props) => {
               size="small"
               startIcon={<CreateNewFolder />}
               onClick={handleNewFolder}
-              style={{ textTransform: "none" }}
+              style={{ textTransform: "none", borderRadius: 8 }}
             >
               New folder
             </Button>
