@@ -22,6 +22,7 @@ import PlaylistAddIcon from "@material-ui/icons/PlaylistAdd";
 
 import KeyMap from "../../utils/KeyMap";
 import { camelotColor, harmonicRelation } from "../../utils/harmonic";
+import { formatReleaseDate } from "../../utils/release";
 
 // TODO: FIX CHORD PROGRESSIONS BUG HERE
 let Row = (props) => {
@@ -193,6 +194,8 @@ let Row = (props) => {
             {props.isMobile && (
               <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '4px' }}>
                 {item.track.artists.map((artist) => artist.name).join(", ")}
+                {" · "}
+                {formatReleaseDate(item.track)}
               </div>
             )}
           </TableCell>
@@ -214,6 +217,11 @@ let Row = (props) => {
               ? Math.round(getKey(item.track.id).bpm)
               : "N/A"}
           </TableCell>
+          {!props.isTablet && (
+            <TableCell style={{ whiteSpace: "nowrap" }}>
+              {formatReleaseDate(item.track)}
+            </TableCell>
+          )}
         </TableRow>
         <TableRow>
           <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={12}>
