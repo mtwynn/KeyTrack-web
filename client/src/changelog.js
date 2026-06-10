@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.13.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Favorite crates (★) to pin them to the top of your library, and Hide crates to tuck them away — hidden crates don't appear in the library or in 'Search all crates', and are managed from a new 'Hidden crates' item in the menu.",
+      },
+    ],
+  },
+  {
     version: "1.12.0",
     date: "06/09/26",
     changes: [
