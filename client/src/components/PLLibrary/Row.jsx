@@ -194,6 +194,8 @@ let Row = (props) => {
             {props.isMobile && (
               <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '4px' }}>
                 {item.track.artists.map((artist) => artist.name).join(", ")}
+                {" · "}
+                {formatReleaseDate(item.track)}
               </div>
             )}
           </TableCell>
