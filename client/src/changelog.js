@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.15.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Folders: organize your crates into your own folders. Toggle the Folders view to see collapsible folders plus an 'Unfiled' root for crates you haven't filed. Create, rename, and delete folders, and assign a crate to a folder from its organize menu.",
+      },
+    ],
+  },
+  {
     version: "1.14.0",
     date: "06/09/26",
     changes: [
