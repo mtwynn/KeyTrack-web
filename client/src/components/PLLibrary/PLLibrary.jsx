@@ -18,6 +18,7 @@ import {
   Typography,
   Box,
   Chip,
+  Collapse,
   FormControl,
   InputLabel,
   MenuItem,
@@ -37,6 +38,12 @@ import {
   StarBorder,
   VisibilityOff,
   LocalOffer,
+  CreateNewFolder,
+  Folder,
+  ExpandMore,
+  ExpandLess,
+  Edit,
+  Delete,
 } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
@@ -44,6 +51,12 @@ import Spotify from "spotify-web-api-js";
 import Playlist from "./Playlist";
 import { useEffect } from "react";
 import { fetchCrateMeta, setCrateMeta } from "../../utils/crateMeta";
+import {
+  fetchFolders,
+  addFolder,
+  renameFolder,
+  deleteFolder,
+} from "../../utils/folders";
 
 const useStyles = makeStyles((theme) => ({
   appBar: {
@@ -568,6 +581,241 @@ let PLLibrary = (props) => {
     }
   };
 
+  // --- Folders ---
+  const [folders, setFolders] = React.useState([]);
+  const [folderView, setFolderView] = React.useState(false);
+  const [expanded, setExpanded] = React.useState({});
+
+  const refreshFolders = React.useCallback(async () => {
+    if (!props.userId) return;
+    try {
+      setFolders(await fetchFolders(props.userId));
+    } catch (e) {
+      console.error("Failed to load folders", e);
+    }
+  }, [props.userId]);
+
+  useEffect(() => {
+    refreshFolders();
+  }, [refreshFolders]);
+
+  const handleNewFolder = async () => {
+    const name = window.prompt("New folder name");
+    if (!name || !name.trim() || !props.userId) return;
+    await addFolder(props.userId, name.trim());
+    setFolderView(true);
+    refreshFolders();
+  };
+  const handleRenameFolder = async (folder) => {
+    const name = window.prompt("Rename folder", folder.name);
+    if (!name || !name.trim() || !props.userId) return;
+    await renameFolder(props.userId, folder.id, name.trim());
+    refreshFolders();
+  };
+  const handleDeleteFolder = async (folder) => {
+    if (!props.userId) return;
+    if (
+      !window.confirm(
+        `Delete folder "${folder.name}"? Its crates move to Unfiled.`
+      )
+    )
+      return;
+    await deleteFolder(props.userId, folder.id);
+    refreshFolders();
+  };
+  const toggleExpand = (id) =>
+    setExpanded((p) => ({ ...p, [id]: p[id] === false ? true : false }));
+  const isExpanded = (id) => expanded[id] !== false; // default expanded
+
+  // Group the filtered + sorted crates by folder (dangling/none -> root).
+  const grouped = React.useMemo(() => {
+    const folderIds = new Set(folders.map((f) => f.id));
+    const groups = { __root__: [] };
+    folders.forEach((f) => {
+      groups[f.id] = [];
+    });
+    sortedCrates.forEach((pl) => {
+      const fid = (crateMeta[pl.id] || {}).folderId;
+      if (fid && folderIds.has(fid)) groups[fid].push(pl);
+      else groups.__root__.push(pl);
+    });
+    return groups;
+  }, [sortedCrates, folders, crateMeta]);
+
+  const renderCrateCard = (playlist) => (
+    <Card
+      key={playlist.id}
+      className={classes.playlistCard}
+      onClick={() => handlePlaylistOpen(playlist)}
+      style={{
+        borderLeft: metaFor(playlist.id).favorite
+          ? "4px solid #1ED760"
+          : "4px solid transparent",
+      }}
+    >
+      <CardContent className={classes.cardContent}>
+        <Avatar
+          variant="square"
+          src={playlist.images[0] ? playlist.images[0].url : undefined}
+          className={classes.albumArt}
+        >
+          <MusicNote />
+        </Avatar>
+
+        <Box className={classes.playlistInfo}>
+          <Box className={classes.playlistHeader}>
+            <Typography className={classes.playlistTitle}>
+              {playlist.name}
+            </Typography>
+            <Typography className={classes.ownerText}>
+              by {playlist.owner.display_name}
+            </Typography>
+          </Box>
+
+          {playlist.description && (
+            <Typography className={classes.playlistDescription}>
+              {playlist.description}
+            </Typography>
+          )}
+
+          <Box className={classes.playlistMeta}>
+            <Chip
+              label={`${playlist.tracks.total} tracks`}
+              size="small"
+              className={classes.trackChip}
+              icon={<MusicNote style={{ color: "#fff" }} />}
+            />
+            {(metaFor(playlist.id).genres || []).map((g) => (
+              <Chip key={`g-${g}`} label={g} size="small" variant="outlined" />
+            ))}
+            {(metaFor(playlist.id).tags || []).map((t) => (
+              <Chip key={`t-${t}`} label={`#${t}`} size="small" variant="outlined" />
+            ))}
+          </Box>
+        </Box>
+
+        <Box style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          <IconButton
+            size="small"
+            onClick={(e) => openTagEdit(e, playlist)}
+            title="Tags, genres & folder"
+            aria-label="organize crate"
+          >
+            <LocalOffer fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            onClick={(e) => toggleFavorite(e, playlist)}
+            title={metaFor(playlist.id).favorite ? "Unfavorite" : "Favorite"}
+            aria-label="favorite crate"
+          >
+            {metaFor(playlist.id).favorite ? (
+              <Star style={{ color: "#1ED760" }} />
+            ) : (
+              <StarBorder />
+            )}
+          </IconButton>
+          <IconButton
+            size="small"
+            onClick={(e) => toggleHidden(e, playlist)}
+            title={metaFor(playlist.id).hidden ? "Unhide" : "Hide"}
+            aria-label="hide crate"
+          >
+            <VisibilityOff
+              fontSize="small"
+              style={{
+                color: metaFor(playlist.id).hidden ? "#1ED760" : undefined,
+              }}
+            />
+          </IconButton>
+          {loadingId === playlist.id ? (
+            <CircularProgress
+              classes={{ colorPrimary: classes.colorPrimary }}
+              size={24}
+              style={{ margin: 8 }}
+            />
+          ) : (
+            !isMobile && (
+              <IconButton
+                className={classes.openButton}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePlaylistOpen(playlist);
+                }}
+              >
+                <MenuOpen />
+              </IconButton>
+            )
+          )}
+        </Box>
+      </CardContent>
+    </Card>
+  );
+
+  const renderFolderGroup = (key, name, crates, folder) => (
+    <Box key={key} style={{ marginBottom: 8 }}>
+      <Box
+        onClick={() => toggleExpand(key)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "8px 16px",
+          cursor: "pointer",
+          borderBottom: "1px solid rgba(128,128,128,0.2)",
+        }}
+      >
+        {isExpanded(key) ? <ExpandLess /> : <ExpandMore />}
+        <Folder fontSize="small" style={{ color: "#1ED760" }} />
+        <Typography variant="subtitle1" style={{ fontWeight: 700, flex: 1 }}>
+          {name}
+        </Typography>
+        <Typography variant="caption" color="textSecondary">
+          {crates.length}
+        </Typography>
+        {folder && (
+          <>
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRenameFolder(folder);
+              }}
+              aria-label="rename folder"
+            >
+              <Edit fontSize="small" />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteFolder(folder);
+              }}
+              aria-label="delete folder"
+            >
+              <Delete fontSize="small" />
+            </IconButton>
+          </>
+        )}
+      </Box>
+      <Collapse in={isExpanded(key)} timeout="auto" unmountOnExit>
+        <Box sx={{ padding: isMobile ? 1 : 2 }}>
+          {crates.length === 0 ? (
+            <Typography
+              variant="caption"
+              color="textSecondary"
+              style={{ paddingLeft: 8 }}
+            >
+              No crates
+            </Typography>
+          ) : (
+            crates.map(renderCrateCard)
+          )}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+
   return (
     <>
       <Dialog
@@ -697,9 +945,31 @@ let PLLibrary = (props) => {
             </FormControl>
           )}
         </Box>
-        <Typography variant="caption" color="textSecondary">
-          {sortedCrates.length} crate{sortedCrates.length === 1 ? "" : "s"}
-        </Typography>
+        <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Button
+            size="small"
+            variant={folderView ? "contained" : "outlined"}
+            color={folderView ? "primary" : "default"}
+            startIcon={<Folder />}
+            onClick={() => setFolderView((v) => !v)}
+            style={{ textTransform: "none" }}
+          >
+            Folders
+          </Button>
+          {folderView && (
+            <Button
+              size="small"
+              startIcon={<CreateNewFolder />}
+              onClick={handleNewFolder}
+              style={{ textTransform: "none" }}
+            >
+              New folder
+            </Button>
+          )}
+          <Typography variant="caption" color="textSecondary">
+            {sortedCrates.length} crate{sortedCrates.length === 1 ? "" : "s"}
+          </Typography>
+        </Box>
       </Box>
 
       {showHidden && (
@@ -733,139 +1003,20 @@ let PLLibrary = (props) => {
         </Box>
       )}
 
-      <Box sx={{ padding: isMobile ? 1 : 2 }}>
-        {pagedCrates.map((playlist) => (
-          <Card
-            key={playlist.id}
-            className={classes.playlistCard}
-            onClick={() => handlePlaylistOpen(playlist)}
-            style={{
-              borderLeft: metaFor(playlist.id).favorite
-                ? "4px solid #1ED760"
-                : "4px solid transparent",
-            }}
-          >
-            <CardContent className={classes.cardContent}>
-              {/* Album Art */}
-              <Avatar
-                variant="square"
-                src={playlist.images[0] ? playlist.images[0].url : undefined}
-                className={classes.albumArt}
-              >
-                <MusicNote />
-              </Avatar>
+      {folderView ? (
+        <Box sx={{ padding: isMobile ? 0 : 1 }}>
+          {renderFolderGroup("__root__", "Unfiled", grouped.__root__, null)}
+          {folders.map((f) =>
+            renderFolderGroup(f.id, f.name, grouped[f.id] || [], f)
+          )}
+        </Box>
+      ) : (
+        <Box sx={{ padding: isMobile ? 1 : 2 }}>
+          {pagedCrates.map(renderCrateCard)}
+        </Box>
+      )}
 
-              {/* Playlist Info */}
-              <Box className={classes.playlistInfo}>
-                {/* Title and Owner - Always on same line */}
-                <Box className={classes.playlistHeader}>
-                  <Typography className={classes.playlistTitle}>
-                    {playlist.name}
-                  </Typography>
-                  <Typography className={classes.ownerText}>
-                    by {playlist.owner.display_name}
-                  </Typography>
-                </Box>
-
-                {/* Description */}
-                {playlist.description && (
-                  <Typography className={classes.playlistDescription}>
-                    {playlist.description}
-                  </Typography>
-                )}
-
-                {/* Meta Info: Track Count + genre/tag chips */}
-                <Box className={classes.playlistMeta}>
-                  <Chip
-                    label={`${playlist.tracks.total} tracks`}
-                    size="small"
-                    className={classes.trackChip}
-                    icon={<MusicNote style={{ color: "#fff" }} />}
-                  />
-                  {(metaFor(playlist.id).genres || []).map((g) => (
-                    <Chip
-                      key={`g-${g}`}
-                      label={g}
-                      size="small"
-                      variant="outlined"
-                    />
-                  ))}
-                  {(metaFor(playlist.id).tags || []).map((t) => (
-                    <Chip
-                      key={`t-${t}`}
-                      label={`#${t}`}
-                      size="small"
-                      variant="outlined"
-                    />
-                  ))}
-                </Box>
-              </Box>
-
-              {/* Actions: favorite, hide, open / loading */}
-              <Box
-                style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
-              >
-                <IconButton
-                  size="small"
-                  onClick={(e) => openTagEdit(e, playlist)}
-                  title="Tags & genres"
-                  aria-label="edit tags and genres"
-                >
-                  <LocalOffer fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={(e) => toggleFavorite(e, playlist)}
-                  title={
-                    metaFor(playlist.id).favorite ? "Unfavorite" : "Favorite"
-                  }
-                  aria-label="favorite crate"
-                >
-                  {metaFor(playlist.id).favorite ? (
-                    <Star style={{ color: "#1ED760" }} />
-                  ) : (
-                    <StarBorder />
-                  )}
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={(e) => toggleHidden(e, playlist)}
-                  title={metaFor(playlist.id).hidden ? "Unhide" : "Hide"}
-                  aria-label="hide crate"
-                >
-                  <VisibilityOff
-                    fontSize="small"
-                    style={{
-                      color: metaFor(playlist.id).hidden ? "#1ED760" : undefined,
-                    }}
-                  />
-                </IconButton>
-                {loadingId === playlist.id ? (
-                  <CircularProgress
-                    classes={{ colorPrimary: classes.colorPrimary }}
-                    size={24}
-                    style={{ margin: 8 }}
-                  />
-                ) : (
-                  !isMobile && (
-                    <IconButton
-                      className={classes.openButton}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePlaylistOpen(playlist);
-                      }}
-                    >
-                      <MenuOpen />
-                    </IconButton>
-                  )
-                )}
-              </Box>
-            </CardContent>
-          </Card>
-        ))}
-      </Box>
-
-      {sortedCrates.length > 12 && (
+      {!folderView && sortedCrates.length > 12 && (
         <TablePagination
           component="div"
           count={sortedCrates.length}
@@ -895,8 +1046,25 @@ let PLLibrary = (props) => {
               variant="subtitle2"
               style={{ fontWeight: 700, marginBottom: 10 }}
             >
-              Tags &amp; genres
+              Organize crate
             </Typography>
+            <FormControl size="small" fullWidth style={{ marginBottom: 14 }}>
+              <InputLabel>Folder</InputLabel>
+              <Select
+                value={metaFor(tagEdit.id).folderId || ""}
+                label="Folder"
+                onChange={(e) =>
+                  updateMeta(tagEdit.id, { folderId: e.target.value || null })
+                }
+              >
+                <MenuItem value="">Unfiled (root)</MenuItem>
+                {folders.map((f) => (
+                  <MenuItem key={f.id} value={f.id}>
+                    {f.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <FormControl size="small" fullWidth style={{ marginBottom: 14 }}>
               <InputLabel>Genres</InputLabel>
               <Select
