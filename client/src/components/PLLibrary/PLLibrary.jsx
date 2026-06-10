@@ -840,8 +840,15 @@ let PLLibrary = (props) => {
 
   // Lay crates out as a responsive grid of cover tiles — denser and more
   // visual than the old full-width rows, and it actually uses the page width.
-  const renderCrateGrid = (crates) => (
+  // `leadingTile` (e.g. Liked Songs) occupies the first cell so it flows with
+  // the crates instead of sitting alone on its own row.
+  const renderCrateGrid = (crates, leadingTile) => (
     <Grid container spacing={2}>
+      {leadingTile && (
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          {leadingTile}
+        </Grid>
+      )}
       {crates.map((p) => (
         <Grid item xs={12} sm={6} md={4} lg={3} key={p.id}>
           {renderCrateCard(p)}
@@ -1071,17 +1078,6 @@ let PLLibrary = (props) => {
         </Typography>
       </Dialog>
 
-      {/* Liked Songs as a virtual crate — a cover tile at the top. */}
-      {!showHidden && !favoritesOnly && (
-        <Box sx={{ padding: isMobile ? 1 : 2 }} style={{ paddingBottom: 0 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={4} lg={3}>
-              {renderLikedTile()}
-            </Grid>
-          </Grid>
-        </Box>
-      )}
-
       <Box
         sx={{ padding: isMobile ? 1 : 2 }}
         style={{
@@ -1233,7 +1229,12 @@ let PLLibrary = (props) => {
         </Box>
       ) : (
         <Box sx={{ padding: isMobile ? 1 : 2 }}>
-          {renderCrateGrid(pagedCrates)}
+          {renderCrateGrid(
+            pagedCrates,
+            !showHidden && !favoritesOnly && cratePage === 0
+              ? renderLikedTile()
+              : null
+          )}
         </Box>
       )}
 
