@@ -45,6 +45,7 @@ import {
   ExpandLess,
   Edit,
   Delete,
+  Favorite,
 } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
@@ -596,6 +597,40 @@ let PLLibrary = (props) => {
     }
   };
 
+  // Open the user's Spotify Liked Songs as a virtual crate.
+  const handleOpenLikedSongs = async () => {
+    setLoadingPlaylist(true);
+    setLoadingId("__liked__");
+    try {
+      let items = [];
+      let offset = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const res = await spotifyWebApi.getMySavedTracks({
+          limit: 50,
+          offset,
+        });
+        items = items.concat(res.items || []);
+        if (!res.next) break;
+        offset += 50;
+      }
+      const tracks = items.filter((it) => it.track && it.track.id);
+      const features = await fetchFeatures(tracks.map((t) => t.track.id));
+
+      setPlaylistName(`Liked Songs · ${tracks.length} tracks`);
+      setPlaylistId("__liked__");
+      setPlaylistOwnerId(null); // hides owner-only Recommendations
+      setCurrPlaylist(tracks);
+      setPlaylistKeys(features.filter(Boolean));
+      setShowPlaylist(true);
+    } catch (error) {
+      console.error("Failed to load liked songs", error);
+    } finally {
+      setLoadingPlaylist(false);
+      setLoadingId(null);
+    }
+  };
+
   // --- Folders ---
   const [folders, setFolders] = React.useState([]);
   const [folderView, setFolderView] = React.useState(false);
@@ -941,6 +976,54 @@ let PLLibrary = (props) => {
           Loading all crates… {allProgress.done}/{allProgress.total}
         </Typography>
       </Dialog>
+
+      {/* Liked Songs as a virtual crate */}
+      <Box sx={{ padding: isMobile ? 1 : 2 }} style={{ paddingBottom: 0 }}>
+        <Card
+          className={classes.playlistCard}
+          onClick={handleOpenLikedSongs}
+          style={{ borderLeft: "4px solid #1ED760" }}
+        >
+          <CardContent className={classes.cardContent}>
+            <Avatar
+              variant="square"
+              className={classes.albumArt}
+              style={{ background: "linear-gradient(135deg,#450af5,#c4efd9)" }}
+            >
+              <Favorite style={{ color: "#fff" }} />
+            </Avatar>
+            <Box className={classes.playlistInfo}>
+              <Box className={classes.playlistHeader}>
+                <Typography className={classes.playlistTitle}>
+                  Liked Songs
+                </Typography>
+              </Box>
+              <Typography className={classes.playlistDescription}>
+                Your Spotify Liked Songs
+              </Typography>
+            </Box>
+            {loadingId === "__liked__" ? (
+              <CircularProgress
+                classes={{ colorPrimary: classes.colorPrimary }}
+                size={24}
+                className={classes.openButton}
+              />
+            ) : (
+              !isMobile && (
+                <IconButton
+                  className={classes.openButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenLikedSongs();
+                  }}
+                >
+                  <MenuOpen />
+                </IconButton>
+              )
+            )}
+          </CardContent>
+        </Card>
+      </Box>
 
       <Box
         sx={{ padding: isMobile ? 1 : 2 }}
