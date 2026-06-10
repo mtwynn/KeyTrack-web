@@ -899,6 +899,8 @@ let Playlist = (props) => {
               playlistKeys={props.playlistKeys}
               updatePlayer={props.updatePlayer}
               addTracksToPlaylistState={props.addTracksToPlaylistState}
+              seedCamelot={harmonicAnchorCamelot}
+              seedBpm={anchorKey ? Math.round(anchorKey.bpm) : null}
             />
           )}
 
