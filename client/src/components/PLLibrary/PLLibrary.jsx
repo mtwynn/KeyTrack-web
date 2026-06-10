@@ -25,6 +25,8 @@ import {
   MenuItem,
   Popover,
   Select,
+  Tab,
+  Tabs,
   TablePagination,
   TextField,
   useMediaQuery,
@@ -64,6 +66,15 @@ import {
 } from "../../utils/folders";
 
 const useStyles = makeStyles((theme) => ({
+  // Staggered entrance for crate tiles when the grid mounts (library open,
+  // folder expand, new page). Reordering reuses elements so it doesn't replay.
+  "@keyframes tileIn": {
+    from: { opacity: 0, transform: "translateY(14px)" },
+    to: { opacity: 1, transform: "translateY(0)" },
+  },
+  tileIn: {
+    animation: "$tileIn 0.34s ease both",
+  },
   // Floating, fully-rounded search pill (replaces the old dark search bar).
   searchPill: {
     display: "flex",
@@ -169,6 +180,8 @@ const useStyles = makeStyles((theme) => ({
   },
   tileBody: {
     flex: 1,
+    display: "flex",
+    flexDirection: "column",
     padding: theme.spacing(1.5),
     "&:last-child": { paddingBottom: theme.spacing(1) },
   },
@@ -182,12 +195,15 @@ const useStyles = makeStyles((theme) => ({
     WebkitLineClamp: 2,
     WebkitBoxOrient: "vertical",
   },
+  // Pinned to the bottom of the body so the track-count chip sits at a
+  // consistent height across every tile regardless of description length.
   tileMeta: {
+    marginTop: "auto",
+    paddingTop: theme.spacing(1),
     display: "flex",
     flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing(0.5),
-    marginTop: theme.spacing(1),
   },
   tileActions: {
     display: "flex",
@@ -577,13 +593,12 @@ let PLLibrary = (props) => {
     setLoadingAll(false);
   };
 
-  const handleSearchAllCrates = async () => {
-    // If crates are selected, search just those; otherwise all non-hidden crates
-    // (hidden crates are abstracted away and never feed the cross-search).
-    const playlists = (props.pllibrary || []).filter((pl) => {
-      if (selected.size > 0) return selected.has(pl.id);
-      return !(crateMeta[pl.id] && crateMeta[pl.id].hidden);
-    });
+  const handleOpenSelected = async () => {
+    // Open the selected crates as one combined view ("Select all" selects them
+    // all). Hidden crates never feed this even if somehow selected.
+    const playlists = (props.pllibrary || []).filter(
+      (pl) => selected.has(pl.id) && !(crateMeta[pl.id] && crateMeta[pl.id].hidden)
+    );
     if (playlists.length === 0) return;
 
     cancelAllRef.current = false;
@@ -619,7 +634,11 @@ let PLLibrary = (props) => {
         });
       });
 
-      setPlaylistName(`All Crates · ${allTracks.length} tracks`);
+      setPlaylistName(
+        `${playlists.length} crate${playlists.length === 1 ? "" : "s"} · ${
+          allTracks.length
+        } tracks`
+      );
       setPlaylistId("__all_crates__");
       setPlaylistOwnerId(null); // hides owner-only Recommendations
       setCurrPlaylist(allTracks);
@@ -865,12 +884,31 @@ let PLLibrary = (props) => {
   const renderCrateGrid = (crates, leadingTile) => (
     <Grid container spacing={2}>
       {leadingTile && (
-        <Grid item xs={12} sm={6} md={4} lg={3}>
+        <Grid
+          item
+          xs={12}
+          sm={6}
+          md={4}
+          lg={3}
+          className={classes.tileIn}
+          style={{ animationDelay: "0ms" }}
+        >
           {leadingTile}
         </Grid>
       )}
-      {crates.map((p) => (
-        <Grid item xs={12} sm={6} md={4} lg={3} key={p.id}>
+      {crates.map((p, i) => (
+        <Grid
+          item
+          xs={12}
+          sm={6}
+          md={4}
+          lg={3}
+          key={p.id}
+          className={classes.tileIn}
+          style={{
+            animationDelay: `${Math.min(i + (leadingTile ? 1 : 0), 14) * 35}ms`,
+          }}
+        >
           {renderCrateCard(p)}
         </Grid>
       ))}
@@ -1031,7 +1069,7 @@ let PLLibrary = (props) => {
             fullWidth
             type="text"
             onChange={handleChange}
-            placeholder="Search playlists"
+            placeholder="Search Crates"
             endAdornment={
               <InputAdornment position="end">
                 <Search style={{ color: theme.palette.text.secondary }} />
@@ -1039,36 +1077,30 @@ let PLLibrary = (props) => {
             }
           />
         </Paper>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<Search />}
-          onClick={handleSearchAllCrates}
-          disabled={!props.pllibrary || props.pllibrary.length === 0}
-          style={{
-            borderRadius: 28,
-            textTransform: "none",
-            fontWeight: 600,
-            whiteSpace: "nowrap",
-            flexShrink: 0,
-          }}
-        >
-          {selected.size > 0
-            ? `Search selected (${selected.size})`
-            : isMobile
-            ? "All crates"
-            : "Search all crates"}
-        </Button>
-        {selected.size > 0 && (
-          <Button
-            size="small"
-            onClick={clearSelection}
-            style={{ whiteSpace: "nowrap", flexShrink: 0 }}
-          >
-            Clear
-          </Button>
-        )}
       </Box>
+
+      {/* Crates / Folders tab toggle (normal Library view only). */}
+      {!showHidden && !favoritesOnly && (
+        <Box sx={{ paddingLeft: isMobile ? 1 : 2, paddingRight: isMobile ? 1 : 2 }}>
+          <Tabs
+            value={folderView ? 1 : 0}
+            onChange={(e, v) => setFolderView(v === 1)}
+            indicatorColor="primary"
+            textColor="primary"
+            variant={isMobile ? "fullWidth" : "standard"}
+            style={{ borderBottom: "1px solid rgba(128,128,128,0.18)" }}
+          >
+            <Tab
+              label="Crates"
+              style={{ textTransform: "none", fontWeight: 700, minWidth: 120 }}
+            />
+            <Tab
+              label="Folders"
+              style={{ textTransform: "none", fontWeight: 700, minWidth: 120 }}
+            />
+          </Tabs>
+        </Box>
+      )}
 
       <Dialog
         open={loadingAll}
@@ -1213,15 +1245,33 @@ let PLLibrary = (props) => {
           )}
         </Box>
         <Box style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {(() => {
+            const shownIds = sortedCrates.map((c) => c.id);
+            const allSelected =
+              shownIds.length > 0 && shownIds.every((id) => selected.has(id));
+            return (
+              <Button
+                size="small"
+                onClick={() =>
+                  allSelected ? clearSelection() : setSelected(new Set(shownIds))
+                }
+                disabled={shownIds.length === 0}
+                style={{ textTransform: "none", borderRadius: 8 }}
+              >
+                {allSelected ? "Deselect all" : "Select all"}
+              </Button>
+            );
+          })()}
           <Button
             size="small"
-            variant={folderView ? "contained" : "outlined"}
-            color={folderView ? "primary" : "default"}
-            startIcon={<Folder />}
-            onClick={() => setFolderView((v) => !v)}
-            style={{ textTransform: "none", borderRadius: 8 }}
+            variant="contained"
+            color="primary"
+            startIcon={<MenuOpen />}
+            disabled={selected.size === 0}
+            onClick={handleOpenSelected}
+            style={{ textTransform: "none", borderRadius: 8, fontWeight: 600 }}
           >
-            Folders
+            Open ({selected.size})
           </Button>
           {folderView && (
             <Button

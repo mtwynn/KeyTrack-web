@@ -13,7 +13,15 @@ const changelog = [
       },
       {
         type: "improvement",
-        desc: "Polished the library controls: the playlist search is now a clean floating rounded search bar, and the Sort / Filter crate dropdowns were restyled as icon buttons that match the Folders button. Loading a big cross-search (Search all crates) can now be cancelled by clicking outside the loader.",
+        desc: "Polished the library controls: the search bar is now a clean floating rounded field (renamed 'Search Crates'), and the Sort / Filter dropdowns were restyled as icon buttons matching the Folders button.",
+      },
+      {
+        type: "improvement",
+        desc: "Crates and Folders are now a tab toggle at the top of the Library. The old 'Search all crates' button is gone — instead select any crates (or 'Select all') and hit 'Open (N)' to open them as one combined view; opening a big selection can be cancelled by clicking outside the loader.",
+      },
+      {
+        type: "improvement",
+        desc: "Crate tiles now animate in with a staggered fade/slide when the library opens, and each tile's track-count chip sits at a consistent height (pinned to the bottom of the card) regardless of description length.",
       },
       {
         type: "bugfix",
