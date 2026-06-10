@@ -27,12 +27,20 @@ import {
   useTheme,
 } from "@material-ui/core";
 
-import { MenuOpen, Search, MusicNote } from "@material-ui/icons";
+import {
+  MenuOpen,
+  Search,
+  MusicNote,
+  Star,
+  StarBorder,
+  VisibilityOff,
+} from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
 import { useEffect } from "react";
+import { fetchCrateMeta, setCrateMeta } from "../../utils/crateMeta";
 
 const useStyles = makeStyles((theme) => ({
   appBar: {
@@ -199,11 +207,55 @@ let PLLibrary = (props) => {
   const [crateSort, setCrateSort] = React.useState("name");
   const [cratePage, setCratePage] = React.useState(0);
   const [cratesPerPage, setCratesPerPage] = React.useState(24);
+  // Per-user crate metadata { [playlistId]: { favorite, hidden, ... } }.
+  const [crateMeta, setCrateMetaState] = React.useState({});
 
-  // Sort + paginate the crate list so we only render a page at a time.
+  useEffect(() => {
+    if (!props.userId) return;
+    fetchCrateMeta(props.userId)
+      .then(setCrateMetaState)
+      .catch((e) => console.error("Failed to load crate metadata", e));
+  }, [props.userId]);
+
+  const metaFor = (id) => crateMeta[id] || {};
+
+  const updateMeta = (playlist, partial) => {
+    setCrateMetaState((prev) => ({
+      ...prev,
+      [playlist.id]: { ...prev[playlist.id], ...partial },
+    }));
+    if (props.userId) {
+      setCrateMeta(props.userId, playlist.id, partial).catch((e) =>
+        console.error("Failed to save crate metadata", e)
+      );
+    }
+  };
+
+  const toggleFavorite = (e, playlist) => {
+    e.stopPropagation();
+    updateMeta(playlist, { favorite: !metaFor(playlist.id).favorite });
+  };
+
+  const toggleHidden = (e, playlist) => {
+    e.stopPropagation();
+    updateMeta(playlist, { hidden: !metaFor(playlist.id).hidden });
+  };
+
+  // Sort + paginate the crate list so we only render a page at a time. In the
+  // normal view, hidden crates are excluded and favorites are pinned to the top;
+  // the hidden view (from the menu) shows only hidden crates.
+  const showHidden = props.showHidden;
   const sortedCrates = React.useMemo(() => {
-    const arr = [...(searchItems || [])];
+    const arr = (searchItems || []).filter((pl) => {
+      const hidden = !!(crateMeta[pl.id] && crateMeta[pl.id].hidden);
+      return showHidden ? hidden : !hidden;
+    });
     arr.sort((a, b) => {
+      if (!showHidden) {
+        const fa = crateMeta[a.id] && crateMeta[a.id].favorite ? 1 : 0;
+        const fb = crateMeta[b.id] && crateMeta[b.id].favorite ? 1 : 0;
+        if (fa !== fb) return fb - fa; // favorites first
+      }
       if (crateSort === "tracks") {
         return (b.tracks?.total || 0) - (a.tracks?.total || 0);
       }
@@ -215,7 +267,7 @@ let PLLibrary = (props) => {
       return (a.name || "").localeCompare(b.name || "");
     });
     return arr;
-  }, [searchItems, crateSort]);
+  }, [searchItems, crateSort, crateMeta, showHidden]);
 
   const pagedCrates = sortedCrates.slice(
     cratePage * cratesPerPage,
@@ -405,7 +457,10 @@ let PLLibrary = (props) => {
   };
 
   const handleSearchAllCrates = async () => {
-    const playlists = props.pllibrary || [];
+    // Hidden crates are abstracted away — they don't feed the cross-search.
+    const playlists = (props.pllibrary || []).filter(
+      (pl) => !(crateMeta[pl.id] && crateMeta[pl.id].hidden)
+    );
     if (playlists.length === 0) return;
 
     setAllProgress({ done: 0, total: playlists.length });
@@ -561,12 +616,48 @@ let PLLibrary = (props) => {
         </Typography>
       </Box>
 
+      {showHidden && (
+        <Box sx={{ padding: isMobile ? 1 : 2 }} style={{ paddingTop: 0 }}>
+          <Box
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <Typography variant="subtitle2" style={{ fontWeight: 700 }}>
+              Hidden crates
+            </Typography>
+            <Button size="small" onClick={props.onExitHidden}>
+              ← Back to all crates
+            </Button>
+          </Box>
+          <Typography variant="caption" color="textSecondary">
+            Hidden from your library and searches. Un-hide to bring one back.
+          </Typography>
+        </Box>
+      )}
+
+      {sortedCrates.length === 0 && (
+        <Box sx={{ padding: isMobile ? 1 : 2 }}>
+          <Typography variant="body2" color="textSecondary">
+            {showHidden ? "No hidden crates." : "No crates to show."}
+          </Typography>
+        </Box>
+      )}
+
       <Box sx={{ padding: isMobile ? 1 : 2 }}>
         {pagedCrates.map((playlist) => (
           <Card
             key={playlist.id}
             className={classes.playlistCard}
             onClick={() => handlePlaylistOpen(playlist)}
+            style={{
+              borderLeft: metaFor(playlist.id).favorite
+                ? "4px solid #1ED760"
+                : "4px solid transparent",
+            }}
           >
             <CardContent className={classes.cardContent}>
               {/* Album Art */}
@@ -608,26 +699,57 @@ let PLLibrary = (props) => {
                 </Box>
               </Box>
 
-              {/* Open Button / per-card loading spinner */}
-              {loadingId === playlist.id ? (
-                <CircularProgress
-                  classes={{ colorPrimary: classes.colorPrimary }}
-                  size={24}
-                  className={classes.openButton}
-                />
-              ) : (
-                !isMobile && (
-                  <IconButton
-                    className={classes.openButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePlaylistOpen(playlist);
+              {/* Actions: favorite, hide, open / loading */}
+              <Box
+                style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
+              >
+                <IconButton
+                  size="small"
+                  onClick={(e) => toggleFavorite(e, playlist)}
+                  title={
+                    metaFor(playlist.id).favorite ? "Unfavorite" : "Favorite"
+                  }
+                  aria-label="favorite crate"
+                >
+                  {metaFor(playlist.id).favorite ? (
+                    <Star style={{ color: "#1ED760" }} />
+                  ) : (
+                    <StarBorder />
+                  )}
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={(e) => toggleHidden(e, playlist)}
+                  title={metaFor(playlist.id).hidden ? "Unhide" : "Hide"}
+                  aria-label="hide crate"
+                >
+                  <VisibilityOff
+                    fontSize="small"
+                    style={{
+                      color: metaFor(playlist.id).hidden ? "#1ED760" : undefined,
                     }}
-                  >
-                    <MenuOpen />
-                  </IconButton>
-                )
-              )}
+                  />
+                </IconButton>
+                {loadingId === playlist.id ? (
+                  <CircularProgress
+                    classes={{ colorPrimary: classes.colorPrimary }}
+                    size={24}
+                    style={{ margin: 8 }}
+                  />
+                ) : (
+                  !isMobile && (
+                    <IconButton
+                      className={classes.openButton}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlaylistOpen(playlist);
+                      }}
+                    >
+                      <MenuOpen />
+                    </IconButton>
+                  )
+                )}
+              </Box>
             </CardContent>
           </Card>
         ))}

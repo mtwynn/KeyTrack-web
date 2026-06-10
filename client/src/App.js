@@ -46,6 +46,7 @@ import {
   Receipt,
   SettingsApplications,
   Tune,
+  VisibilityOff,
 } from '@material-ui/icons';
 import FadeIn from 'react-fade-in';
 
@@ -126,6 +127,7 @@ class App extends React.Component {
       showKeyCalculator: false,
       drawerOpen: false,
       loadingPlaylists: false,
+      showHiddenCrates: false,
       // App-level set so it spans playlists. Entries are { item, key }.
       set: [],
       setOpen: false,
@@ -161,6 +163,8 @@ class App extends React.Component {
     this.clearSet = this.clearSet.bind(this);
     this.openSet = this.openSet.bind(this);
     this.loadSet = this.loadSet.bind(this);
+    this.openHiddenCrates = this.openHiddenCrates.bind(this);
+    this.exitHidden = this.exitHidden.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
     this.scheduleTokenRefresh = this.scheduleTokenRefresh.bind(this);
@@ -301,6 +305,7 @@ class App extends React.Component {
 
       this.setState({
         showPlaylists: true,
+        showHiddenCrates: false,
         pllibrary: allPlaylists,
       });
     } catch (error) {
@@ -352,6 +357,19 @@ class App extends React.Component {
   // Replace the current set with a loaded saved set.
   loadSet(entries) {
     this.setState({ set: entries, setOpen: true });
+  }
+
+  // Open the library showing only hidden crates (reached from the menu).
+  async openHiddenCrates() {
+    this.setState({ drawerOpen: false });
+    if (!this.state.showPlaylists) {
+      await this.getUserPlaylists();
+    }
+    this.setState({ showHiddenCrates: true });
+  }
+
+  exitHidden() {
+    this.setState({ showHiddenCrates: false });
   }
 
   toggleTheme() {
@@ -618,6 +636,8 @@ class App extends React.Component {
                   onAddToSet={this.addToSet}
                   onOpenSet={this.openSet}
                   setCount={this.state.set.length}
+                  showHidden={this.state.showHiddenCrates}
+                  onExitHidden={this.exitHidden}
                 />
               </FadeIn>
             </Box>
@@ -696,6 +716,12 @@ class App extends React.Component {
                     : 'empty'
                 }
               />
+            </ListItem>
+            <ListItem button onClick={this.openHiddenCrates}>
+              <ListItemIcon>
+                <VisibilityOff />
+              </ListItemIcon>
+              <ListItemText primary="Hidden crates" />
             </ListItem>
             <ListItem>
               <ListItemIcon>
