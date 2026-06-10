@@ -169,15 +169,6 @@ const useStyles = makeStyles((theme) => ({
       WebkitLineClamp: 1,
     },
   },
-  playlistMeta: {
-    display: "flex",
-    alignItems: "center",
-    gap: theme.spacing(1),
-    [theme.breakpoints.down('sm')]: {
-      flexWrap: "wrap",
-      gap: theme.spacing(0.5),
-    },
-  },
   ownerText: {
     fontSize: "0.8rem",
     color: theme.palette.text.secondary,
@@ -197,14 +188,103 @@ const useStyles = makeStyles((theme) => ({
     },
   },
   openButton: {
-    marginLeft: theme.spacing(2),
     color: "#1ED760",
-    [theme.breakpoints.down('sm')]: {
-      marginLeft: 0,
-      alignSelf: "center",
+  },
+  // --- Cover-art tile layout ---
+  tileCard: {
+    cursor: "pointer",
+    borderRadius: 12,
+    overflow: "hidden",
+    transition: "all 0.18s ease-in-out",
+    "&:hover": {
+      transform: "translateY(-3px)",
+      boxShadow: theme.shadows[6],
     },
   },
+  tileCover: {
+    position: "relative",
+    height: 130,
+    backgroundColor: "#191414",
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    [theme.breakpoints.down("sm")]: {
+      height: 110,
+    },
+  },
+  tileCheckbox: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    padding: 4,
+    color: "#fff",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    "&:hover": { backgroundColor: "rgba(0,0,0,0.5)" },
+  },
+  tileFav: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    padding: 4,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    "&:hover": { backgroundColor: "rgba(0,0,0,0.5)" },
+  },
+  tileLoading: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  tileBody: {
+    flex: 1,
+    padding: theme.spacing(1.5),
+    "&:last-child": { paddingBottom: theme.spacing(1) },
+  },
+  tileDesc: {
+    color: theme.palette.text.secondary,
+    fontSize: "0.78rem",
+    margin: theme.spacing(0.5, 0),
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical",
+  },
+  tileMeta: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.spacing(0.5),
+    marginTop: theme.spacing(1),
+  },
+  tileActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 2,
+    padding: theme.spacing(0.5, 1),
+    borderTop: "1px solid rgba(128,128,128,0.15)",
+  },
 }));
+
+// Spotify returns playlist descriptions containing HTML entities and anchor
+// tags (e.g. `<a href="spotify:genre:edm_dance">dance</a>`). Strip the tags and
+// decode the entities so the UI shows clean, readable text. Using a textarea's
+// value to decode is safe — it never executes markup.
+const decodeEl =
+  typeof document !== "undefined" ? document.createElement("textarea") : null;
+function cleanDescription(desc) {
+  if (!desc) return "";
+  let text = desc.replace(/<[^>]*>/g, "");
+  if (decodeEl) {
+    decodeEl.innerHTML = text;
+    text = decodeEl.value;
+  }
+  return text.trim();
+}
 
 const GENRES = [
   "House",
@@ -333,11 +413,14 @@ let PLLibrary = (props) => {
   // normal view, hidden crates are excluded and favorites are pinned to the top;
   // the hidden view (from the menu) shows only hidden crates.
   const showHidden = props.showHidden;
+  const favoritesOnly = props.favoritesOnly;
   const sortedCrates = React.useMemo(() => {
     const arr = (searchItems || []).filter((pl) => {
       const m = crateMeta[pl.id] || {};
       const hidden = !!m.hidden;
       if (showHidden ? !hidden : hidden) return false;
+      // "Favorites" view: only crates the user has starred.
+      if (favoritesOnly && !showHidden && !m.favorite) return false;
       if (metaFilter.length > 0) {
         const vals = [...(m.tags || []), ...(m.genres || [])];
         if (!metaFilter.some((f) => vals.includes(f))) return false;
@@ -361,7 +444,7 @@ let PLLibrary = (props) => {
       return (a.name || "").localeCompare(b.name || "");
     });
     return arr;
-  }, [searchItems, crateSort, crateMeta, showHidden, metaFilter]);
+  }, [searchItems, crateSort, crateMeta, showHidden, favoritesOnly, metaFilter]);
 
   const pagedCrates = sortedCrates.slice(
     cratePage * cratesPerPage,
@@ -370,7 +453,7 @@ let PLLibrary = (props) => {
 
   React.useEffect(() => {
     setCratePage(0);
-  }, [searchItems, crateSort, cratesPerPage, metaFilter]);
+  }, [searchItems, crateSort, cratesPerPage, metaFilter, favoritesOnly]);
 
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
@@ -693,72 +776,100 @@ let PLLibrary = (props) => {
     return groups;
   }, [sortedCrates, folders, crateMeta]);
 
-  const renderCrateCard = (playlist) => (
-    <Card
-      key={playlist.id}
-      className={classes.playlistCard}
-      onClick={() => handlePlaylistOpen(playlist)}
-      style={{
-        height: "100%",
-        marginBottom: 0,
-        borderLeft: metaFor(playlist.id).favorite
-          ? "4px solid #1ED760"
-          : "4px solid transparent",
-      }}
-    >
-      <CardContent className={classes.cardContent}>
-        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+  // A crate rendered as a cover-art tile: the playlist artwork as a banner
+  // (with the cross-search checkbox + favorite star overlaid), then title /
+  // owner / cleaned description / track + tag chips, and a footer action row.
+  const renderCrateCard = (playlist) => {
+    const meta = metaFor(playlist.id);
+    const img = playlist.images[0] ? playlist.images[0].url : null;
+    const desc = cleanDescription(playlist.description);
+    return (
+      <Card
+        key={playlist.id}
+        className={classes.tileCard}
+        onClick={() => handlePlaylistOpen(playlist)}
+        style={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          border: meta.favorite
+            ? "1px solid #1ED760"
+            : "1px solid rgba(128,128,128,0.18)",
+        }}
+      >
+        <Box
+          className={classes.tileCover}
+          style={img ? { backgroundImage: `url(${img})` } : {}}
+        >
+          {!img && (
+            <MusicNote style={{ color: "#fff", fontSize: 42, opacity: 0.85 }} />
+          )}
           <Checkbox
+            className={classes.tileCheckbox}
             checked={selected.has(playlist.id)}
             onClick={(e) => {
               e.stopPropagation();
               toggleSelect(playlist.id);
             }}
             title="Select for cross-search"
-            style={{ padding: 4 }}
+            size="small"
           />
-          <Avatar
-            variant="square"
-            src={playlist.images[0] ? playlist.images[0].url : undefined}
-            className={classes.albumArt}
+          <IconButton
+            className={classes.tileFav}
+            size="small"
+            onClick={(e) => toggleFavorite(e, playlist)}
+            title={meta.favorite ? "Unfavorite" : "Favorite"}
+            aria-label="favorite crate"
           >
-            <MusicNote />
-          </Avatar>
-        </div>
-
-        <Box className={classes.playlistInfo}>
-          <Box className={classes.playlistHeader}>
-            <Typography className={classes.playlistTitle}>
-              {playlist.name}
-            </Typography>
-            <Typography className={classes.ownerText}>
-              by {playlist.owner.display_name}
-            </Typography>
-          </Box>
-
-          {playlist.description && (
-            <Typography className={classes.playlistDescription}>
-              {playlist.description}
-            </Typography>
+            {meta.favorite ? (
+              <Star style={{ color: "#1ED760" }} fontSize="small" />
+            ) : (
+              <StarBorder style={{ color: "#fff" }} fontSize="small" />
+            )}
+          </IconButton>
+          {loadingId === playlist.id && (
+            <Box className={classes.tileLoading}>
+              <CircularProgress size={28} style={{ color: "#fff" }} />
+            </Box>
           )}
+        </Box>
 
-          <Box className={classes.playlistMeta}>
+        <CardContent className={classes.tileBody}>
+          <Typography
+            className={classes.playlistTitle}
+            noWrap
+            title={playlist.name}
+          >
+            {playlist.name}
+          </Typography>
+          <Typography className={classes.ownerText} noWrap>
+            by {playlist.owner.display_name}
+          </Typography>
+          {desc && (
+            <Typography className={classes.tileDesc}>{desc}</Typography>
+          )}
+          <Box className={classes.tileMeta}>
             <Chip
               label={`${playlist.tracks.total} tracks`}
               size="small"
               className={classes.trackChip}
               icon={<MusicNote style={{ color: "#fff" }} />}
             />
-            {(metaFor(playlist.id).genres || []).map((g) => (
+            {(meta.genres || []).map((g) => (
               <Chip key={`g-${g}`} label={g} size="small" variant="outlined" />
             ))}
-            {(metaFor(playlist.id).tags || []).map((t) => (
-              <Chip key={`t-${t}`} label={`#${t}`} size="small" variant="outlined" />
+            {(meta.tags || []).map((t) => (
+              <Chip
+                key={`t-${t}`}
+                label={`#${t}`}
+                size="small"
+                variant="outlined"
+              />
             ))}
           </Box>
-        </Box>
+        </CardContent>
 
-        <Box style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+        <Box className={classes.tileActions}>
           <IconButton
             size="small"
             onClick={(e) => openTagEdit(e, playlist)}
@@ -769,59 +880,39 @@ let PLLibrary = (props) => {
           </IconButton>
           <IconButton
             size="small"
-            onClick={(e) => toggleFavorite(e, playlist)}
-            title={metaFor(playlist.id).favorite ? "Unfavorite" : "Favorite"}
-            aria-label="favorite crate"
-          >
-            {metaFor(playlist.id).favorite ? (
-              <Star style={{ color: "#1ED760" }} />
-            ) : (
-              <StarBorder />
-            )}
-          </IconButton>
-          <IconButton
-            size="small"
             onClick={(e) => toggleHidden(e, playlist)}
-            title={metaFor(playlist.id).hidden ? "Unhide" : "Hide"}
+            title={meta.hidden ? "Unhide" : "Hide"}
             aria-label="hide crate"
           >
             <VisibilityOff
               fontSize="small"
-              style={{
-                color: metaFor(playlist.id).hidden ? "#1ED760" : undefined,
-              }}
+              style={{ color: meta.hidden ? "#1ED760" : undefined }}
             />
           </IconButton>
-          {loadingId === playlist.id ? (
-            <CircularProgress
-              classes={{ colorPrimary: classes.colorPrimary }}
-              size={24}
-              style={{ margin: 8 }}
-            />
-          ) : (
-            !isMobile && (
-              <IconButton
-                className={classes.openButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePlaylistOpen(playlist);
-                }}
-              >
-                <MenuOpen />
-              </IconButton>
-            )
-          )}
+          <Box style={{ flex: 1 }} />
+          <IconButton
+            size="small"
+            className={classes.openButton}
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePlaylistOpen(playlist);
+            }}
+            title="Open crate"
+            aria-label="open crate"
+          >
+            <MenuOpen />
+          </IconButton>
         </Box>
-      </CardContent>
-    </Card>
-  );
+      </Card>
+    );
+  };
 
-  // Lay crates out in a responsive grid so wide screens show two cards per
-  // row instead of one sparse full-width row with lots of empty space.
+  // Lay crates out as a responsive grid of cover tiles — denser and more
+  // visual than the old full-width rows, and it actually uses the page width.
   const renderCrateGrid = (crates) => (
     <Grid container spacing={2}>
       {crates.map((p) => (
-        <Grid item xs={12} md={6} key={p.id}>
+        <Grid item xs={12} sm={6} md={4} lg={3} key={p.id}>
           {renderCrateCard(p)}
         </Grid>
       ))}
@@ -1132,10 +1223,25 @@ let PLLibrary = (props) => {
         </Box>
       )}
 
+      {favoritesOnly && !showHidden && (
+        <Box sx={{ padding: isMobile ? 1 : 2 }} style={{ paddingTop: 0 }}>
+          <Typography variant="subtitle2" style={{ fontWeight: 700 }}>
+            ★ Favorite crates
+          </Typography>
+          <Typography variant="caption" color="textSecondary">
+            Star a crate to pin it here.
+          </Typography>
+        </Box>
+      )}
+
       {sortedCrates.length === 0 && (
         <Box sx={{ padding: isMobile ? 1 : 2 }}>
           <Typography variant="body2" color="textSecondary">
-            {showHidden ? "No hidden crates." : "No crates to show."}
+            {showHidden
+              ? "No hidden crates."
+              : favoritesOnly
+              ? "No favorite crates yet — tap the ★ on a crate to add one."
+              : "No crates to show."}
           </Typography>
         </Box>
       )}

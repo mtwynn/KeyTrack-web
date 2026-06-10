@@ -1,5 +1,23 @@
 const changelog = [
   {
+    version: "1.25.0",
+    date: "06/10/26",
+    changes: [
+      {
+        type: "improvement",
+        desc: "Home redesign: the two oversized hero cards are gone, replaced by a left sidebar (Library, Key Calculator, Sets, Favorites, Hidden crates) and a reworked top bar — the KeyTrack logo now sits on the left, with quick Set Builder (count badge), dark-mode, and account/avatar actions on the right.",
+      },
+      {
+        type: "improvement",
+        desc: "Crates now display as cover-art tiles in a responsive grid (the artwork is the card), with a new Favorites view to pin starred crates.",
+      },
+      {
+        type: "bugfix",
+        desc: "Crate descriptions no longer show raw HTML — Spotify's embedded tags/entities (e.g. <a href=\"spotify:genre:...\">) are now stripped and decoded into clean text.",
+      },
+    ],
+  },
+  {
     version: "1.24.0",
     date: "06/10/26",
     changes: [
