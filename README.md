@@ -98,15 +98,7 @@ Play tracks **in the browser** via Spotify's Web Playback SDK, with a **slim Now
 
 ## 🤖 How this app was built
 
-KeyTrack started as a hand-built side project in 2020 and was rebuilt into the app it is today with AI assistance. Rather than count commits, here's the honest timeline of **when it was coded by hand vs. with AI help**:
-
-| When | How it was built | What happened |
-|---|---|---|
-| **May 2020 – Jan 2022** | ✍️ **By hand** (no AI) | The original KeyTrack: Spotify login, the track table, key/BPM detection, filtering, chord progressions, and logout |
-| **Nov 2025** | ⚡ **Hand + first AI assist** (Cursor) | A burst of additions — SoundCloud, a changelog, and a Cursor-assisted pass on recommendations, mobile layout, collapsible filters, and the musical-key UI |
-| **Jun 2026** | 🤖 **AI agent** (Claude Code) | The modern app, v1.3.0 → v1.26.0: harmonic mixing, the Camelot wheel, the Set Builder, the full crate-management suite, folders, Crate DNA, energy/vibe, smarter recommendations, and the complete library redesign |
-
-Work done with Claude Code carries a `🤖 Generated with Claude Code` footer on its pull requests, so the line between hand-written and AI-assisted is fully traceable in the history. The taste and direction stayed with the author throughout — KeyTrack is what that human-and-AI collaboration looks like in the open.
+Any work that I did with Claude will have a a `🤖 Generated with Claude Code` footer on its pull requests. All the features on this app from a product perspective are my own ideas or ideas that I have evolved from using similar DJ and music software, or pain points that I wanted to solve for myself as a DJ and artist.
 
 ---
 
