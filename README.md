@@ -20,9 +20,13 @@ KeyTrack turns your Spotify library into a DJ's workspace — it reads the key, 
 
 ## 💡 Why I built KeyTrack
 
-<!-- ✍️ Tam — write your story here. A few prompts if helpful: what you spin, what frustrated you about existing tools, why harmonic mixing mattered enough to build this, and what you wanted that nothing else gave you. -->
+This is a tool I began in 2019–2020 while I was still in college, to help me build sets for DJ gigs and shows. I always liked to save new music on Spotify through playlists, but when building setlists I found myself having to compile music and feed it into BPM/key detection or DJ software, which was very time consuming. KeyTrack started out as a fun side project to learn more about APIs and backends while doing something I loved.
 
-> _A note from the author — coming soon._
+I followed a Spotify Developer API tutorial on YouTube, then designed and created the very first few iterations of KeyTrack. Those early versions included the "Current Song" feature that could detect BPM and key for a song you were currently playing on Spotify, as well as pull your playlists and tracks and display their musical information on Material-UI surfaces. I built out the core of the search, filter, and backend server functionality between 2020 and 2025.
+
+With the rise of AI and agentic coding, I was able to use Cursor in 2025 to build out a recommendations feature and redesign parts of the UI. And with Claude in 2026, I was able to do a full UI revamp and introduce a ton of new features I've always wanted to see.
+
+It's a project I hold very dear to me, and I hope it's helpful to you. 🎧
 
 ---
 
