@@ -1,393 +1,165 @@
 import React from "react";
-import { doc, updateDoc } from "firebase/firestore";
-
-import {
-    Avatar,
-    Button,
-    Box,
-    Collapse,
-    Table,
-    TableCell,
-    TableRow,
-    TableBody,
-    TableHead,
-    TextField,
-    IconButton,
-    Typography
-} from "@material-ui/core";
-
-import KeyboardArrowDownIcon from "@material-ui/icons/KeyboardArrowDown";
-import KeyboardArrowUpIcon from "@material-ui/icons/KeyboardArrowUp";
+import { Avatar, TableCell, TableRow, IconButton } from "@material-ui/core";
 import PlaylistAddIcon from "@material-ui/icons/PlaylistAdd";
 
 import KeyMap from "../../utils/KeyMap";
 import { camelotColor, harmonicRelation } from "../../utils/harmonic";
 import { formatReleaseDate } from "../../utils/release";
 
-// TODO: FIX CHORD PROGRESSIONS BUG HERE
 let Row = (props) => {
-    const { item } = props;
-    const [open, setOpen] = React.useState(false);
+  const { item } = props;
 
-    // Key/Camelot info for this track, computed once.
-    const trackKey = props.getKey(item.track.id);
-    const camelot = trackKey ? KeyMap[trackKey.key].camelot[trackKey.mode] : null;
-    const keyColor = camelot ? camelotColor(camelot) : null;
+  // Key/Camelot info for this track, computed once.
+  const trackKey = props.getKey(item.track.id);
+  const camelot = trackKey ? KeyMap[trackKey.key].camelot[trackKey.mode] : null;
+  const keyColor = camelot ? camelotColor(camelot) : null;
 
-    // Label for the single key column, rendered in the selected notation. On
-    // mobile (no separate Quality column) the musical key includes Maj/Min.
-    let keyLabel = null;
-    if (trackKey) {
-      if (props.wheel === "Camelot") {
-        keyLabel = camelot;
-      } else if (props.wheel === "Open") {
-        keyLabel = KeyMap[trackKey.key].open[trackKey.mode];
-      } else {
-        keyLabel = `${KeyMap[trackKey.key].key}${
-          props.isMobile ? (trackKey.mode === 1 ? " Maj" : " Min") : ""
-        }`;
-      }
+  // Label for the single key column, rendered in the selected notation. On
+  // mobile (no separate Quality column) the musical key includes Maj/Min.
+  let keyLabel = null;
+  if (trackKey) {
+    if (props.wheel === "Camelot") {
+      keyLabel = camelot;
+    } else if (props.wheel === "Open") {
+      keyLabel = KeyMap[trackKey.key].open[trackKey.mode];
+    } else {
+      keyLabel = `${KeyMap[trackKey.key].key}${
+        props.isMobile ? (trackKey.mode === 1 ? " Maj" : " Min") : ""
+      }`;
     }
-
-    // Harmonic-mixing highlight relative to the anchored track (if any).
-    const isAnchor = props.harmonicAnchorId === item.track.id;
-    const relation = harmonicRelation(
-      props.harmonicAnchorCamelot,
-      camelot,
-      isAnchor
-    );
-
-    const rowStyle = { cursor: "pointer" };
-    if (relation === "incompatible") rowStyle.opacity = 0.4;
-    if (relation === "compatible")
-      rowStyle.backgroundColor = "rgba(30, 215, 96, 0.12)";
-    if (relation === "anchor") {
-      rowStyle.backgroundColor = "rgba(30, 215, 96, 0.2)";
-      rowStyle.boxShadow = `inset 3px 0 0 ${keyColor ? keyColor.bg : "#1ED760"}`;
-    }
-
-    // A colored, clickable pill for a key value. Clicking anchors this track so
-    // its harmonic matches light up across the table.
-    const keyChip = (label) => (
-      <span
-        onClick={(e) => {
-          e.stopPropagation();
-          if (props.onToggleAnchor) props.onToggleAnchor(item);
-        }}
-        title="Click to highlight harmonic matches"
-        style={
-          keyColor
-            ? {
-                backgroundColor: keyColor.bg,
-                color: keyColor.text,
-                padding: "3px 10px",
-                borderRadius: "12px",
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "inline-block",
-                whiteSpace: "nowrap",
-              }
-            : {}
-        }
-      >
-        {label}
-      </span>
-    );
-    const addButton = (
-      <IconButton
-        aria-label="add to set"
-        size="small"
-        title="Add to set"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (props.onAddToSet) props.onAddToSet(item);
-        }}
-      >
-        <PlaylistAddIcon fontSize="small" />
-      </IconButton>
-    );
-
-    const [editChords, setEditChords] = React.useState(false);
-    const [oldProgressions, setOldProgressions] = React.useState(
-      props.chordProgressions[item.track.id] || {}
-    );
-    const [progressions, setProgressions] = React.useState(
-      props.chordProgressions[item.track.id] || {}
-    );
-
-    let handleChordProgressionChange = (e) => {
-      let newObj = { ...progressions };
-      newObj[e.target.id] = e.target.value;
-      setProgressions(newObj);
-    };
-
-    const progressionRef = doc(props.db, `Users/${props.userId}`);
-
-    const getKey = (id) => {
-        return props.getKey(id);
-    }
-
-    return (
-      <React.Fragment>
-        <TableRow
-          key={item.track.id}
-          hover
-          style={rowStyle}
-          onClick={(event) => props.handleRowClick(event, item)}
-          sx={{ "& > *": { borderBottom: "unset" } }}
-        >
-          {!props.isMobile && (
-            <TableCell>
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <IconButton
-                  aria-label="expand row"
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpen(!open);
-                  }}
-                >
-                  {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-                </IconButton>
-                {addButton}
-              </div>
-            </TableCell>
-          )}
-          {!props.isMobile && (
-            <TableCell>
-              <Avatar
-                variant="square"
-                src={
-                  item.track.album.images[0]
-                    ? item.track.album.images[0].url
-                    : null
-                }
-              ></Avatar>
-            </TableCell>
-          )}
-          <TableCell>
-            {props.isMobile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <Avatar
-                  variant="square"
-                  src={
-                    item.track.album.images[0]
-                      ? item.track.album.images[0].url
-                      : null
-                  }
-                  style={{ width: 40, height: 40 }}
-                ></Avatar>
-                <IconButton
-                  aria-label="expand row"
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setOpen(!open);
-                  }}
-                >
-                  {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-                </IconButton>
-                {addButton}
-              </div>
-            )}
-            <div style={{ fontWeight: 'bold' }}>{item.track.name}</div>
-            {props.isMobile && (
-              <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '4px' }}>
-                {item.track.artists.map((artist) => artist.name).join(", ")}
-                {" · "}
-                {formatReleaseDate(item.track)}
-              </div>
-            )}
-          </TableCell>
-          {!props.isMobile && (
-            <TableCell>
-              {item.track.artists.map((artist) => artist.name).join(", ")}
-            </TableCell>
-          )}
-          <TableCell>
-            {trackKey ? keyChip(keyLabel) : "N/A"}
-          </TableCell>
-          {!props.isMobile && (
-            <TableCell>
-              {trackKey ? (trackKey.mode === 1 ? "Major" : "Minor") : "N/A"}
-            </TableCell>
-          )}
-          <TableCell>
-            {getKey(item.track.id) || getKey(item.track.id) === 0
-              ? Math.round(getKey(item.track.id).bpm)
-              : "N/A"}
-          </TableCell>
-          {!props.isTablet && (
-            <TableCell style={{ whiteSpace: "nowrap" }}>
-              {formatReleaseDate(item.track)}
-            </TableCell>
-          )}
-        </TableRow>
-        <TableRow>
-          <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={12}>
-            <Collapse in={open} timeout="auto" unmountOnExit>
-              <Box>
-                <Typography variant="h6" gutterBottom component="div">
-                  Chord Progressions
-                </Typography>
-                {editChords ? (
-                  <>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      color="primary"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setEditChords(false);
-
-                        setOldProgressions(progressions);
-
-                        console.log("Saving...");
-                        console.log(progressions);
-                        let route = `chordProgressions.${item.track.id}`;
-
-                        updateDoc(progressionRef, {
-                          [route]: progressions,
-                        });
-                      }}
-                    >
-                      Save Chords
-                    </Button>{" "}
-                    <Button
-                      variant="contained"
-                      size="small"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setEditChords(false);
-
-                        console.log("Cancelling");
-                        setProgressions(oldProgressions);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      variant="contained"
-                      size="small"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        console.log(progressions);
-                        setEditChords(true);
-                      }}
-                    >
-                      Edit Chords
-                    </Button>
-                  </>
-                )}
-
-                <Table size="small" aria-label="purchases">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Verse</TableCell>
-                      <TableCell>Pre-Chorus</TableCell>
-                      <TableCell>Chorus</TableCell>
-                      <TableCell>Build-up</TableCell>
-                      <TableCell>Drop</TableCell>
-                      <TableCell>Bridge</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    <TableRow key={item.track.id}>
-                      <TableCell>
-                        {editChords ? (
-                          <TextField
-                            id="verse"
-                            variant="outlined"
-                            size="small"
-                            placeholder='ex. "C G Am F"'
-                            defaultValue={progressions.verse}
-                            onChange={handleChordProgressionChange}
-                          />
-                        ) : (
-                          <strong>{progressions.verse}</strong>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editChords ? (
-                          <TextField
-                            id="preChorus"
-                            variant="outlined"
-                            size="small"
-                            placeholder='ex. "I V vi IV"'
-                            value={progressions.preChorus}
-                            onChange={handleChordProgressionChange}
-                          />
-                        ) : (
-                          <strong>{progressions.preChorus}</strong>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editChords ? (
-                          <TextField
-                            id="chorus"
-                            variant="outlined"
-                            size="small"
-                            value={progressions.chorus}
-                            onChange={handleChordProgressionChange}
-                          />
-                        ) : (
-                          <strong>{progressions.chorus}</strong>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editChords ? (
-                          <TextField
-                            id="buildUp"
-                            variant="outlined"
-                            size="small"
-                            value={progressions.buildUp}
-                            onChange={handleChordProgressionChange}
-                          />
-                        ) : (
-                          <strong>{progressions.buildUp}</strong>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editChords ? (
-                          <TextField
-                            id="drop"
-                            variant="outlined"
-                            size="small"
-                            value={progressions.drop}
-                            onChange={handleChordProgressionChange}
-                          />
-                        ) : (
-                          <strong>{progressions.drop}</strong>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editChords ? (
-                          <TextField
-                            id="bridge"
-                            variant="outlined"
-                            size="small"
-                            value={progressions.bridge}
-                            onChange={handleChordProgressionChange}
-                          />
-                        ) : (
-                          <strong>{progressions.bridge}</strong>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </Box>
-            </Collapse>
-          </TableCell>
-        </TableRow>
-      </React.Fragment>
-    );
   }
 
-  // Memoized so rows skip re-rendering when Playlist re-renders without their
-  // props changing (e.g. when an unrelated app-level dialog opens). Rows still
-  // re-render when the anchor, notation, or chord data they depend on changes.
-  export default React.memo(Row);
+  // Harmonic-mixing highlight relative to the anchored track (if any).
+  const isAnchor = props.harmonicAnchorId === item.track.id;
+  const relation = harmonicRelation(
+    props.harmonicAnchorCamelot,
+    camelot,
+    isAnchor
+  );
+
+  const rowStyle = { cursor: "pointer" };
+  if (relation === "incompatible") rowStyle.opacity = 0.4;
+  if (relation === "compatible")
+    rowStyle.backgroundColor = "rgba(30, 215, 96, 0.12)";
+  if (relation === "anchor") {
+    rowStyle.backgroundColor = "rgba(30, 215, 96, 0.2)";
+    rowStyle.boxShadow = `inset 3px 0 0 ${keyColor ? keyColor.bg : "#1ED760"}`;
+  }
+
+  // A colored, clickable pill for a key value. Clicking anchors this track so
+  // its harmonic matches light up across the table.
+  const keyChip = (label) => (
+    <span
+      onClick={(e) => {
+        e.stopPropagation();
+        if (props.onToggleAnchor) props.onToggleAnchor(item);
+      }}
+      title="Click to highlight harmonic matches"
+      style={
+        keyColor
+          ? {
+              backgroundColor: keyColor.bg,
+              color: keyColor.text,
+              padding: "3px 10px",
+              borderRadius: "12px",
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "inline-block",
+              whiteSpace: "nowrap",
+            }
+          : {}
+      }
+    >
+      {label}
+    </span>
+  );
+
+  const addButton = (
+    <IconButton
+      aria-label="add to set"
+      size="small"
+      title="Add to set"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (props.onAddToSet) props.onAddToSet(item);
+      }}
+    >
+      <PlaylistAddIcon fontSize="small" />
+    </IconButton>
+  );
+
+  return (
+    <TableRow
+      key={item.track.id}
+      hover
+      style={rowStyle}
+      onClick={(event) => props.handleRowClick(event, item)}
+    >
+      {!props.isMobile && <TableCell>{addButton}</TableCell>}
+      {!props.isMobile && (
+        <TableCell>
+          <Avatar
+            variant="square"
+            src={
+              item.track.album.images[0]
+                ? item.track.album.images[0].url
+                : null
+            }
+          ></Avatar>
+        </TableCell>
+      )}
+      <TableCell>
+        {props.isMobile && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "4px",
+            }}
+          >
+            <Avatar
+              variant="square"
+              src={
+                item.track.album.images[0]
+                  ? item.track.album.images[0].url
+                  : null
+              }
+              style={{ width: 40, height: 40 }}
+            ></Avatar>
+            {addButton}
+          </div>
+        )}
+        <div style={{ fontWeight: "bold" }}>{item.track.name}</div>
+        {props.isMobile && (
+          <div style={{ fontSize: "0.875rem", color: "#666", marginTop: "4px" }}>
+            {item.track.artists.map((artist) => artist.name).join(", ")}
+            {" · "}
+            {formatReleaseDate(item.track)}
+          </div>
+        )}
+      </TableCell>
+      {!props.isMobile && (
+        <TableCell>
+          {item.track.artists.map((artist) => artist.name).join(", ")}
+        </TableCell>
+      )}
+      <TableCell>{trackKey ? keyChip(keyLabel) : "N/A"}</TableCell>
+      {!props.isMobile && (
+        <TableCell>
+          {trackKey ? (trackKey.mode === 1 ? "Major" : "Minor") : "N/A"}
+        </TableCell>
+      )}
+      <TableCell>{trackKey ? Math.round(trackKey.bpm) : "N/A"}</TableCell>
+      {!props.isTablet && (
+        <TableCell style={{ whiteSpace: "nowrap" }}>
+          {formatReleaseDate(item.track)}
+        </TableCell>
+      )}
+    </TableRow>
+  );
+};
+
+// Memoized so rows skip re-rendering when Playlist re-renders without their
+// props changing (e.g. when an unrelated app-level dialog opens).
+export default React.memo(Row);

@@ -35,7 +35,6 @@ import Spotify from "spotify-web-api-js";
 
 import { initializeApp } from "firebase/app";
 import { firebaseConfig } from "../../../src/config/firebaseConfig";
-import { doc, getDoc, getFirestore } from "firebase/firestore";
 
 import KeyMap from "../../utils/KeyMap";
 import { releaseSortKey, releaseYear } from "../../utils/release";
@@ -267,7 +266,6 @@ let Playlist = (props) => {
   const [sortBy, setSortBy] = React.useState("key");
   const [showFilters, setShowFilters] = React.useState(!isMobile); // Collapsed on mobile by default
   let [searchItems, setSearchItems] = React.useState(allItems);
-  let [chordProgressions, setChordProgressions] = React.useState({});
   // Track whose key is "anchored" for harmonic-mixing highlighting (or null).
   const [harmonicAnchorId, setHarmonicAnchorId] = React.useState(null);
   // Key-filter bottom-sheet open state.
@@ -310,8 +308,6 @@ let Playlist = (props) => {
     },
     [props.updatePlayer]
   );
-
-  const db = getFirestore();
 
   const spotifyWebApi = new Spotify();
   spotifyWebApi.setAccessToken(props.token);
@@ -401,20 +397,6 @@ let Playlist = (props) => {
   }, [sortedItems]);
 
   useEffect(() => {
-    let getChordProgressions = async () => {
-      const docRef = doc(db, "Users", props.userId);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        setChordProgressions(docSnap.data().chordProgressions || {});
-      } else {
-        // doc.data() will be undefined in this case
-        console.log("No such document!");
-      }
-    };
-
-    getChordProgressions();
-
     if (
       keyFilter.length === 0 &&
       search === "" &&
@@ -832,10 +814,7 @@ let Playlist = (props) => {
                 .map((item) => (
                   <Row
                     item={item}
-                    userId={props.userId}
                     key={item.track.id}
-                    db={db}
-                    chordProgressions={chordProgressions}
                     handleRowClick={handleRowClick}
                     getKey={getKey}
                     isMobile={isMobile}
