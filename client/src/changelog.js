@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.19.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Removed the manual chord-progression feature. Accurate chord detection isn't available for Spotify tracks (the API exposes no chords and the audio is DRM-protected), and the manual entry was unused \u2014 so the track-row chord editor is gone for a cleaner table.",
+      },
+    ],
+  },
+  {
     version: "1.18.0",
     date: "06/09/26",
     changes: [
