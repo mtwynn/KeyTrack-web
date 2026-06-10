@@ -19,6 +19,7 @@ import {
   TableRow,
   TableBody,
   TableHead,
+  TableSortLabel,
   TablePagination,
   AppBar,
   Toolbar,
@@ -249,6 +250,19 @@ const StyledTableCell = withStyles((theme) => ({
   },
 }))(TableCell);
 
+// Sort arrows on the green header need to stay white (and visible) instead of
+// MUI's default dark/secondary text color.
+const HeadSortLabel = withStyles({
+  root: {
+    color: "inherit",
+    "&:hover": { color: "#fff" },
+    "&:focus": { color: "#fff" },
+    "&$active": { color: "#fff" },
+  },
+  active: {},
+  icon: { color: "inherit !important" },
+})(TableSortLabel);
+
 let Playlist = (props) => {
   const classes = useStyles();
   const theme = useTheme();
@@ -265,6 +279,7 @@ let Playlist = (props) => {
   const [minYear, setMinYear] = React.useState("");
   const [maxYear, setMaxYear] = React.useState("");
   const [sortBy, setSortBy] = React.useState("key");
+  const [sortDir, setSortDir] = React.useState("asc");
   const [energyFilter, setEnergyFilter] = React.useState("any");
   const [showDNA, setShowDNA] = React.useState(false);
   const [showFilters, setShowFilters] = React.useState(!isMobile); // Collapsed on mobile by default
@@ -372,34 +387,63 @@ let Playlist = (props) => {
   const [rowsPerPage, setRowsPerPage] = React.useState(100);
 
   // Sort once per data change (not on every render), on a copy so we don't
-  // mutate the searchItems state in place. Default order: Camelot key, then BPM.
+  // mutate the searchItems state in place. `sortBy` is a column id and
+  // `sortDir` is "asc"/"desc"; tracks missing audio features always sort last.
   const sortedItems = React.useMemo(() => {
+    const dir = sortDir === "desc" ? -1 : 1;
     const arr = [...searchItems];
     arr.sort((a, b) => {
-      if (sortBy === "released-desc" || sortBy === "released-asc") {
-        const diff = releaseSortKey(a.track) - releaseSortKey(b.track);
-        return sortBy === "released-desc" ? -diff : diff;
+      // Columns that don't need audio features.
+      if (sortBy === "released")
+        return dir * (releaseSortKey(a.track) - releaseSortKey(b.track));
+      if (sortBy === "track")
+        return dir * a.track.name.localeCompare(b.track.name);
+      if (sortBy === "artist") {
+        const an = a.track.artists[0] ? a.track.artists[0].name : "";
+        const bn = b.track.artists[0] ? b.track.artists[0].name : "";
+        return dir * an.localeCompare(bn);
       }
+      // Audio-feature columns: keep tracks with no key/BPM at the bottom
+      // regardless of sort direction.
       const aKey = getKey(a.track.id);
       const bKey = getKey(b.track.id);
-      if (!aKey) return -1;
-      if (!bKey) return 1;
-      if (sortBy === "bpm") return aKey.bpm - bKey.bpm;
-      // Energy / danceability / valence: highest first.
-      if (sortBy === "energy") return (bKey.energy || 0) - (aKey.energy || 0);
+      if (!aKey && !bKey) return 0;
+      if (!aKey) return 1;
+      if (!bKey) return -1;
+      if (sortBy === "bpm") return dir * (aKey.bpm - bKey.bpm);
+      if (sortBy === "energy")
+        return dir * ((aKey.energy || 0) - (bKey.energy || 0));
       if (sortBy === "danceability")
-        return (bKey.danceability || 0) - (aKey.danceability || 0);
+        return dir * ((aKey.danceability || 0) - (bKey.danceability || 0));
       if (sortBy === "valence")
-        return (bKey.valence || 0) - (aKey.valence || 0);
-      // Default: Camelot key, then BPM.
+        return dir * ((aKey.valence || 0) - (bKey.valence || 0));
+      // Default ("key"): Camelot code, then BPM as a tiebreaker.
       const aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
       const bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
       const cmp = aCamelot.localeCompare(bCamelot);
-      if (cmp !== 0) return cmp;
-      return aKey.bpm - bKey.bpm;
+      if (cmp !== 0) return dir * cmp;
+      return dir * (aKey.bpm - bKey.bpm);
     });
     return arr;
-  }, [searchItems, getKey, sortBy]);
+  }, [searchItems, getKey, sortBy, sortDir]);
+
+  // Sensible default direction the first time a column is selected. Energy/
+  // vibe and "newest" are most useful high-to-low; names and keys low-to-high.
+  const defaultSortDir = (col) =>
+    ["energy", "danceability", "valence", "released"].includes(col)
+      ? "desc"
+      : "asc";
+
+  // Clicking a column header sorts by it; clicking the active column flips
+  // direction. Shared with the "Sort by" dropdown so the two stay in sync.
+  const handleSort = (col) => {
+    if (sortBy === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(col);
+      setSortDir(defaultSortDir(col));
+    }
+  };
 
   // Only the current page is rendered into the DOM.
   const pagedItems = React.useMemo(
@@ -750,14 +794,32 @@ let Playlist = (props) => {
               <FormControl className={classes.filter}>
                 <InputLabel id="demo-simple-select-label">Sort by</InputLabel>
                 <Select
-                  value={sortBy}
+                  value={
+                    sortBy === "released"
+                      ? `released-${sortDir}`
+                      : sortBy
+                  }
                   label="Sort by"
-                  onChange={(e) => setSortBy(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "released-desc") {
+                      setSortBy("released");
+                      setSortDir("desc");
+                    } else if (v === "released-asc") {
+                      setSortBy("released");
+                      setSortDir("asc");
+                    } else {
+                      setSortBy(v);
+                      setSortDir(defaultSortDir(v));
+                    }
+                  }}
                   inputProps={{
                     classes: { icon: classes.icon, root: classes.root },
                   }}
                   input={<Input />}
                 >
+                  <MenuItem value="track">Track name</MenuItem>
+                  <MenuItem value="artist">Artist</MenuItem>
                   <MenuItem value="key">Key</MenuItem>
                   <MenuItem value="bpm">BPM</MenuItem>
                   <MenuItem value="released-desc">Newest</MenuItem>
@@ -860,15 +922,67 @@ let Playlist = (props) => {
               <TableRow>
                 {!isMobile && <StyledTableCell></StyledTableCell>}
                 {!isMobile && <StyledTableCell>Cover Art</StyledTableCell>}
-                <StyledTableCell>Track</StyledTableCell>
-                {!isMobile && <StyledTableCell>Artist</StyledTableCell>}
-                <StyledTableCell>
-                  {isMobile ? "Key" : `Key (${wheel})`}
+                <StyledTableCell sortDirection={sortBy === "track" ? sortDir : false}>
+                  <HeadSortLabel
+                    active={sortBy === "track"}
+                    direction={sortBy === "track" ? sortDir : "asc"}
+                    onClick={() => handleSort("track")}
+                  >
+                    Track
+                  </HeadSortLabel>
+                </StyledTableCell>
+                {!isMobile && (
+                  <StyledTableCell sortDirection={sortBy === "artist" ? sortDir : false}>
+                    <HeadSortLabel
+                      active={sortBy === "artist"}
+                      direction={sortBy === "artist" ? sortDir : "asc"}
+                      onClick={() => handleSort("artist")}
+                    >
+                      Artist
+                    </HeadSortLabel>
+                  </StyledTableCell>
+                )}
+                <StyledTableCell sortDirection={sortBy === "key" ? sortDir : false}>
+                  <HeadSortLabel
+                    active={sortBy === "key"}
+                    direction={sortBy === "key" ? sortDir : "asc"}
+                    onClick={() => handleSort("key")}
+                  >
+                    {isMobile ? "Key" : `Key (${wheel})`}
+                  </HeadSortLabel>
                 </StyledTableCell>
                 {!isMobile && <StyledTableCell>Quality</StyledTableCell>}
-                <StyledTableCell>BPM</StyledTableCell>
-                {!isTablet && <StyledTableCell>Released</StyledTableCell>}
-                {!isTablet && <StyledTableCell>Energy</StyledTableCell>}
+                <StyledTableCell sortDirection={sortBy === "bpm" ? sortDir : false}>
+                  <HeadSortLabel
+                    active={sortBy === "bpm"}
+                    direction={sortBy === "bpm" ? sortDir : "asc"}
+                    onClick={() => handleSort("bpm")}
+                  >
+                    BPM
+                  </HeadSortLabel>
+                </StyledTableCell>
+                {!isTablet && (
+                  <StyledTableCell sortDirection={sortBy === "released" ? sortDir : false}>
+                    <HeadSortLabel
+                      active={sortBy === "released"}
+                      direction={sortBy === "released" ? sortDir : "asc"}
+                      onClick={() => handleSort("released")}
+                    >
+                      Released
+                    </HeadSortLabel>
+                  </StyledTableCell>
+                )}
+                {!isTablet && (
+                  <StyledTableCell sortDirection={sortBy === "energy" ? sortDir : false}>
+                    <HeadSortLabel
+                      active={sortBy === "energy"}
+                      direction={sortBy === "energy" ? sortDir : "asc"}
+                      onClick={() => handleSort("energy")}
+                    >
+                      Energy
+                    </HeadSortLabel>
+                  </StyledTableCell>
+                )}
               </TableRow>
             </TableHead>
             <TableBody>

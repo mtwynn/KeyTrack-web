@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.23.0",
+    date: "06/10/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Sortable columns: click any of the Track, Artist, Key, BPM, Released, or Energy column headers to sort by it, and click again to flip between ascending and descending. The 'Sort by' dropdown and the header arrows stay in sync, and tracks missing key/BPM data always fall to the bottom.",
+      },
+    ],
+  },
+  {
     version: "1.22.0",
     date: "06/09/26",
     changes: [
