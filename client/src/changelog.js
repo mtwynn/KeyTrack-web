@@ -1,5 +1,15 @@
 const changelog = [
   {
+    version: "1.11.0",
+    date: "06/09/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Search all crates: load every playlist's tracks into one view and search/filter across your whole library by key, BPM, and text — then add any result straight to your set. (Loads with a progress indicator.)",
+      },
+    ],
+  },
+  {
     version: "1.10.0",
     date: "06/09/26",
     changes: [
