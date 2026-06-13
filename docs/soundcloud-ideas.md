@@ -1,6 +1,6 @@
 # KeyTrack × SoundCloud — Planning Doc
 
-> **Status:** Exploration / not yet scoped for build. We're fleshing out the roadmap before committing to an MVP. This captures the research, decisions, open questions, and the full idea backlog so we can pick up later.
+> **Status:** Exploration / not yet scoped for build. Key decisions are now made (see §6 — scale, engine, playback, UX, infra); next step is to scope the MVP. This captures the research, decisions, and the full idea backlog so we can pick up later.
 
 ---
 
@@ -125,13 +125,38 @@ Tags: ✅ straightforward · ⚠️ needs our analysis engine · 🔶 ToS/archit
 
 ---
 
-## 6. Open questions (resolve before scoping the MVP)
+## 6. Resolved decisions (round 2)
 
-1. **Where does analysis run + which engine?** Heroku worker (ffmpeg + a native/WASM key/BPM lib like essentia/aubio/keyfinder), a managed audio-analysis service/API, or start on-demand single-track only? Affects accuracy, cost, infra.
-2. **Multi-user quota math.** The 15k plays/day cap is app-wide. Is KeyTrack staying mostly personal/small, or expecting many users? Determines how conservative the queue + shared cache must be (and whether analysis needs to be opt-in/metered).
-3. **Do we even need API streaming for playback, or is the embed Widget enough?** If playback is Widget-only, we sidestep streaming licensing — but **analysis still needs `/streams`** (counts as plays). Worth confirming the split.
-4. **ToS comfort on persisting derived analysis** — confirm we're comfortable storing computed BPM/key keyed by URN (recommended), given the session-caching clause targets *their* content.
-5. **Account requirements for users** — users just OAuth-connect (no Artist Pro needed for them); confirm playback/stream `access` nuances (some tracks are `preview`/`blocked` by geo/rights).
+All the round-1 open questions are now answered:
+
+1. **Scale = personal (1 user, maybe up to ~5).** Possible future scaling is a *very* far-off conversation. → The **15k plays/24h cap is a non-issue** solo (even Analyze-Crate on the biggest ~882-track crate = ~882 plays). Persisting derived analysis is fine.
+2. **Analysis engine = self-hosted Essentia** (pipeline: `ffmpeg` decodes the HLS/AAC stream → **Essentia** computes key + BPM). **Free** (compute only), does both, no external dependency, no per-track cost. Accuracy to expect: **BPM ~90–98%** on 4/4 dance (main failure = half/double-time → constrain range + auto-correct); **Key ~70–85% exact** ("sometimes off by a relative or a fifth" — hence the artist-vs-detected + confidence + mismatch UX). Optional later: a paid API (Cyanite.ai / Music.ai) if we want energy/mood/chords/stems on the SC side too.
+
+   | Engine | Cost | Key | BPM | Notes |
+   |---|---|---|---|---|
+   | **Essentia (self-host)** ⭐ | Free | ✅ | ✅ | Open-source gold standard; chosen |
+   | libKeyFinder + JS BPM | Free | ✅ great | ✅ good | Two libs to wire |
+   | aubio | Free | ⚠️ weak | ✅ strong | Skip for key |
+   | Cyanite.ai | Paid (small free tier) | ✅ | ✅ +mood/energy | External; "vibe" extras |
+   | Music.ai (Moises) | Paid/min | ✅ | ✅ +chords/stems | If we want stems later |
+   | GetSongBPM / Tunebat | Free (attribution) | lookup | lookup | DB lookup, poor underground coverage |
+
+3. **Playback = official embed Widget for now** (sidesteps streaming licensing + the play cap + HLS complexity). Native in-app player is a *later* workshop item; its caveats: each play hits `/streams` (counts against 15k/day), in-browser HLS handling, short-lived auth'd URLs (backend-refreshed), and `access`-gated tracks (`preview`/`blocked` by geo/rights). **Note: analysis still needs `/streams`** regardless of playback choice.
+4. **Persisting derived analysis: confirmed yes** (solo app; it's our computed data, not their audio).
+5. **Artist Pro: non-issue.** Pro is only needed to *register the API app / get credentials* (the developer). End users who OAuth-connect don't need it. Owner is developer + sole user + already on Artist Pro → fully covered.
+
+## 6b. Analysis UX (decided)
+
+A **single-worker FIFO queue**, two entry points:
+- **Auto-analyze on play** — playing a track enqueues its analysis; **never blocks playback**. Show a **loading state** on that track's key/BPM info; **fill it in live** + persist on completion. If the user plays another track before the first finishes, the first **still completes** and the new one **queues behind it**.
+- **"Analyze Crate"** — the same queue fed a whole crate as a batch, with progress + cancel (like the existing "Loading all crates…" loader).
+
+One analysis at a time keeps it simple and is plenty for a solo user.
+
+## 6c. Infrastructure note (Heroku)
+
+- The backend's **`heroku-22` stack is deprecated** (builds start failing Nov 2026, escalating through 2027). **Immediate fix, independent of SoundCloud:** `heroku stack:set heroku-24 -a key-track2` then redeploy.
+- The audio analysis is CPU/RAM-heavy and Heroku has a **30s web-request timeout** + small dynos — fine **because analysis runs as an async background job** (HTTP returns "queued" instantly; frontend polls). If the dyno strains, move analysis to a small **containerized service (Fly.io / Render)** with `ffmpeg` + Essentia baked into the image (cleaner than native libs on Heroku buildpacks; cheap/free tiers). Not needed for MVP.
 
 ---
 
@@ -146,4 +171,4 @@ Tags: ✅ straightforward · ⚠️ needs our analysis engine · 🔶 ToS/archit
 
 ---
 
-*Last updated during planning. Revisit §6 before scoping the MVP.*
+*Last updated during planning (round 2: decisions in §6 resolved). Next: scope the MVP — likely Phase 0 + Phase 1.*
