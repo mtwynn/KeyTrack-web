@@ -31,6 +31,13 @@ import {
 // are always visually distinct from Spotify's green (strict source separation).
 const SC_ORANGE = "#ff5500";
 
+// Tracks longer than this are almost certainly DJ sets/mixes — their key/BPM
+// wander across the whole thing, so analyzing them is meaningless. We flag them
+// as "Set" and exclude them from analysis. ~6 min is a heuristic; one constant
+// so it's easy to tune.
+const LIKELY_SET_MS = 6 * 60 * 1000;
+const isLikelySet = (ms) => ms && ms > LIKELY_SET_MS;
+
 const useStyles = makeStyles((theme) => ({
   tile: {
     cursor: "pointer",
@@ -284,8 +291,25 @@ let SoundCloudLibrary = (props) => {
                   </TableCell>
                   <TableCell style={{ fontWeight: 600 }}>{t.title}</TableCell>
                   <TableCell>{t.user && t.user.username}</TableCell>
-                  <TableCell>{t.key_signature || "—"}</TableCell>
-                  <TableCell>{t.bpm || "—"}</TableCell>
+                  {isLikelySet(t.duration) ? (
+                    <TableCell colSpan={2}>
+                      <Chip
+                        size="small"
+                        label="Set · not analyzed"
+                        style={{
+                          backgroundColor: SC_ORANGE,
+                          color: "#fff",
+                          height: 20,
+                          fontWeight: 700,
+                        }}
+                      />
+                    </TableCell>
+                  ) : (
+                    <>
+                      <TableCell>{t.key_signature || "—"}</TableCell>
+                      <TableCell>{t.bpm || "—"}</TableCell>
+                    </>
+                  )}
                   <TableCell>{t.genre || "—"}</TableCell>
                   <TableCell style={{ whiteSpace: "nowrap" }}>
                     {fmtDuration(t.duration)}
