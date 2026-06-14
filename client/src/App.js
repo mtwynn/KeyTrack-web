@@ -40,6 +40,7 @@ import {
   Brightness4,
   Brightness7,
   Build,
+  Cloud,
   ExitToApp,
   GraphicEq,
   LibraryMusic,
@@ -64,7 +65,13 @@ import SpotifyIcon from './components/SpotifyIcon';
 import { makeAppTheme, THEME_STORAGE_KEY } from './theme';
 
 // Utils
-import { getHashParams, saveSpotifyHashParams } from './utils/utils';
+import {
+  getHashParams,
+  saveSpotifyHashParams,
+  getSoundcloudParams,
+  saveSoundcloudParams,
+  clearSoundcloudParams,
+} from './utils/utils';
 
 const spotifyWebApi = new Spotify();
 
@@ -77,6 +84,12 @@ let spotifyLoginEndpoint = isProduction
 let refreshTokenEndpoint = isProduction
   ? 'https://key-track2.herokuapp.com/refresh_token'
   : 'http://127.0.0.1:8888/refresh_token';
+
+// Backend base for the SoundCloud OAuth + proxy routes.
+let soundcloudBackend = isProduction
+  ? 'https://key-track2.herokuapp.com'
+  : 'http://127.0.0.1:8888';
+let soundcloudLoginEndpoint = soundcloudBackend + '/soundcloud/login';
 
 // Refresh the access token this many ms before it actually expires, so API
 // calls never hit a window where the token is dead.
@@ -125,6 +138,7 @@ class App extends React.Component {
 
     // TODO move this to different component lifecycle
     const spotifyParams = getHashParams('spotify', isProduction);
+    const soundcloudParams = getSoundcloudParams(isProduction);
 
     this.state = {
       openChangelog: false,
@@ -159,8 +173,18 @@ class App extends React.Component {
         uris: [],
         isPlaying: false,
       },
+      // SoundCloud connection (separate source; tokens managed like Spotify's).
+      soundcloud: {
+        connected: !!soundcloudParams.access_token,
+        access_token: soundcloudParams.access_token || '',
+        refresh_token: soundcloudParams.refresh_token || '',
+        expires_at: soundcloudParams.expires_at || null,
+      },
     };
 
+    this.connectSoundcloud = this.connectSoundcloud.bind(this);
+    this.disconnectSoundcloud = this.disconnectSoundcloud.bind(this);
+    this.refreshSoundcloudToken = this.refreshSoundcloudToken.bind(this);
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
     this.toggleTheme = this.toggleTheme.bind(this);
@@ -380,6 +404,53 @@ class App extends React.Component {
 
   exitHidden() {
     this.setState({ showHiddenCrates: false });
+  }
+
+  // --- SoundCloud connection ---
+  // Kick off the OAuth round-trip. Because SoundCloud allows a single redirect
+  // URI (registered to the backend), the handshake goes through the backend and
+  // returns here with sc_* params, which getSoundcloudParams() picks up on load.
+  connectSoundcloud() {
+    window.location.href = soundcloudLoginEndpoint;
+  }
+
+  disconnectSoundcloud() {
+    clearSoundcloudParams();
+    this.setState({
+      soundcloud: {
+        connected: false,
+        access_token: '',
+        refresh_token: '',
+        expires_at: null,
+      },
+    });
+  }
+
+  // Exchange the (single-use) refresh token for a fresh access token, persist
+  // the rotated refresh token, and return the new access token (or null).
+  async refreshSoundcloudToken() {
+    const { refresh_token } = this.state.soundcloud;
+    if (!refresh_token) return null;
+    try {
+      const res = await Axios.get(
+        soundcloudBackend +
+          '/soundcloud/refresh_token?refresh_token=' +
+          encodeURIComponent(refresh_token)
+      );
+      const next = {
+        access_token: res.data.access_token,
+        refresh_token: res.data.refresh_token || refresh_token,
+        expires_at: res.data.expires_in
+          ? Date.now() + Number(res.data.expires_in) * 1000
+          : null,
+      };
+      saveSoundcloudParams(next);
+      this.setState({ soundcloud: { connected: true, ...next } });
+      return next.access_token;
+    } catch (e) {
+      console.error('SoundCloud token refresh failed', e);
+      return null;
+    }
   }
 
   // Sidebar "Library": always lands on the full crate list (loading on first
@@ -931,6 +1002,28 @@ class App extends React.Component {
           <Divider />
 
           <List>
+            <ListItem
+              button
+              onClick={
+                this.state.soundcloud.connected
+                  ? this.disconnectSoundcloud
+                  : this.connectSoundcloud
+              }
+            >
+              <ListItemIcon>
+                <Cloud style={{ color: '#ff5500' }} />
+              </ListItemIcon>
+              <ListItemText
+                primary={
+                  this.state.soundcloud.connected
+                    ? 'SoundCloud connected'
+                    : 'Connect SoundCloud'
+                }
+                secondary={
+                  this.state.soundcloud.connected ? 'Tap to disconnect' : null
+                }
+              />
+            </ListItem>
             <ListItem>
               <ListItemIcon>
                 {isDark ? <Brightness7 /> : <Brightness4 />}

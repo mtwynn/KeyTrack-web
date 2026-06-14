@@ -36,6 +36,49 @@ export function saveSpotifyHashParams(hashParams: HashParams) {
   window.localStorage.setItem('spotify_hash_params', JSON.stringify(hashParams));
 }
 
+// --- SoundCloud ---
+// The backend hands SoundCloud tokens back as sc_* params (prefixed so they
+// never collide with Spotify's). Mirror the Spotify plumbing: prefer stored
+// creds, otherwise pick them up off the return URL and persist them.
+export function getSoundcloudParams(isProduction: boolean): HashParams {
+  const stored = JSON.parse(
+    window.localStorage.getItem('soundcloud_hash_params') ?? '{}'
+  );
+  if (stored.access_token && stored.refresh_token) {
+    return stored;
+  }
+  const source = isProduction
+    ? new URLSearchParams(new URL(window.location.href).search)
+    : new URLSearchParams(window.location.hash.substring(1));
+  const access_token = source.get('sc_access_token') ?? '';
+  const refresh_token = source.get('sc_refresh_token') ?? '';
+  const expires_in = source.get('sc_expires_in');
+  const params: HashParams = {
+    access_token,
+    refresh_token,
+    expires_at: expires_in
+      ? Date.now() + Number(expires_in) * 1000
+      : undefined,
+  };
+  if (access_token && refresh_token) {
+    window.localStorage.setItem(
+      'soundcloud_hash_params',
+      JSON.stringify(params)
+    );
+  }
+  return params;
+}
+
+// Persist refreshed SoundCloud creds (refresh tokens are single-use, so the
+// rotated one must be saved every refresh).
+export function saveSoundcloudParams(params: HashParams) {
+  window.localStorage.setItem('soundcloud_hash_params', JSON.stringify(params));
+}
+
+export function clearSoundcloudParams() {
+  window.localStorage.removeItem('soundcloud_hash_params');
+}
+
 function getAndSetSpotifyHashParamsFromUrlLocal() {
   let hashParams: any = {
     access_token: '',
