@@ -70,6 +70,7 @@ Top-level, **shared across users** (it's analysis of public tracks). Check here 
 
 ### The analysis worker (single FIFO queue)
 Per track:
+0. **Skip likely DJ sets/mixes.** A single track's key/BPM is meaningful; a 60-minute mix's isn't (it wanders across many keys/tempos). So **exclude tracks longer than ~6 minutes** (`LIKELY_SET_MS = 6 * 60 * 1000`) from analysis — never auto-analyze them, skip them in "Analyze Crate," and flag them in the UI as a **"Set"** instead of showing a (meaningless) detected key/BPM. (~6 min is a heuristic; keep the threshold a single constant so it's easy to tune.)
 1. **Cache hit?** `scAnalysis/{urn}` exists → return it. Done.
 2. `GET /tracks/{urn}/streams` → HLS/AAC URL (counts as 1 "play" — fine at personal scale).
 3. **ffmpeg decode** → mono PCM, downsampled (≈22 kHz is plenty for key/BPM). *Optimization: analyze a representative ~60–90s segment (skip intro/outro) for speed.*
