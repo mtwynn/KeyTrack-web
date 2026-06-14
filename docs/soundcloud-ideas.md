@@ -169,6 +169,8 @@ One analysis at a time keeps it simple and is plenty for a solo user.
 
 - **Phase 0 — Foundation:** SoundCloud OAuth + backend proxy; read likes/playlists/reposts as crates; source badges; embed-Widget playback. *(No analysis yet — display artist-entered data where present.)*
 - **Phase 1 — The headline:** server-side key/BPM analysis (on-demand single track) + persisted shared cache + Camelot normalization + harmonic highlighting. Likely the true **MVP**.
+
+> 📋 **Phase 0 + Phase 1 are now scoped in detail → [`soundcloud-mvp.md`](./soundcloud-mvp.md)** (architecture, auth, data model, endpoints, the analysis worker/queue, UX, risks, and a ticket-sized build order).
 - **Phase 2 — Analyze Crate:** background/queue job + progress UI + throttling against the quota.
 - **Phase 3 — Native + digging:** waveform, reposts feed, free-download/buy links, edits/bootlegs finder, cross-SoundCloud harmonic search.
 - **Phase 4 — Unification:** unified library + cross-platform Set Builder + Spotify⇄SoundCloud bridge.
