@@ -345,5 +345,123 @@ app.get('/soundcloud/refresh_token', function (req, res) {
   });
 });
 
+// ---------------------------------------------------------------------------
+// SoundCloud API proxy
+//
+// The frontend never calls api.soundcloud.com directly — it goes through here
+// so the backend can attach the user's token (SoundCloud uses the unusual
+// `Authorization: OAuth <token>` header, not Bearer), keep the secret server
+// side, and add CORS. Pass the access token as an `access_token` query param
+// or an `Authorization` header. ToS attribution (uploader + SoundCloud +
+// permalink backlink) is the frontend's job when it renders this data.
+// ---------------------------------------------------------------------------
+const SC_API = 'https://api.soundcloud.com';
+
+const scToken = (req) => {
+  const h = req.headers.authorization;
+  if (h && h.indexOf('OAuth ') === 0) return h.slice(6);
+  if (h && h.indexOf('Bearer ') === 0) return h.slice(7);
+  return req.query.access_token || null;
+};
+
+// Forward a GET to the SoundCloud API with the user's token + linked
+// partitioning, and relay the JSON response (status + body) straight back.
+const scApiGet = (res, token, path, query) => {
+  request.get(
+    {
+      url: SC_API + path,
+      qs: Object.assign({ linked_partitioning: 1, limit: 50 }, query || {}),
+      headers: {
+        Authorization: 'OAuth ' + token,
+        accept: 'application/json; charset=utf-8',
+      },
+      json: true,
+    },
+    function (error, response, body) {
+      if (error) {
+        console.error('SoundCloud proxy error', path, error);
+        return res.status(502).send({ error: 'soundcloud_proxy_error' });
+      }
+      res.status(response.statusCode).send(body);
+    }
+  );
+};
+
+// Wrap a proxy route so every one shares the same missing-token guard.
+const scRoute = (build) => (req, res) => {
+  const token = scToken(req);
+  if (!token) return res.status(401).send({ error: 'missing_access_token' });
+  build(req, res, token);
+};
+
+// The signed-in user + their crates (sets / liked tracks / reposts).
+app.get('/soundcloud/me', scRoute((req, res, t) => scApiGet(res, t, '/me')));
+app.get(
+  '/soundcloud/me/playlists',
+  scRoute((req, res, t) => scApiGet(res, t, '/me/playlists'))
+);
+app.get(
+  '/soundcloud/me/likes/tracks',
+  scRoute((req, res, t) => scApiGet(res, t, '/me/likes/tracks'))
+);
+app.get(
+  '/soundcloud/me/reposts',
+  scRoute((req, res, t) => scApiGet(res, t, '/me/reposts/tracks'))
+);
+
+// Tracks inside one playlist/set.
+app.get(
+  '/soundcloud/playlists/:urn/tracks',
+  scRoute((req, res, t) =>
+    scApiGet(res, t, '/playlists/' + req.params.urn + '/tracks')
+  )
+);
+
+// Search tracks (q + SoundCloud's native bpm/genre/tag filters).
+app.get(
+  '/soundcloud/search',
+  scRoute((req, res, t) => {
+    const q = {};
+    if (req.query.q) q.q = req.query.q;
+    if (req.query.genres) q.genres = req.query.genres;
+    if (req.query.tags) q.tags = req.query.tags;
+    if (req.query.bpm_from) q['bpm[from]'] = req.query.bpm_from;
+    if (req.query.bpm_to) q['bpm[to]'] = req.query.bpm_to;
+    scApiGet(res, t, '/tracks', q);
+  })
+);
+
+// Resolve a permalink / secret share link to its API resource.
+app.get(
+  '/soundcloud/resolve',
+  scRoute((req, res, t) => scApiGet(res, t, '/resolve', { url: req.query.url }))
+);
+
+// Follow a `next_href` from a linked-partitioning response (pagination).
+// Only api.soundcloud.com URLs are allowed.
+app.get(
+  '/soundcloud/next',
+  scRoute((req, res, t) => {
+    const href = req.query.href || '';
+    if (href.indexOf(SC_API) !== 0) {
+      return res.status(400).send({ error: 'invalid_next_href' });
+    }
+    request.get(
+      {
+        url: href,
+        headers: {
+          Authorization: 'OAuth ' + t,
+          accept: 'application/json; charset=utf-8',
+        },
+        json: true,
+      },
+      function (error, response, body) {
+        if (error) return res.status(502).send({ error: 'soundcloud_proxy_error' });
+        res.status(response.statusCode).send(body);
+      }
+    );
+  })
+);
+
 console.log('Listening on 8888');
 app.listen(process.env.PORT || 8888);
