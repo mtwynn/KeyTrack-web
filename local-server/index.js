@@ -15,11 +15,15 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express'); // Express web server framework
 const request = require('request'); // "Request" library
 const cors = require('cors');
+const crypto = require('crypto'); // PKCE for SoundCloud OAuth 2.1
 const querystring = require('querystring');
 const cookieParser = require('cookie-parser');
 
 const spotify_client_id = process.env.SPOTIFY_ID; // Your client id
 const spotify_client_secret = process.env.SPOTIFY_SECRET; // Your secret
+
+const soundcloud_client_id = process.env.SOUNDCLOUD_ID;
+const soundcloud_client_secret = process.env.SOUNDCLOUD_SECRET;
 
 const isProduction = process.env.NODE_ENV === 'production';
 const redirect_uri = isProduction
@@ -27,6 +31,18 @@ const redirect_uri = isProduction
   // Spotify rejects http://localhost as an "Insecure" redirect URI; the
   // explicit loopback IP is required for local development.
   : 'http://127.0.0.1:8888/callback';
+
+// SoundCloud uses its own callback path so it never collides with Spotify's
+// /callback. Only ONE redirect URI can be registered on the SoundCloud app at
+// a time, so we flip the registered value between these when deploying.
+const soundcloud_redirect_uri = isProduction
+  ? 'https://key-track2.herokuapp.com/soundcloud/callback'
+  : 'http://127.0.0.1:8888/soundcloud/callback';
+
+// Where to hand the tokens back to the frontend after the OAuth round-trip.
+const frontend_return = isProduction
+  ? 'https://key-track.netlify.app/?'
+  : 'http://localhost:3000/#';
 
 /**
  * Generates a random string containing numbers and letters,
@@ -196,6 +212,132 @@ app.get('/refresh_token', function (req, res) {
       res
         .status(response && response.statusCode ? response.statusCode : 500)
         .send({ error: 'could_not_refresh_token' });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SoundCloud OAuth 2.1 (Authorization Code + PKCE)
+//
+// Unlike Spotify, SoundCloud requires PKCE: we generate a random code_verifier,
+// send its SHA-256 challenge on /authorize, then send the verifier back on the
+// token exchange. Access tokens last ~1h and refresh tokens are SINGLE-USE
+// (each refresh returns a new one), so the client must persist the rotated
+// refresh token every time. Token host is secure.soundcloud.com.
+// ---------------------------------------------------------------------------
+const SOUNDCLOUD_STATE_KEY = 'soundcloud_auth_state';
+const SOUNDCLOUD_VERIFIER_KEY = 'soundcloud_code_verifier';
+const SOUNDCLOUD_TOKEN_URL = 'https://secure.soundcloud.com/oauth/token';
+
+const base64url = (buf) =>
+  buf
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+const generateCodeVerifier = () => base64url(crypto.randomBytes(64));
+const codeChallengeFromVerifier = (verifier) =>
+  base64url(crypto.createHash('sha256').update(verifier).digest());
+
+// Basic auth header for the SoundCloud token endpoint (client is confidential).
+const soundcloudBasicAuth = () =>
+  'Basic ' +
+  Buffer.from(
+    soundcloud_client_id + ':' + soundcloud_client_secret
+  ).toString('base64');
+
+app.get('/soundcloud/login', function (req, res) {
+  const state = generateRandomString(16);
+  const codeVerifier = generateCodeVerifier();
+  res.cookie(SOUNDCLOUD_STATE_KEY, state);
+  res.cookie(SOUNDCLOUD_VERIFIER_KEY, codeVerifier);
+
+  res.redirect(
+    'https://secure.soundcloud.com/authorize?' +
+      querystring.stringify({
+        client_id: soundcloud_client_id,
+        redirect_uri: soundcloud_redirect_uri,
+        response_type: 'code',
+        code_challenge: codeChallengeFromVerifier(codeVerifier),
+        code_challenge_method: 'S256',
+        state: state,
+      })
+  );
+});
+
+app.get('/soundcloud/callback', function (req, res) {
+  const code = req.query.code || null;
+  const state = req.query.state || null;
+  const storedState = req.cookies ? req.cookies[SOUNDCLOUD_STATE_KEY] : null;
+  const codeVerifier = req.cookies
+    ? req.cookies[SOUNDCLOUD_VERIFIER_KEY]
+    : null;
+
+  if (state === null || state !== storedState) {
+    return res.redirect(
+      frontend_return + querystring.stringify({ error: 'sc_state_mismatch' })
+    );
+  }
+  res.clearCookie(SOUNDCLOUD_STATE_KEY);
+  res.clearCookie(SOUNDCLOUD_VERIFIER_KEY);
+
+  const authOptions = {
+    url: SOUNDCLOUD_TOKEN_URL,
+    headers: { Authorization: soundcloudBasicAuth() },
+    form: {
+      grant_type: 'authorization_code',
+      redirect_uri: soundcloud_redirect_uri,
+      code_verifier: codeVerifier,
+      code: code,
+    },
+    json: true,
+  };
+
+  request.post(authOptions, function (error, response, body) {
+    if (!error && response.statusCode === 200) {
+      res.redirect(
+        302,
+        frontend_return +
+          querystring.stringify({
+            sc_access_token: body.access_token,
+            sc_refresh_token: body.refresh_token,
+            sc_expires_in: body.expires_in,
+          })
+      );
+    } else {
+      console.error('SoundCloud token exchange failed', body);
+      res.redirect(
+        frontend_return +
+          querystring.stringify({ error: 'sc_invalid_token' })
+      );
+    }
+  });
+});
+
+app.get('/soundcloud/refresh_token', function (req, res) {
+  const refresh_token = req.query.refresh_token;
+  const authOptions = {
+    url: SOUNDCLOUD_TOKEN_URL,
+    headers: { Authorization: soundcloudBasicAuth() },
+    form: {
+      grant_type: 'refresh_token',
+      refresh_token: refresh_token,
+    },
+    json: true,
+  };
+
+  request.post(authOptions, function (error, response, body) {
+    if (!error && response.statusCode === 200) {
+      // Refresh tokens are single-use — the client MUST persist the new one.
+      res.send({
+        access_token: body.access_token,
+        expires_in: body.expires_in,
+        refresh_token: body.refresh_token,
+      });
+    } else {
+      res
+        .status(response && response.statusCode ? response.statusCode : 500)
+        .send({ error: 'could_not_refresh_soundcloud_token' });
     }
   });
 });
