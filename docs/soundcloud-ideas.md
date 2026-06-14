@@ -61,8 +61,8 @@ Two tiers:
   **Why DB:** analysis is CPU-heavy *and* burns the precious play quota. A shared cache means a track is only ever analyzed once for the whole app — user B reuses user A's result for free, without re-spending quota. This is the key mitigation for the rate cap.
 - **ToS note:** derived BPM/key numbers are *our computed output*, not a copy of their audio/content — defensible vs. the "session-only caching" clause (which targets *their* content). Worth a careful read before shipping; conservative fallback is to store derived data + minimal identifiers only.
 
-### Open feasibility questions (see §6)
-Where analysis runs (Heroku worker vs. managed service vs. on-demand only), which engine (WASM keyfinder/essentia vs. ffmpeg+native vs. 3rd-party API), and the multi-user quota math.
+### Resolved (see §6)
+Engine = `libKeyFinder` (key) + a permissive JS BPM lib; runs server-side as an async background job (Heroku now, container host if it strains); scale is personal so the quota is a non-issue.
 
 ---
 
@@ -130,16 +130,21 @@ Tags: ✅ straightforward · ⚠️ needs our analysis engine · 🔶 ToS/archit
 All the round-1 open questions are now answered:
 
 1. **Scale = personal (1 user, maybe up to ~5).** Possible future scaling is a *very* far-off conversation. → The **15k plays/24h cap is a non-issue** solo (even Analyze-Crate on the biggest ~882-track crate = ~882 plays). Persisting derived analysis is fine.
-2. **Analysis engine = self-hosted Essentia** (pipeline: `ffmpeg` decodes the HLS/AAC stream → **Essentia** computes key + BPM). **Free** (compute only), does both, no external dependency, no per-track cost. Accuracy to expect: **BPM ~90–98%** on 4/4 dance (main failure = half/double-time → constrain range + auto-correct); **Key ~70–85% exact** ("sometimes off by a relative or a fifth" — hence the artist-vs-detected + confidence + mismatch UX). Optional later: a paid API (Cyanite.ai / Music.ai) if we want energy/mood/chords/stems on the SC side too.
+2. **Analysis engine = self-hosted `libKeyFinder` (key) + a permissive JS BPM lib** (pipeline: `ffmpeg` decodes the HLS/AAC stream → **libKeyFinder** computes key, **web-audio-beat-detector** / **realtime-bpm-analyzer** computes BPM). **Free** (compute only), purpose-built for each job, no per-track cost. Accuracy to expect: **BPM ~90–98%** on 4/4 dance (main failure = half/double-time → constrain range + auto-correct); **Key ~70–85% exact** ("sometimes off by a relative or a fifth" — hence the artist-vs-detected + confidence + mismatch UX).
 
-   | Engine | Cost | Key | BPM | Notes |
-   |---|---|---|---|---|
-   | **Essentia (self-host)** ⭐ | Free | ✅ | ✅ | Open-source gold standard; chosen |
-   | libKeyFinder + JS BPM | Free | ✅ great | ✅ good | Two libs to wire |
-   | aubio | Free | ⚠️ weak | ✅ strong | Skip for key |
-   | Cyanite.ai | Paid (small free tier) | ✅ | ✅ +mood/energy | External; "vibe" extras |
-   | Music.ai (Moises) | Paid/min | ✅ | ✅ +chords/stems | If we want stems later |
-   | GetSongBPM / Tunebat | Free (attribution) | lookup | lookup | DB lookup, poor underground coverage |
+   **Why this over Essentia (the licensing call):** Essentia/essentia.js is one library that does both, but it's **AGPL-3.0** — for a hosted web app that means **relicensing all of KeyTrack from MIT → AGPL** + a prominent in-app source link (AGPL §13 network-use clause). `libKeyFinder` is **plain GPL-3.0**: running it server-side to serve users is *not* "distribution," so it imposes **no relicensing or source-disclosure obligation** on a hosted app, and the JS BPM libs are fully permissive (**MIT** / **Apache-2.0**). So the libKeyFinder + JS combo keeps KeyTrack's license clean. Trade-off accepted: two libs to wire instead of one (libKeyFinder is C++ → native addon or a small sidecar).
+
+   | Engine | Cost | Key | BPM | Licensing | Notes |
+   |---|---|---|---|---|---|
+   | **libKeyFinder + JS BPM** ⭐ chosen | Free (compute) | ✅ (Mixxx's lib) | ✅ (MIT/Apache JS) | **GPL (key, server-side) + permissive (BPM)** — no app relicense | Two libs to wire; cleanest licensing |
+   | Essentia / essentia.js | Free (compute) | ✅ | ✅ +energy/vibe | **AGPL-3.0** → whole app must go AGPL (or pay UPF) | One lib, does all; rejected on licensing |
+   | aubio | Free | ⚠️ weak | ✅ strong | GPL | Skip for key |
+   | **Music.ai** (Moises) | **PAYG, ~$0.21/3-min track** (BPM $0.03/min + key via Chords $0.04/min); or $25/mo Pro | ✅ ("root key") | ✅ | proprietary API | Self-serve, transparent. The "don't host it" escape hatch; one-time cost since we cache |
+   | Cyanite.ai | **5 songs/mo free; beyond = opaque, catalog-size custom quote / contact-sales** | ✅ | ✅ +mood/genre/energy | proprietary API | Richest tags but built for label catalogs, not hobby apps |
+   | **GetSongBPM** (lookup) | Free, **mandatory backlink**, 3k req/hr | ✅ (+open-key) | ✅ | attribution | Mainstream-only DB (~6M); **misses SoundCloud underground** → optional free first-pass only |
+   | Tunebat (lookup) | No official API (enterprise via Songstats); unofficial scrape only | ✅ +Camelot | ✅ | scraping = ToS risk, stale Spotify data | **Avoid** |
+
+   **Optional optimization:** for tracks that are also mainstream, try a free **GetSongBPM** lookup first (with the required backlink) before spending compute — but it won't cover bootlegs/edits/unreleased, so self-analysis stays the core.
 
 3. **Playback = official embed Widget for now** (sidesteps streaming licensing + the play cap + HLS complexity). Native in-app player is a *later* workshop item; its caveats: each play hits `/streams` (counts against 15k/day), in-browser HLS handling, short-lived auth'd URLs (backend-refreshed), and `access`-gated tracks (`preview`/`blocked` by geo/rights). **Note: analysis still needs `/streams`** regardless of playback choice.
 4. **Persisting derived analysis: confirmed yes** (solo app; it's our computed data, not their audio).
@@ -156,7 +161,7 @@ One analysis at a time keeps it simple and is plenty for a solo user.
 ## 6c. Infrastructure note (Heroku)
 
 - The backend's **`heroku-22` stack is deprecated** (builds start failing Nov 2026, escalating through 2027). **Immediate fix, independent of SoundCloud:** `heroku stack:set heroku-24 -a key-track2` then redeploy.
-- The audio analysis is CPU/RAM-heavy and Heroku has a **30s web-request timeout** + small dynos — fine **because analysis runs as an async background job** (HTTP returns "queued" instantly; frontend polls). If the dyno strains, move analysis to a small **containerized service (Fly.io / Render)** with `ffmpeg` + Essentia baked into the image (cleaner than native libs on Heroku buildpacks; cheap/free tiers). Not needed for MVP.
+- The audio analysis is CPU/RAM-heavy and Heroku has a **30s web-request timeout** + small dynos — fine **because analysis runs as an async background job** (HTTP returns "queued" instantly; frontend polls). If the dyno strains, move analysis to a small **containerized service (Fly.io / Render)** with `ffmpeg` + `libKeyFinder` baked into the image (cleaner than building native libs on Heroku buildpacks; cheap/free tiers). Not needed for MVP.
 
 ---
 
