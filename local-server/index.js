@@ -239,12 +239,11 @@ const generateCodeVerifier = () => base64url(crypto.randomBytes(64));
 const codeChallengeFromVerifier = (verifier) =>
   base64url(crypto.createHash('sha256').update(verifier).digest());
 
-// Basic auth header for the SoundCloud token endpoint (client is confidential).
-const soundcloudBasicAuth = () =>
-  'Basic ' +
-  Buffer.from(
-    soundcloud_client_id + ':' + soundcloud_client_secret
-  ).toString('base64');
+// Headers for the SoundCloud token endpoint. For the authorization_code and
+// refresh_token grants, SoundCloud expects client_id + client_secret in the
+// request BODY (Basic auth is only for the client_credentials grant), so we
+// just ask for a JSON response here.
+const soundcloudTokenHeaders = { accept: 'application/json; charset=utf-8' };
 
 app.get('/soundcloud/login', function (req, res) {
   const state = generateRandomString(16);
@@ -283,9 +282,11 @@ app.get('/soundcloud/callback', function (req, res) {
 
   const authOptions = {
     url: SOUNDCLOUD_TOKEN_URL,
-    headers: { Authorization: soundcloudBasicAuth() },
+    headers: soundcloudTokenHeaders,
     form: {
       grant_type: 'authorization_code',
+      client_id: soundcloud_client_id,
+      client_secret: soundcloud_client_secret,
       redirect_uri: soundcloud_redirect_uri,
       code_verifier: codeVerifier,
       code: code,
@@ -318,9 +319,11 @@ app.get('/soundcloud/refresh_token', function (req, res) {
   const refresh_token = req.query.refresh_token;
   const authOptions = {
     url: SOUNDCLOUD_TOKEN_URL,
-    headers: { Authorization: soundcloudBasicAuth() },
+    headers: soundcloudTokenHeaders,
     form: {
       grant_type: 'refresh_token',
+      client_id: soundcloud_client_id,
+      client_secret: soundcloud_client_secret,
       refresh_token: refresh_token,
     },
     json: true,
