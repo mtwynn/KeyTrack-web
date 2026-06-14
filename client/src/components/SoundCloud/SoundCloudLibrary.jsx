@@ -25,6 +25,7 @@ import {
   Repeat,
   ArrowBack,
   OpenInNew,
+  PlayArrow,
 } from "@material-ui/icons";
 
 // SoundCloud's brand orange — used for the source badge so SoundCloud crates
@@ -111,6 +112,8 @@ let SoundCloudLibrary = (props) => {
   // Crate-detail view: the opened crate + its tracks (null while loading).
   const [opened, setOpened] = React.useState(null);
   const [tracks, setTracks] = React.useState(null);
+  // The track currently loaded into the embedded SoundCloud Widget player.
+  const [playing, setPlaying] = React.useState(null);
 
   // Call the backend proxy with the SoundCloud token. On a 401 (expired access
   // token) refresh once and retry, mirroring the Spotify session handling.
@@ -162,6 +165,29 @@ let SoundCloudLibrary = (props) => {
   const closeCrate = () => {
     setOpened(null);
     setTracks(null);
+    setPlaying(null);
+  };
+
+  // SoundCloud's sanctioned HTML5 Widget (iframe) — ToS-compliant playback with
+  // no OAuth. Public tracks resolve from the permalink; PRIVATE tracks need
+  // their secret (secret_uri, or the permalink with a secret_token) or the
+  // widget 403s.
+  const widgetSrc = (track) => {
+    let url = track.permalink_url || track.uri;
+    if (track.sharing === "private") {
+      if (track.secret_uri) {
+        url = track.secret_uri;
+      } else if (track.secret_token) {
+        const base = track.permalink_url || track.uri;
+        url = base + (base.indexOf("?") >= 0 ? "&" : "?") +
+          "secret_token=" + track.secret_token;
+      }
+    }
+    return (
+      "https://w.soundcloud.com/player/?url=" +
+      encodeURIComponent(url) +
+      "&color=%23ff5500&auto_play=true&show_comments=false&visual=false"
+    );
   };
 
   React.useEffect(() => {
@@ -255,6 +281,21 @@ let SoundCloudLibrary = (props) => {
           </Typography>
         </Box>
 
+        {playing && (
+          <Box style={{ marginBottom: 12 }}>
+            <iframe
+              title="SoundCloud player"
+              width="100%"
+              height="120"
+              scrolling="no"
+              frameBorder="no"
+              allow="autoplay"
+              src={widgetSrc(playing)}
+              style={{ borderRadius: 8 }}
+            />
+          </Box>
+        )}
+
         {!tracks ? (
           <Box style={{ padding: 48, textAlign: "center" }}>
             <CircularProgress style={{ color: SC_ORANGE }} />
@@ -278,16 +319,50 @@ let SoundCloudLibrary = (props) => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {tracks.map((t) => (
-                <TableRow key={t.urn || t.id} hover>
+              {tracks.map((t) => {
+                const tid = t.urn || t.id;
+                const isPlaying = playing && (playing.urn || playing.id) === tid;
+                return (
+                <TableRow
+                  key={tid}
+                  hover
+                  style={
+                    isPlaying ? { backgroundColor: "rgba(255,85,0,0.08)" } : undefined
+                  }
+                >
                   <TableCell style={{ width: 48 }}>
-                    <Avatar
-                      variant="rounded"
-                      src={t.artwork_url}
-                      style={{ width: 36, height: 36 }}
+                    <IconButton
+                      size="small"
+                      onClick={() => setPlaying(t)}
+                      title="Play on SoundCloud"
+                      style={{ padding: 2 }}
                     >
-                      <MusicNote />
-                    </Avatar>
+                      <Box style={{ position: "relative" }}>
+                        <Avatar
+                          variant="rounded"
+                          src={t.artwork_url}
+                          style={{ width: 36, height: 36 }}
+                        >
+                          <MusicNote />
+                        </Avatar>
+                        <Box
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "rgba(0,0,0,0.35)",
+                            borderRadius: 4,
+                          }}
+                        >
+                          <PlayArrow style={{ color: "#fff", fontSize: 20 }} />
+                        </Box>
+                      </Box>
+                    </IconButton>
                   </TableCell>
                   <TableCell style={{ fontWeight: 600 }}>{t.title}</TableCell>
                   <TableCell>{t.user && t.user.username}</TableCell>
@@ -326,7 +401,8 @@ let SoundCloudLibrary = (props) => {
                     </IconButton>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}
