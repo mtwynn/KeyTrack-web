@@ -981,7 +981,7 @@ let PLLibrary = (props) => {
               style={{ display: "inline-flex" }}
             >
               {meta.favorite ? (
-                <Star style={{ color: "#1ED760" }} fontSize="small" />
+                <Star style={{ color: accent }} fontSize="small" />
               ) : (
                 <StarBorder style={{ color: "#fff" }} fontSize="small" />
               )}
@@ -1013,6 +1013,7 @@ let PLLibrary = (props) => {
               label={`${crate.trackCount} tracks`}
               size="small"
               className={classes.trackChip}
+              style={{ backgroundColor: accent }}
               icon={<MusicNote style={{ color: "#fff" }} />}
             />
             {(meta.genres || []).map((g) => (
@@ -1046,7 +1047,7 @@ let PLLibrary = (props) => {
           >
             <VisibilityOff
               fontSize="small"
-              style={{ color: meta.hidden ? "#1ED760" : undefined }}
+              style={{ color: meta.hidden ? accent : undefined }}
             />
           </IconButton>
           <Box style={{ flex: 1 }} />
@@ -1061,7 +1062,7 @@ let PLLibrary = (props) => {
             }}
             title="Open crate for digging"
             aria-label="open crate"
-            style={{ textTransform: "none", fontWeight: 600 }}
+            style={{ textTransform: "none", fontWeight: 600, color: accent }}
           >
             Open
           </Button>
