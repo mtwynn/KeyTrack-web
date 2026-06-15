@@ -473,6 +473,8 @@ app.get(
 // ---------------------------------------------------------------------------
 const ANALYSIS_SERVICE_URL =
   process.env.ANALYSIS_SERVICE_URL || 'http://127.0.0.1:8899';
+// Shared secret so only this backend can call the (public) analysis service.
+const ANALYSIS_SECRET = process.env.ANALYSIS_SECRET || '';
 const LIKELY_SET_MS = 6 * 60 * 1000;
 
 app.get(
@@ -504,6 +506,7 @@ app.get(
         request.post(
           {
             url: ANALYSIS_SERVICE_URL + '/analyze',
+            headers: { 'x-analysis-secret': ANALYSIS_SECRET },
             json: {
               audioUrl,
               authHeader: 'OAuth ' + token,
