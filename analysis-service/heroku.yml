@@ -1,0 +1,9 @@
+# Heroku container deploy for the analysis microservice.
+# The app uses the `container` stack and builds this directory's Dockerfile
+# remotely (no local Docker needed). Deploy by pushing just this subdir as the
+# app root, e.g.:
+#   git subtree push --prefix analysis-service heroku-analysis main
+# Heroku injects $PORT at runtime; server.js binds to it.
+build:
+  docker:
+    web: Dockerfile
