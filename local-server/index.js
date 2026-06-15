@@ -463,5 +463,67 @@ app.get(
   })
 );
 
+// ---------------------------------------------------------------------------
+// SoundCloud key/BPM analysis
+//
+// SoundCloud has no audio-analysis API, so we compute it ourselves: resolve the
+// track's stream URL, then hand it (with the user's token) to the analysis
+// microservice, which downloads + decodes + runs keyfinder-cli + bpm-tools.
+// The service is a separate container; in dev it runs on localhost:8899.
+// ---------------------------------------------------------------------------
+const ANALYSIS_SERVICE_URL =
+  process.env.ANALYSIS_SERVICE_URL || 'http://127.0.0.1:8899';
+const LIKELY_SET_MS = 6 * 60 * 1000;
+
+app.get(
+  '/soundcloud/analyze',
+  scRoute((req, res, token) => {
+    const trackId = req.query.track_id || req.query.urn;
+    const durationMs = req.query.duration ? Number(req.query.duration) : 0;
+    const genre = req.query.genre || '';
+    if (!trackId) return res.status(400).send({ error: 'track_id required' });
+    // Skip likely DJ sets without touching the stream/quota.
+    if (durationMs && durationMs > LIKELY_SET_MS) {
+      return res.send({ isLikelySet: true });
+    }
+    // 1) resolve the playable stream URL
+    request.get(
+      {
+        url: SC_API + '/tracks/' + encodeURIComponent(trackId) + '/streams',
+        headers: { Authorization: 'OAuth ' + token, accept: 'application/json' },
+        json: true,
+      },
+      function (err, r, streams) {
+        if (err || !streams) {
+          return res.status(502).send({ error: 'stream_lookup_failed' });
+        }
+        const audioUrl =
+          streams.http_mp3_128_url || streams.hls_aac_160_url || null;
+        if (!audioUrl) return res.status(422).send({ error: 'no_stream' });
+        // 2) hand it to the analysis service
+        request.post(
+          {
+            url: ANALYSIS_SERVICE_URL + '/analyze',
+            json: {
+              audioUrl,
+              authHeader: 'OAuth ' + token,
+              durationMs,
+              genre,
+            },
+            timeout: 60000,
+          },
+          function (e2, r2, result) {
+            if (e2 || !r2 || r2.statusCode !== 200) {
+              console.error('analysis service error', e2 && e2.message, r2 && r2.statusCode);
+              return res.status(502).send({ error: 'analysis_failed' });
+            }
+            res.send(result);
+          }
+        );
+      }
+    );
+  })
+);
+
 console.log('Listening on 8888');
 app.listen(process.env.PORT || 8888);
