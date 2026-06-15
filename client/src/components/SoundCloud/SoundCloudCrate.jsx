@@ -16,6 +16,7 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
+  TablePagination,
   Typography,
   withStyles,
 } from "@material-ui/core";
@@ -31,6 +32,7 @@ import {
 
 import { camelotColor } from "../../utils/harmonic";
 import { getScAnalysis, saveScAnalysis } from "../../utils/scAnalysis";
+import { fetchScTracks } from "../../utils/soundcloudCrates";
 
 // SoundCloud's brand orange — keeps SoundCloud crates visually distinct from
 // Spotify's green (strict source separation).
@@ -88,6 +90,9 @@ let SoundCloudCrate = (props) => {
   // Within-crate search + column sort (parity with the Spotify track table).
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState({ col: null, dir: "asc" });
+  // Render only the current page of rows (parity with the Spotify track view).
+  const [page, setPage] = React.useState(0);
+  const [rowsPerPage, setRowsPerPage] = React.useState(100);
 
   // Call the backend proxy with the SoundCloud token. On a 401 (expired access
   // token) refresh once and retry, mirroring the Spotify session handling.
@@ -193,10 +198,9 @@ let SoundCloudCrate = (props) => {
         : "/soundcloud/playlists/" + encodeURIComponent(crate.id) + "/tracks";
     (async () => {
       try {
-        const data = await scFetch(path);
-        const list = data && data.collection ? data.collection : Array.isArray(data) ? data : [];
-        // Likes/reposts come back as { track: {...} } wrappers on some endpoints.
-        if (!cancelled) setTracks(list.map((t) => (t && t.track ? t.track : t)).filter(Boolean));
+        // Follow pagination so the whole crate loads, not just the first 50.
+        const list = await fetchScTracks(scFetch, path);
+        if (!cancelled) setTracks(list);
       } catch (e) {
         console.error("Failed to load SoundCloud crate", e);
         if (!cancelled) setTracks([]);
@@ -279,6 +283,13 @@ let SoundCloudCrate = (props) => {
         ? { col, dir: s.dir === "asc" ? "desc" : "asc" }
         : { col, dir: "asc" }
     );
+
+  // Only the current page is rendered into the DOM (search/sort still run over
+  // the whole crate). Snap back to page 1 whenever the result set changes.
+  React.useEffect(() => {
+    setPage(0);
+  }, [search, sort, props.hideSets, crate]);
+  const pagedView = view.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     // paddingBottom clears the fixed bottom player bar so the last rows /
@@ -422,7 +433,7 @@ let SoundCloudCrate = (props) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {view.map((t) => {
+            {pagedView.map((t) => {
               const tid = t.urn || t.id;
               const isPlaying = playing && (playing.urn || playing.id) === tid;
               const a = analysis[tid];
@@ -544,6 +555,22 @@ let SoundCloudCrate = (props) => {
             })}
           </TableBody>
         </Table>
+      )}
+
+      {tracks && view.length > 50 && (
+        <TablePagination
+          component="div"
+          count={view.length}
+          page={page}
+          onChangePage={(e, p) => setPage(p)}
+          rowsPerPage={rowsPerPage}
+          onChangeRowsPerPage={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+          rowsPerPageOptions={[50, 100, 200]}
+          labelRowsPerPage="Tracks per page"
+        />
       )}
 
       <Typography

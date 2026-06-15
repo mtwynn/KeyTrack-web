@@ -66,6 +66,13 @@ async function fetchAllPages(scFetch, path) {
   return items;
 }
 
+// Load a crate's FULL track list (all pages), normalizing { track: {...} }
+// wrappers (likes/reposts return those) into plain track objects.
+export async function fetchScTracks(scFetch, path) {
+  const items = await fetchAllPages(scFetch, path);
+  return items.map((t) => (t && t.track ? t.track : t)).filter(Boolean);
+}
+
 // Fetch the user's SoundCloud crates: Liked Tracks + Reposts as virtual crates
 // (artwork from the first track) plus their playlists/sets. Returns a plain
 // array of crate descriptors:
@@ -92,6 +99,9 @@ export async function fetchSoundcloudCrates(scFetch) {
       name: "Liked Tracks",
       owner: "Your likes",
       count: likeTracks.length,
+      // We only fetch the first page for the tile; there may be more (the full
+      // list loads when the crate is opened).
+      more: !!(likes && likes.next_href),
       nonSetCount: countNonSets(likeTracks),
       artwork: bigArtwork(likeTracks[0] && likeTracks[0].artwork_url),
     });
@@ -103,6 +113,7 @@ export async function fetchSoundcloudCrates(scFetch) {
       name: "Reposts",
       owner: "Your reposts",
       count: repostTracks.length,
+      more: !!(reposts && reposts.next_href),
       nonSetCount: countNonSets(repostTracks),
       artwork: bigArtwork(repostTracks[0] && repostTracks[0].artwork_url),
     });

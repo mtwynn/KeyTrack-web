@@ -333,6 +333,9 @@ function normalizeSoundcloudCrate(c) {
     // Non-set track count (null = not yet known). Used to hide all-set crates
     // when "Disable Sets" is on.
     nonSetCount: c.nonSetCount == null ? null : c.nonSetCount,
+    // True when the tile count is a first-page floor (likes/reposts) — the full
+    // list still loads when the crate is opened.
+    more: !!c.more,
     ownerName: c.owner || "",
     description: "",
     raw: c,
@@ -1066,7 +1069,7 @@ let PLLibrary = (props) => {
           )}
           <Box className={classes.tileMeta}>
             <Chip
-              label={`${displayCount} tracks`}
+              label={`${displayCount}${crate.more ? "+" : ""} tracks`}
               size="small"
               className={classes.trackChip}
               style={{ backgroundColor: accent }}
