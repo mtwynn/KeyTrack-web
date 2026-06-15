@@ -32,6 +32,7 @@ COPY package*.json ./
 RUN npm install --omit=dev
 COPY . .
 
-ENV PORT=8899
+# No hardcoded PORT — the host (Heroku/Fly/Render) injects $PORT at runtime and
+# server.js binds to it (falling back to 8899 for local `docker run`).
 EXPOSE 8899
 CMD ["node", "server.js"]
