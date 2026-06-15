@@ -29,6 +29,7 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  ListSubheader,
   Paper,
   Switch,
   Toolbar,
@@ -57,7 +58,6 @@ import FadeIn from 'react-fade-in';
 
 import changelog from './changelog.js';
 import CurrentSong from './components/CurrentSong/CurrentSong';
-import SoundCloudLibrary from './components/SoundCloud/SoundCloudLibrary';
 import PLLibrary from './components/PLLibrary/PLLibrary';
 import SetBuilder from './components/PLLibrary/SetBuilder';
 import KeyCalculator from './utils/KeyCalculator';
@@ -150,9 +150,10 @@ class App extends React.Component {
       showHiddenCrates: false,
       // Library view filter driven by the "Favorites" sidebar item.
       favoritesOnly: false,
-      // When true, the main content shows the SoundCloud source (separate
-      // from the Spotify library).
-      showSoundcloud: false,
+      // KeyTrack setting: hide likely DJ sets/mixes (>~6min) from SoundCloud
+      // crate views. Persisted; default off.
+      disableScSets:
+        window.localStorage.getItem('keytrack_disable_sc_sets') === 'true',
       // App-level set so it spans playlists. Entries are { item, key }.
       set: [],
       setOpen: false,
@@ -190,7 +191,7 @@ class App extends React.Component {
     this.disconnectSoundcloud = this.disconnectSoundcloud.bind(this);
     this.refreshSoundcloudToken = this.refreshSoundcloudToken.bind(this);
     this.scheduleSoundcloudRefresh = this.scheduleSoundcloudRefresh.bind(this);
-    this.openSoundcloud = this.openSoundcloud.bind(this);
+    this.toggleDisableScSets = this.toggleDisableScSets.bind(this);
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
     this.toggleTheme = this.toggleTheme.bind(this);
@@ -415,7 +416,6 @@ class App extends React.Component {
     this.setState({
       showHiddenCrates: true,
       favoritesOnly: false,
-      showSoundcloud: false,
     });
   }
 
@@ -510,22 +510,22 @@ class App extends React.Component {
     }
   }
 
-  // Sidebar "SoundCloud": switch the main content to the SoundCloud source.
-  openSoundcloud() {
-    this.setState({
-      showSoundcloud: true,
-      showPlaylists: false,
-      showHiddenCrates: false,
-      favoritesOnly: false,
-      drawerOpen: false,
-      navDrawerOpen: false,
+  // KeyTrack setting: hide likely DJ sets/mixes from SoundCloud crate views.
+  toggleDisableScSets() {
+    this.setState((s) => {
+      const next = !s.disableScSets;
+      window.localStorage.setItem(
+        'keytrack_disable_sc_sets',
+        next ? 'true' : 'false'
+      );
+      return { disableScSets: next };
     });
   }
 
   // Sidebar "Library": always lands on the full crate list (loading on first
   // open). Unlike the old toggle tile, navigating here never closes the view.
   async openLibrary() {
-    this.setState({ drawerOpen: false, showSoundcloud: false });
+    this.setState({ drawerOpen: false });
     if (!this.state.pllibrary) {
       await this.getUserPlaylists();
     }
@@ -538,7 +538,7 @@ class App extends React.Component {
 
   // Sidebar "Favorites": the library scoped to favorited crates.
   async openFavorites() {
-    this.setState({ drawerOpen: false, showSoundcloud: false });
+    this.setState({ drawerOpen: false });
     if (!this.state.pllibrary) {
       await this.getUserPlaylists();
     }
@@ -808,18 +808,6 @@ class App extends React.Component {
         onClick: this.openHiddenCrates,
         active: this.state.showHiddenCrates,
       },
-      // Only surfaced once a SoundCloud account is connected.
-      ...(this.state.soundcloud.connected
-        ? [
-            {
-              key: 'soundcloud',
-              icon: <Cloud style={{ color: '#ff5500' }} />,
-              label: 'SoundCloud',
-              onClick: this.openSoundcloud,
-              active: this.state.showSoundcloud,
-            },
-          ]
-        : []),
     ];
 
     // Shared between the persistent desktop sidebar and the mobile nav drawer.
@@ -976,15 +964,7 @@ class App extends React.Component {
           </Drawer>
 
           <Box style={{ flex: 1, minWidth: 0 }}>
-            {this.state.showSoundcloud ? (
-              <FadeIn transitionDuration={400}>
-                <SoundCloudLibrary
-                  token={this.state.soundcloud.access_token}
-                  backend={soundcloudBackend}
-                  onRefreshToken={this.refreshSoundcloudToken}
-                />
-              </FadeIn>
-            ) : this.state.showPlaylists ? (
+            {this.state.showPlaylists ? (
               <FadeIn transitionDuration={400}>
                 <PLLibrary
                   token={this.state.access_token}
@@ -1000,6 +980,7 @@ class App extends React.Component {
                   soundcloud={this.state.soundcloud}
                   soundcloudBackend={soundcloudBackend}
                   onRefreshSoundcloud={this.refreshSoundcloudToken}
+                  hideSets={this.state.disableScSets}
                 />
               </FadeIn>
             ) : (
@@ -1116,6 +1097,26 @@ class App extends React.Component {
                 }
               />
             </ListItem>
+            {this.state.soundcloud.connected && (
+              <>
+                <ListSubheader disableSticky>KeyTrack settings</ListSubheader>
+                <ListItem>
+                  <ListItemIcon>
+                    <GraphicEq />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary="Disable Sets (SoundCloud)"
+                    secondary="Hide long DJ sets/mixes from crates"
+                  />
+                  <Switch
+                    edge="end"
+                    color="primary"
+                    checked={this.state.disableScSets}
+                    onChange={this.toggleDisableScSets}
+                  />
+                </ListItem>
+              </>
+            )}
             <ListItem>
               <ListItemIcon>
                 {isDark ? <Brightness7 /> : <Brightness4 />}

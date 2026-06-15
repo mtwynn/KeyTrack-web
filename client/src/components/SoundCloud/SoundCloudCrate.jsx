@@ -233,6 +233,10 @@ let SoundCloudCrate = (props) => {
   // key/BPM uses our analysis; un-analyzed tracks sort last.
   const view = React.useMemo(() => {
     let list = tracks || [];
+    // "Disable Sets" (KeyTrack setting): drop likely DJ sets/mixes entirely.
+    if (props.hideSets) {
+      list = list.filter((t) => !isLikelySet(t.duration));
+    }
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -267,7 +271,7 @@ let SoundCloudCrate = (props) => {
       });
     }
     return list;
-  }, [tracks, search, sort, analysis]);
+  }, [tracks, search, sort, analysis, props.hideSets]);
 
   const toggleSort = (col) =>
     setSort((s) =>

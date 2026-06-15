@@ -1748,6 +1748,7 @@ let PLLibrary = (props) => {
             backend={props.soundcloudBackend}
             onRefreshToken={props.onRefreshSoundcloud}
             onBack={() => setScOpened(null)}
+            hideSets={props.hideSets}
           />
         )}
       </Dialog>

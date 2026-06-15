@@ -1,7 +1,6 @@
 import axios from "axios";
 
-// Shared SoundCloud crate-list fetching, used by both the standalone
-// SoundCloudLibrary view and the unified PLLibrary grid.
+// Shared SoundCloud crate-list fetching for the unified PLLibrary grid.
 
 // Build a fetcher for the SoundCloud backend proxy. SoundCloud uses the unusual
 // `Authorization: OAuth <token>` header (not Bearer). On a 401 (expired access
