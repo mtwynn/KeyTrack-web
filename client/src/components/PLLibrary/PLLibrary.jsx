@@ -1807,6 +1807,7 @@ let PLLibrary = (props) => {
             onRefreshToken={props.onRefreshSoundcloud}
             onBack={() => setScOpened(null)}
             hideSets={props.hideSets}
+            onPlaySoundcloud={props.onPlaySoundcloud}
           />
         )}
       </Dialog>

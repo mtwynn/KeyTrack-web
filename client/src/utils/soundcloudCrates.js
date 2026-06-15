@@ -73,6 +73,30 @@ export async function fetchScTracks(scFetch, path) {
   return items.map((t) => (t && t.track ? t.track : t)).filter(Boolean);
 }
 
+// SoundCloud's sanctioned HTML5 Widget URL — ToS-compliant playback with no
+// OAuth. Public tracks resolve from the permalink; PRIVATE tracks need their
+// secret (secret_uri, or the permalink + secret_token) or the widget 403s.
+export function scWidgetSrc(track) {
+  let url = track.permalink_url || track.uri;
+  if (track.sharing === "private") {
+    if (track.secret_uri) {
+      url = track.secret_uri;
+    } else if (track.secret_token) {
+      const base = track.permalink_url || track.uri;
+      url =
+        base +
+        (base.indexOf("?") >= 0 ? "&" : "?") +
+        "secret_token=" +
+        track.secret_token;
+    }
+  }
+  return (
+    "https://w.soundcloud.com/player/?url=" +
+    encodeURIComponent(url) +
+    "&color=%23ff5500&auto_play=true&show_comments=false&visual=false"
+  );
+}
+
 // Fetch the user's SoundCloud crates: Liked Tracks + Reposts as virtual crates
 // (artwork from the first track) plus their playlists/sets. Returns a plain
 // array of crate descriptors:

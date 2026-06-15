@@ -41,6 +41,7 @@ import {
   Brightness4,
   Brightness7,
   Build,
+  Close,
   Cloud,
   ExitToApp,
   GraphicEq,
@@ -63,6 +64,7 @@ import SetBuilder from './components/PLLibrary/SetBuilder';
 import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
 import SpotifyIcon from './components/SpotifyIcon';
+import { scWidgetSrc } from './utils/soundcloudCrates';
 import { makeAppTheme, THEME_STORAGE_KEY } from './theme';
 
 // Utils
@@ -116,6 +118,8 @@ const PLAYER_STYLES = {
   loaderColor: '#1ED760',
   sliderColor: '#1ED760',
 };
+// The SoundCloud bar sits on TOP of the (always-mounted) Spotify player.
+const SC_PLAYER_WRAP_STYLE = { ...PLAYER_WRAP_STYLE, zIndex: 10000 };
 
 // Memoized so the Spotify Web Playback player only re-renders (and never
 // reconnects) when its own props change — not on every unrelated App re-render
@@ -130,6 +134,41 @@ const BottomPlayer = React.memo(({ token, uris, play }) => (
       showSaveIcon={true}
       magnifySliderOnHover={true}
     />
+  </div>
+));
+
+// SoundCloud playback reuses the same bottom player-bar slot: the sanctioned
+// SoundCloud Widget (iframe), keyed by track so it reloads + autoplays when the
+// track changes. Shown instead of the Spotify player while a SC track is active
+// (one source plays at a time).
+const ScBottomPlayer = React.memo(({ track, onClose }) => (
+  <div style={SC_PLAYER_WRAP_STYLE}>
+    <div style={{ position: 'relative', backgroundColor: '#111', lineHeight: 0 }}>
+      <iframe
+        key={track.urn || track.id}
+        title="SoundCloud player"
+        width="100%"
+        height="120"
+        scrolling="no"
+        frameBorder="no"
+        allow="autoplay"
+        src={scWidgetSrc(track)}
+      />
+      <IconButton
+        size="small"
+        onClick={onClose}
+        title="Close SoundCloud player"
+        style={{
+          position: 'absolute',
+          top: 4,
+          right: 4,
+          color: '#fff',
+          backgroundColor: 'rgba(0,0,0,0.45)',
+        }}
+      >
+        <Close fontSize="small" />
+      </IconButton>
+    </div>
   </div>
 ));
 
@@ -178,6 +217,9 @@ class App extends React.Component {
         uris: [],
         isPlaying: false,
       },
+      // The SoundCloud track currently in the bottom player bar (null = the
+      // Spotify player owns the bar instead). One source plays at a time.
+      scNowPlaying: null,
       // SoundCloud connection (separate source; tokens managed like Spotify's).
       soundcloud: {
         connected: !!soundcloudParams.access_token,
@@ -206,6 +248,7 @@ class App extends React.Component {
     this.openLibrary = this.openLibrary.bind(this);
     this.openFavorites = this.openFavorites.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
+    this.playSoundcloudTrack = this.playSoundcloudTrack.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
     this.scheduleTokenRefresh = this.scheduleTokenRefresh.bind(this);
 
@@ -561,7 +604,19 @@ class App extends React.Component {
         uris: uris,
         isPlaying: isPlaying,
       },
+      // Playing a Spotify track hands the bottom bar back to the Spotify player.
+      scNowPlaying: null,
     });
+  }
+
+  // Play a SoundCloud track in the shared bottom bar (swaps out the Spotify
+  // player, which stops it — one source at a time). Also mark Spotify paused so
+  // closing the SC player returns to a paused Spotify bar, not an auto-resume.
+  playSoundcloudTrack(track) {
+    this.setState((s) => ({
+      scNowPlaying: track,
+      player: { ...s.player, isPlaying: false },
+    }));
   }
 
   handleCloseChangelog() {
@@ -981,6 +1036,7 @@ class App extends React.Component {
                   soundcloudBackend={soundcloudBackend}
                   onRefreshSoundcloud={this.refreshSoundcloudToken}
                   hideSets={this.state.disableScSets}
+                  onPlaySoundcloud={this.playSoundcloudTrack}
                 />
               </FadeIn>
             ) : (
@@ -1282,12 +1338,21 @@ class App extends React.Component {
             onLoadSet={this.loadSet}
           />
 
-          {/* Spotify Player - always visible at bottom */}
+          {/* The Spotify player stays mounted at all times — unmounting it
+              tears down its Web Playback device ("Device not found"). While a
+              SoundCloud track plays, the SC widget overlays it (higher z-index)
+              and Spotify is paused. */}
           {loggedIn && (
             <BottomPlayer
               token={this.state.access_token}
               uris={this.state.player.uris}
               play={this.state.player.isPlaying}
+            />
+          )}
+          {this.state.scNowPlaying && (
+            <ScBottomPlayer
+              track={this.state.scNowPlaying}
+              onClose={() => this.setState({ scNowPlaying: null })}
             />
           )}
         </div>
