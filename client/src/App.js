@@ -118,6 +118,8 @@ const PLAYER_STYLES = {
   loaderColor: '#1ED760',
   sliderColor: '#1ED760',
 };
+// The SoundCloud bar sits on TOP of the (always-mounted) Spotify player.
+const SC_PLAYER_WRAP_STYLE = { ...PLAYER_WRAP_STYLE, zIndex: 10000 };
 
 // Memoized so the Spotify Web Playback player only re-renders (and never
 // reconnects) when its own props change — not on every unrelated App re-render
@@ -140,7 +142,7 @@ const BottomPlayer = React.memo(({ token, uris, play }) => (
 // track changes. Shown instead of the Spotify player while a SC track is active
 // (one source plays at a time).
 const ScBottomPlayer = React.memo(({ track, onClose }) => (
-  <div style={PLAYER_WRAP_STYLE}>
+  <div style={SC_PLAYER_WRAP_STYLE}>
     <div style={{ position: 'relative', backgroundColor: '#111', lineHeight: 0 }}>
       <iframe
         key={track.urn || track.id}
@@ -1336,21 +1338,22 @@ class App extends React.Component {
             onLoadSet={this.loadSet}
           />
 
-          {/* Bottom player bar — the SoundCloud Widget while a SC track is
-              active, otherwise the Spotify Web Playback player. */}
-          {this.state.scNowPlaying ? (
+          {/* The Spotify player stays mounted at all times — unmounting it
+              tears down its Web Playback device ("Device not found"). While a
+              SoundCloud track plays, the SC widget overlays it (higher z-index)
+              and Spotify is paused. */}
+          {loggedIn && (
+            <BottomPlayer
+              token={this.state.access_token}
+              uris={this.state.player.uris}
+              play={this.state.player.isPlaying}
+            />
+          )}
+          {this.state.scNowPlaying && (
             <ScBottomPlayer
               track={this.state.scNowPlaying}
               onClose={() => this.setState({ scNowPlaying: null })}
             />
-          ) : (
-            loggedIn && (
-              <BottomPlayer
-                token={this.state.access_token}
-                uris={this.state.player.uris}
-                play={this.state.player.isPlaying}
-              />
-            )
           )}
         </div>
       </ThemeProvider>
