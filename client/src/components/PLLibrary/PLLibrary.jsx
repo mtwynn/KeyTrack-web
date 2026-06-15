@@ -52,11 +52,14 @@ import {
   FilterList,
   ArrowDropDown,
   Close,
+  Cloud,
 } from "@material-ui/icons";
 
 import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
+import SoundCloudCrate from "../SoundCloud/SoundCloudCrate";
+import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 import { useEffect } from "react";
 import { fetchCrateMeta, setCrateMeta } from "../../utils/crateMeta";
 import {
@@ -65,6 +68,16 @@ import {
   renameFolder,
   deleteFolder,
 } from "../../utils/folders";
+import {
+  buildScFetch,
+  fetchSoundcloudCrates,
+} from "../../utils/soundcloudCrates";
+
+// SoundCloud brand orange (source badge + toggle), distinct from Spotify green.
+const SC_ORANGE = "#ff5500";
+const SPOTIFY_GREEN = "#1ED760";
+// Persisted Library source toggles (Spotify / SoundCloud).
+const SOURCES_KEY = "keytrack_lib_sources";
 
 const useStyles = makeStyles((theme) => ({
   // Staggered entrance for crate tiles when the grid mounts (library open,
@@ -306,17 +319,100 @@ function normalizeSpotifyCrate(pl) {
   };
 }
 
+// SoundCloud crate (from fetchSoundcloudCrates) -> the same neutral shape. The
+// `sc:` prefix keeps SoundCloud uids from ever colliding with Spotify's 22-char
+// base62 playlist ids, so crateMeta/folders stay cleanly partitioned.
+function normalizeSoundcloudCrate(c) {
+  return {
+    uid: "sc:" + c.id,
+    source: "soundcloud",
+    name: c.name || "",
+    image: c.artwork || null,
+    trackCount: c.count || 0,
+    ownerName: c.owner || "",
+    description: "",
+    raw: c,
+  };
+}
+
 let PLLibrary = (props) => {
   const classes = useStyles();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  // Normalized, source-agnostic crate list (Spotify only for now). Everything
-  // below — search, sort, folders, selection, rendering — operates on this.
-  const library = React.useMemo(
+  // --- SoundCloud source (unified into this same library) ---
+  const scConnected = !!(props.soundcloud && props.soundcloud.connected);
+  const scToken = props.soundcloud ? props.soundcloud.access_token : null;
+  const [scCrates, setScCrates] = React.useState(null);
+  // The SoundCloud crate opened in the full-screen modal (null = closed).
+  const [scOpened, setScOpened] = React.useState(null);
+
+  // Library source toggles (Spotify / SoundCloud). At least one must stay on;
+  // both default on; persisted. The SoundCloud toggle only matters once a
+  // SoundCloud account is connected.
+  const [sources, setSources] = React.useState(() => {
+    try {
+      const s = JSON.parse(window.localStorage.getItem(SOURCES_KEY));
+      if (s && (s.spotify || s.soundcloud)) {
+        return { spotify: !!s.spotify, soundcloud: !!s.soundcloud };
+      }
+    } catch (e) {}
+    return { spotify: true, soundcloud: true };
+  });
+  const setSource = (key, on) =>
+    setSources((prev) => {
+      const next = { ...prev, [key]: on };
+      if (!next.spotify && !next.soundcloud) return prev; // keep >=1 on
+      window.localStorage.setItem(SOURCES_KEY, JSON.stringify(next));
+      return next;
+    });
+
+  // Fetch the SoundCloud crate list once connected (independent of the toggle,
+  // so flipping it on is instant). Rebuilds the fetcher when the token rotates.
+  const scFetch = React.useMemo(
+    () =>
+      scConnected
+        ? buildScFetch({
+            token: scToken,
+            backend: props.soundcloudBackend,
+            onRefreshToken: props.onRefreshSoundcloud,
+          })
+        : null,
+    [scConnected, scToken, props.soundcloudBackend, props.onRefreshSoundcloud]
+  );
+  React.useEffect(() => {
+    if (!scFetch) {
+      setScCrates(null);
+      return;
+    }
+    let cancelled = false;
+    fetchSoundcloudCrates(scFetch)
+      .then((c) => !cancelled && setScCrates(c))
+      .catch((e) => {
+        console.error("Failed to load SoundCloud crates", e);
+        if (!cancelled) setScCrates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scFetch]);
+
+  // Normalized, source-agnostic crate list — the merge of the active sources.
+  // Everything below (search, sort, folders, selection, rendering) uses this.
+  const spotifyLib = React.useMemo(
     () => (props.pllibrary || []).map(normalizeSpotifyCrate),
     [props.pllibrary]
   );
+  const scLib = React.useMemo(
+    () => (scCrates || []).map(normalizeSoundcloudCrate),
+    [scCrates]
+  );
+  const library = React.useMemo(() => {
+    const out = [];
+    if (sources.spotify) out.push(...spotifyLib);
+    if (scConnected && sources.soundcloud) out.push(...scLib);
+    return out;
+  }, [spotifyLib, scLib, sources, scConnected]);
 
   const [loadingPlaylist, setLoadingPlaylist] = React.useState(false);
   const [loadingId, setLoadingId] = React.useState(null);
@@ -582,6 +678,11 @@ let PLLibrary = (props) => {
     setShowPlaylist(false);
   };
 
+  // SoundCloud crates open in a full-screen modal (their own track view) rather
+  // than the Spotify Playlist dialog. Cross-source combining is a later phase —
+  // for now SoundCloud crates open individually.
+  const openScCrate = (crate) => setScOpened(crate);
+
   // --- Cross-playlist search: load every crate's tracks into one virtual
   // playlist, then reuse the normal Playlist view to search/filter across them.
   const fetchAllTracks = async (playlistId) => {
@@ -799,19 +900,21 @@ let PLLibrary = (props) => {
     const img = crate.image;
     const desc = cleanDescription(crate.description);
     const isSelected = selected.has(crate.uid);
+    const isSc = crate.source === "soundcloud";
+    const accent = isSc ? SC_ORANGE : SPOTIFY_GREEN;
     return (
       <Card
         key={crate.uid}
         className={classes.tileCard}
-        onClick={() => toggleSelect(crate.uid)}
+        onClick={() => (isSc ? openScCrate(crate) : toggleSelect(crate.uid))}
         style={{
           height: "100%",
           display: "flex",
           flexDirection: "column",
           border: isSelected
-            ? "2px solid #1ED760"
+            ? `2px solid ${SPOTIFY_GREEN}`
             : meta.favorite
-            ? "1px solid #1ED760"
+            ? `1px solid ${accent}`
             : "1px solid rgba(128,128,128,0.18)",
           backgroundColor: isSelected ? "rgba(30,215,96,0.08)" : undefined,
         }}
@@ -820,22 +923,52 @@ let PLLibrary = (props) => {
           className={classes.tileCover}
           style={img ? { backgroundImage: `url(${img})` } : {}}
         >
-          {!img && (
-            <MusicNote style={{ color: "#fff", fontSize: 42, opacity: 0.85 }} />
-          )}
-          <Checkbox
-            key={selected.has(crate.uid) ? "on" : "off"}
-            className={`${classes.tileCheckbox} ${
-              selected.has(crate.uid) ? classes.iconPop : ""
-            }`}
-            checked={selected.has(crate.uid)}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleSelect(crate.uid);
+          {!img &&
+            (isSc ? (
+              <Cloud style={{ color: "#fff", fontSize: 42, opacity: 0.9 }} />
+            ) : (
+              <MusicNote style={{ color: "#fff", fontSize: 42, opacity: 0.85 }} />
+            ))}
+          {/* Source badge — provenance always visible in the unified grid. */}
+          <span
+            style={{
+              position: "absolute",
+              bottom: 6,
+              left: 6,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 3,
+              backgroundColor: accent,
+              color: "#fff",
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "2px 7px",
+              borderRadius: 10,
             }}
-            title="Select for cross-search"
-            size="small"
-          />
+          >
+            {isSc ? (
+              <SoundcloudIcon size={13} color="#fff" />
+            ) : (
+              <SpotifyIcon size={12} color="#fff" />
+            )}
+            {isSc ? "SoundCloud" : "Spotify"}
+          </span>
+          {/* Cross-search selection is Spotify-only (Phase 2 adds mixed sets). */}
+          {!isSc && (
+            <Checkbox
+              key={selected.has(crate.uid) ? "on" : "off"}
+              className={`${classes.tileCheckbox} ${
+                selected.has(crate.uid) ? classes.iconPop : ""
+              }`}
+              checked={selected.has(crate.uid)}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSelect(crate.uid);
+              }}
+              title="Select for cross-search"
+              size="small"
+            />
+          )}
           <IconButton
             className={classes.tileFav}
             size="small"
@@ -849,7 +982,7 @@ let PLLibrary = (props) => {
               style={{ display: "inline-flex" }}
             >
               {meta.favorite ? (
-                <Star style={{ color: "#1ED760" }} fontSize="small" />
+                <Star style={{ color: accent }} fontSize="small" />
               ) : (
                 <StarBorder style={{ color: "#fff" }} fontSize="small" />
               )}
@@ -871,7 +1004,7 @@ let PLLibrary = (props) => {
             {crate.name}
           </Typography>
           <Typography className={classes.ownerText} noWrap>
-            by {crate.ownerName}
+            {isSc ? crate.ownerName : `by ${crate.ownerName}`}
           </Typography>
           {desc && (
             <Typography className={classes.tileDesc}>{desc}</Typography>
@@ -881,6 +1014,7 @@ let PLLibrary = (props) => {
               label={`${crate.trackCount} tracks`}
               size="small"
               className={classes.trackChip}
+              style={{ backgroundColor: accent }}
               icon={<MusicNote style={{ color: "#fff" }} />}
             />
             {(meta.genres || []).map((g) => (
@@ -914,7 +1048,7 @@ let PLLibrary = (props) => {
           >
             <VisibilityOff
               fontSize="small"
-              style={{ color: meta.hidden ? "#1ED760" : undefined }}
+              style={{ color: meta.hidden ? accent : undefined }}
             />
           </IconButton>
           <Box style={{ flex: 1 }} />
@@ -924,11 +1058,12 @@ let PLLibrary = (props) => {
             startIcon={<MenuOpen fontSize="small" />}
             onClick={(e) => {
               e.stopPropagation();
-              handlePlaylistOpen(crate);
+              if (isSc) openScCrate(crate);
+              else handlePlaylistOpen(crate);
             }}
             title="Open crate for digging"
             aria-label="open crate"
-            style={{ textTransform: "none", fontWeight: 600 }}
+            style={{ textTransform: "none", fontWeight: 600, color: accent }}
           >
             Open
           </Button>
@@ -1139,6 +1274,47 @@ let PLLibrary = (props) => {
             }
           />
         </Paper>
+        {/* Source toggles — both default on, at least one always stays on. */}
+        {scConnected && (
+          <>
+            <Chip
+              label="Spotify"
+              clickable
+              onClick={() => setSource("spotify", !sources.spotify)}
+              icon={
+                <SpotifyIcon
+                  size={17}
+                  color={sources.spotify ? "#fff" : SPOTIFY_GREEN}
+                  style={{ marginLeft: 8 }}
+                />
+              }
+              style={{
+                backgroundColor: sources.spotify ? SPOTIFY_GREEN : "transparent",
+                color: sources.spotify ? "#fff" : theme.palette.text.secondary,
+                border: `1px solid ${SPOTIFY_GREEN}`,
+                fontWeight: 700,
+              }}
+            />
+            <Chip
+              label="SoundCloud"
+              clickable
+              onClick={() => setSource("soundcloud", !sources.soundcloud)}
+              icon={
+                <SoundcloudIcon
+                  size={18}
+                  color={sources.soundcloud ? "#fff" : SC_ORANGE}
+                  style={{ marginLeft: 8 }}
+                />
+              }
+              style={{
+                backgroundColor: sources.soundcloud ? SC_ORANGE : "transparent",
+                color: sources.soundcloud ? "#fff" : theme.palette.text.secondary,
+                border: `1px solid ${SC_ORANGE}`,
+                fontWeight: 700,
+              }}
+            />
+          </>
+        )}
       </Box>
 
       {/* Crates / Folders tab toggle (normal Library view only). */}
@@ -1309,7 +1485,9 @@ let PLLibrary = (props) => {
         </Box>
         <Box style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {(() => {
-            const shownIds = sortedCrates.map((c) => c.uid);
+            const shownIds = sortedCrates
+              .filter((c) => c.source === "spotify")
+              .map((c) => c.uid);
             const allSelected =
               shownIds.length > 0 && shownIds.every((id) => selected.has(id));
             return (
@@ -1431,7 +1609,7 @@ let PLLibrary = (props) => {
           <Box sx={{ padding: isMobile ? 1 : 2 }}>
             {renderCrateGrid(
               pagedCrates,
-              !showHidden && !favoritesOnly && cratePage === 0
+              !showHidden && !favoritesOnly && cratePage === 0 && sources.spotify
                 ? renderLikedTile()
                 : null
             )}
@@ -1560,6 +1738,19 @@ let PLLibrary = (props) => {
           setCount={props.setCount}
         />
       ) : null}
+
+      {/* SoundCloud crate opens in its own full-screen modal (its track view). */}
+      <Dialog fullScreen open={Boolean(scOpened)} onClose={() => setScOpened(null)}>
+        {scOpened && (
+          <SoundCloudCrate
+            crate={scOpened.raw}
+            token={scToken}
+            backend={props.soundcloudBackend}
+            onRefreshToken={props.onRefreshSoundcloud}
+            onBack={() => setScOpened(null)}
+          />
+        )}
+      </Dialog>
     </>
   );
 };

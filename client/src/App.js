@@ -997,6 +997,9 @@ class App extends React.Component {
                   showHidden={this.state.showHiddenCrates}
                   onExitHidden={this.exitHidden}
                   favoritesOnly={this.state.favoritesOnly}
+                  soundcloud={this.state.soundcloud}
+                  soundcloudBackend={soundcloudBackend}
+                  onRefreshSoundcloud={this.refreshSoundcloudToken}
                 />
               </FadeIn>
             ) : (
