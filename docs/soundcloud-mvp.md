@@ -73,13 +73,20 @@ Per track:
 0. **Skip likely DJ sets/mixes.** A single track's key/BPM is meaningful; a 60-minute mix's isn't (it wanders across many keys/tempos). So **exclude tracks longer than ~6 minutes** (`LIKELY_SET_MS = 6 * 60 * 1000`) from analysis — never auto-analyze them, skip them in "Analyze Crate," and flag them in the UI as a **"Set"** instead of showing a (meaningless) detected key/BPM. (~6 min is a heuristic; keep the threshold a single constant so it's easy to tune.)
 1. **Cache hit?** `scAnalysis/{urn}` exists → return it. Done.
 2. `GET /tracks/{urn}/streams` → HLS/AAC URL (counts as 1 "play" — fine at personal scale).
-3. **ffmpeg decode** → mono PCM, downsampled (≈22 kHz is plenty for key/BPM). *Optimization: analyze a representative ~60–90s segment (skip intro/outro) for speed.*
-4. **libKeyFinder** → key; **JS BPM lib** (web-audio-beat-detector / realtime-bpm-analyzer) → BPM.
-5. **Normalize**: key → Camelot (reuse `utils/harmonic.js` mapping); BPM range-constrain + half/double-time correct.
+3. **ffmpeg decode** → mono WAV. *Analyze a representative ~90s mid-segment (start at 25% of the track) for BPM — faster and more stable than the whole track.*
+4. **`keyfinder-cli`** (libKeyFinder, `-n camelot`) → key; **`bpm-tools`** (`bpm`) on the segment → BPM. Both are GPL CLIs we shell out to (separate processes → KeyTrack stays MIT). ~1.5s/track.
+5. **Normalize / correct**: key already comes out as Camelot. **BPM octave-fold** into the octave that fits the track's SoundCloud `genre` tag's tempo band (DnB ≈170–180, house ≈124–128, future/melodic bass ≈140–160…); a rare residual gets a one-tap ×2/÷2 fallback in the UI.
 6. **Write** `scAnalysis/{urn}` and return.
 
 - **Concurrency = 1** for MVP; subsequent requests queue. (Matches your spec: finish the current, queue the next.)
-- **Async, never blocks**: HTTP returns `queued` immediately; frontend polls. (Heroku 30s request cap → the queue runs off the request cycle.)
+- **Async, never blocks**: HTTP returns `queued` immediately; frontend polls.
+- **Host: a containerized analysis microservice** (Fly.io/Render). ffmpeg + libkeyfinder + bpm-tools install cleanly in Linux and keyfinder-cli builds in the Dockerfile; the existing Heroku OAuth/proxy backend is untouched and calls this service over HTTP. (Spike built keyfinder-cli from the `libkeyfinder` source with one clang++ command — no cmake.)
+
+### 📊 Benchmark (validated 2026-06): keyfinder-cli + bpm-tools vs. Spotify
+110 same-recording tracks (the "Bass Lounge" Spotify playlist, matched to the same upload on SoundCloud), compared against Spotify's audio-features:
+- **BPM** — 82% exact (≤3%), **97% correct allowing a clean octave** (auto-fixable), **0.1% median error** after octave-fold, ~3% genuinely off. → as good as Spotify.
+- **KEY** — 55% exact agreement, **90% harmonically compatible** (exact/relative/fifth), ~99% within one Camelot step, ~1% truly wrong. (Spotify isn't ground truth — it errs too.)
+- **Verdict:** ship this stack. Essentia-`edma` is a future A/B *only if* we want to raise the exact-key number; not worth the AGPL container now.
 
 ### Backend endpoints
 - `POST /soundcloud/analyze` `{ trackUrn }` → `{ status: 'cached'|'queued', analysis? }`
