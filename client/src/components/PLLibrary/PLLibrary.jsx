@@ -59,6 +59,7 @@ import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
 import SoundCloudCrate from "../SoundCloud/SoundCloudCrate";
+import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 import { useEffect } from "react";
 import { fetchCrateMeta, setCrateMeta } from "../../utils/crateMeta";
 import {
@@ -946,9 +947,9 @@ let PLLibrary = (props) => {
             }}
           >
             {isSc ? (
-              <Cloud style={{ fontSize: 12 }} />
+              <SoundcloudIcon size={13} color="#fff" />
             ) : (
-              <MusicNote style={{ fontSize: 12 }} />
+              <SpotifyIcon size={12} color="#fff" />
             )}
             {isSc ? "SoundCloud" : "Spotify"}
           </span>
@@ -1281,8 +1282,10 @@ let PLLibrary = (props) => {
               clickable
               onClick={() => setSource("spotify", !sources.spotify)}
               icon={
-                <MusicNote
-                  style={{ color: sources.spotify ? "#fff" : SPOTIFY_GREEN }}
+                <SpotifyIcon
+                  size={17}
+                  color={sources.spotify ? "#fff" : SPOTIFY_GREEN}
+                  style={{ marginLeft: 8 }}
                 />
               }
               style={{
@@ -1297,7 +1300,11 @@ let PLLibrary = (props) => {
               clickable
               onClick={() => setSource("soundcloud", !sources.soundcloud)}
               icon={
-                <Cloud style={{ color: sources.soundcloud ? "#fff" : SC_ORANGE }} />
+                <SoundcloudIcon
+                  size={18}
+                  color={sources.soundcloud ? "#fff" : SC_ORANGE}
+                  style={{ marginLeft: 8 }}
+                />
               }
               style={{
                 backgroundColor: sources.soundcloud ? SC_ORANGE : "transparent",
