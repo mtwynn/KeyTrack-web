@@ -174,9 +174,12 @@ let SoundCloudCrate = (props) => {
   );
 
   // Play a track → load the Widget AND kick off analysis (non-blocking).
+  // Playback happens in the shared bottom player bar (lifted to App); we keep
+  // local `playing` only to highlight the active row. Analysis is independent.
   const playTrack = (t) => {
     setPlaying(t);
     enqueueAnalysis(t);
+    if (props.onPlaySoundcloud) props.onPlaySoundcloud(t);
   };
 
   // "Analyze Crate" → enqueue every track in the open crate.
@@ -210,28 +213,6 @@ let SoundCloudCrate = (props) => {
       cancelled = true;
     };
   }, [crate, scFetch]);
-
-  // SoundCloud's sanctioned HTML5 Widget (iframe) — ToS-compliant playback with
-  // no OAuth. Public tracks resolve from the permalink; PRIVATE tracks need
-  // their secret (secret_uri, or the permalink with a secret_token) or the
-  // widget 403s.
-  const widgetSrc = (track) => {
-    let url = track.permalink_url || track.uri;
-    if (track.sharing === "private") {
-      if (track.secret_uri) {
-        url = track.secret_uri;
-      } else if (track.secret_token) {
-        const base = track.permalink_url || track.uri;
-        url = base + (base.indexOf("?") >= 0 ? "&" : "?") +
-          "secret_token=" + track.secret_token;
-      }
-    }
-    return (
-      "https://w.soundcloud.com/player/?url=" +
-      encodeURIComponent(url) +
-      "&color=%23ff5500&auto_play=true&show_comments=false&visual=false"
-    );
-  };
 
   // Filtered + sorted track view (search + clickable column sort). Sorting by
   // key/BPM uses our analysis; un-analyzed tracks sort last.
@@ -322,20 +303,6 @@ let SoundCloudCrate = (props) => {
         )}
       </Box>
 
-      {playing && (
-        <Box style={{ marginBottom: 12 }}>
-          <iframe
-            title="SoundCloud player"
-            width="100%"
-            height="120"
-            scrolling="no"
-            frameBorder="no"
-            allow="autoplay"
-            src={widgetSrc(playing)}
-            style={{ borderRadius: 8 }}
-          />
-        </Box>
-      )}
 
       {tracks && tracks.length > 0 && (
         <Paper
