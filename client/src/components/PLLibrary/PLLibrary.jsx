@@ -286,11 +286,38 @@ const GENRES = [
   "Other",
 ];
 
+// A crate normalized to a source-agnostic shape so the grid, search, sort,
+// folders, selection and metadata can treat every crate the same — the
+// foundation for mixing Spotify and SoundCloud crates in one library.
+//   uid         React key AND crateMeta/folder key. For Spotify it stays the
+//               raw playlist id so existing favorites/folders/tags keep working.
+//   source      'spotify' | 'soundcloud'
+//   raw         the original source object (handed to the source's open flow).
+function normalizeSpotifyCrate(pl) {
+  return {
+    uid: pl.id,
+    source: "spotify",
+    name: pl.name || "",
+    image: pl.images && pl.images[0] ? pl.images[0].url : null,
+    trackCount: pl.tracks ? pl.tracks.total : 0,
+    ownerName: pl.owner ? pl.owner.display_name : "",
+    description: pl.description || "",
+    raw: pl,
+  };
+}
+
 let PLLibrary = (props) => {
   const classes = useStyles();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  
+
+  // Normalized, source-agnostic crate list (Spotify only for now). Everything
+  // below — search, sort, folders, selection, rendering — operates on this.
+  const library = React.useMemo(
+    () => (props.pllibrary || []).map(normalizeSpotifyCrate),
+    [props.pllibrary]
+  );
+
   const [loadingPlaylist, setLoadingPlaylist] = React.useState(false);
   const [loadingId, setLoadingId] = React.useState(null);
   const [loadingAll, setLoadingAll] = React.useState(false);
@@ -317,7 +344,7 @@ let PLLibrary = (props) => {
   const [playlistId, setPlaylistId] = React.useState("");
   const [playlistOwnerId, setPlaylistOwnerId] = React.useState("");
   const [search, setSearch] = React.useState("");
-  const [searchItems, setSearchItems] = React.useState(props.pllibrary);
+  const [searchItems, setSearchItems] = React.useState(library);
   const [crateSort, setCrateSort] = React.useState("name");
   const [cratePage, setCratePage] = React.useState(0);
   const [cratesPerPage, setCratesPerPage] = React.useState(24);
@@ -345,14 +372,14 @@ let PLLibrary = (props) => {
     }
   };
 
-  const toggleFavorite = (e, playlist) => {
+  const toggleFavorite = (e, crate) => {
     e.stopPropagation();
-    updateMeta(playlist.id, { favorite: !metaFor(playlist.id).favorite });
+    updateMeta(crate.uid, { favorite: !metaFor(crate.uid).favorite });
   };
 
-  const toggleHidden = (e, playlist) => {
+  const toggleHidden = (e, crate) => {
     e.stopPropagation();
-    updateMeta(playlist.id, { hidden: !metaFor(playlist.id).hidden });
+    updateMeta(crate.uid, { hidden: !metaFor(crate.uid).hidden });
   };
 
   // Tag/genre editing popover + library filter.
@@ -367,10 +394,10 @@ let PLLibrary = (props) => {
       prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]
     );
 
-  const openTagEdit = (e, playlist) => {
+  const openTagEdit = (e, crate) => {
     e.stopPropagation();
     setTagInput("");
-    setTagEdit({ anchorEl: e.currentTarget, id: playlist.id });
+    setTagEdit({ anchorEl: e.currentTarget, id: crate.uid });
   };
 
   const addTag = (id, tag) => {
@@ -400,8 +427,8 @@ let PLLibrary = (props) => {
   const showHidden = props.showHidden;
   const favoritesOnly = props.favoritesOnly;
   const sortedCrates = React.useMemo(() => {
-    const arr = (searchItems || []).filter((pl) => {
-      const m = crateMeta[pl.id] || {};
+    const arr = (searchItems || []).filter((c) => {
+      const m = crateMeta[c.uid] || {};
       const hidden = !!m.hidden;
       if (showHidden ? !hidden : hidden) return false;
       // "Favorites" view: only crates the user has starred.
@@ -414,17 +441,15 @@ let PLLibrary = (props) => {
     });
     arr.sort((a, b) => {
       if (!showHidden) {
-        const fa = crateMeta[a.id] && crateMeta[a.id].favorite ? 1 : 0;
-        const fb = crateMeta[b.id] && crateMeta[b.id].favorite ? 1 : 0;
+        const fa = crateMeta[a.uid] && crateMeta[a.uid].favorite ? 1 : 0;
+        const fb = crateMeta[b.uid] && crateMeta[b.uid].favorite ? 1 : 0;
         if (fa !== fb) return fb - fa; // favorites first
       }
       if (crateSort === "tracks") {
-        return (b.tracks?.total || 0) - (a.tracks?.total || 0);
+        return (b.trackCount || 0) - (a.trackCount || 0);
       }
       if (crateSort === "owner") {
-        return (a.owner?.display_name || "").localeCompare(
-          b.owner?.display_name || ""
-        );
+        return (a.ownerName || "").localeCompare(b.ownerName || "");
       }
       return (a.name || "").localeCompare(b.name || "");
     });
@@ -472,56 +497,40 @@ let PLLibrary = (props) => {
 
   useEffect(() => {
     if (search === "") {
-      _.debounce(setSearchItems(props.pllibrary), 500);
-    } else {
-      _.debounce(
-        setSearchItems(() => {
-          let filteredItems = props.pllibrary;
-
-          if (search !== "") {
-            filteredItems = filteredItems.filter((item) => {
-              const {
-                name: title,
-                description,
-                owner: { display_name: owner },
-              } = item;
-
-              console.log(description);
-
-              return (
-                title.toLowerCase().includes(search) ||
-                description.toLowerCase().includes(search) ||
-                owner.toLowerCase().includes(search)
-              );
-            });
-          }
-
-          return filteredItems;
-        }, 500)
-      );
+      setSearchItems(library);
+      return;
     }
-  }, [search]);
+    setSearchItems(
+      library.filter(
+        (c) =>
+          c.name.toLowerCase().includes(search) ||
+          (c.description || "").toLowerCase().includes(search) ||
+          (c.ownerName || "").toLowerCase().includes(search)
+      )
+    );
+  }, [search, library]);
 
   let handleChange = _.debounce((event) => {
     event.persist();
     setSearch(String(event.target.value).toLowerCase());
   }, 500);
 
-  let handlePlaylistOpen = (playlist) => {
-    let numRequests = Math.ceil(playlist.tracks.total / 100);
+  let handlePlaylistOpen = (crate) => {
+    const id = crate.uid;
+    let numRequests = Math.ceil(crate.trackCount / 100);
     let playlistPromises = [];
     let audioFeaturesPromises = [];
 
     setLoadingPlaylist(true);
-    setLoadingId(playlist.id);
+    setLoadingId(crate.uid);
 
-    setPlaylistName(playlist.name);
-    setPlaylistId(playlist.id);
-    setPlaylistOwnerId(playlist.owner.id);
+    setPlaylistName(crate.name);
+    setPlaylistId(crate.uid);
+    setPlaylistOwnerId(crate.raw.owner.id);
 
     for (var i = 0; i < numRequests; ++i) {
       playlistPromises.push(
-        spotifyWebApi.getPlaylistTracks(playlist.id, { offset: i * 100 })
+        spotifyWebApi.getPlaylistTracks(id, { offset: i * 100 })
       );
     }
 
@@ -627,8 +636,13 @@ let PLLibrary = (props) => {
   const handleOpenSelected = async () => {
     // Open the selected crates as one combined view ("Select all" selects them
     // all). Hidden crates never feed this even if somehow selected.
-    const playlists = (props.pllibrary || []).filter(
-      (pl) => selected.has(pl.id) && !(crateMeta[pl.id] && crateMeta[pl.id].hidden)
+    // Cross-search is Spotify-only (it relies on Spotify audio-features);
+    // SoundCloud crates open individually. Hidden crates never feed this.
+    const playlists = library.filter(
+      (c) =>
+        c.source === "spotify" &&
+        selected.has(c.uid) &&
+        !(crateMeta[c.uid] && crateMeta[c.uid].hidden)
     );
     if (playlists.length === 0) return;
 
@@ -636,10 +650,10 @@ let PLLibrary = (props) => {
     setAllProgress({ done: 0, total: playlists.length });
     setLoadingAll(true);
     try {
-      const perPlaylist = await mapWithLimit(playlists, 4, async (pl) => {
+      const perPlaylist = await mapWithLimit(playlists, 4, async (c) => {
         // Skip queued/in-flight work once the user has cancelled.
         if (cancelAllRef.current) return { tracks: [], features: [] };
-        const tracks = await fetchAllTracks(pl.id);
+        const tracks = await fetchAllTracks(c.uid);
         if (cancelAllRef.current) return { tracks: [], features: [] };
         const features = await fetchFeatures(tracks.map((t) => t.track.id));
         setAllProgress((p) => ({ ...p, done: p.done + 1 }));
@@ -769,10 +783,10 @@ let PLLibrary = (props) => {
     folders.forEach((f) => {
       groups[f.id] = [];
     });
-    sortedCrates.forEach((pl) => {
-      const fid = (crateMeta[pl.id] || {}).folderId;
-      if (fid && folderIds.has(fid)) groups[fid].push(pl);
-      else groups.__root__.push(pl);
+    sortedCrates.forEach((c) => {
+      const fid = (crateMeta[c.uid] || {}).folderId;
+      if (fid && folderIds.has(fid)) groups[fid].push(c);
+      else groups.__root__.push(c);
     });
     return groups;
   }, [sortedCrates, folders, crateMeta]);
@@ -780,16 +794,16 @@ let PLLibrary = (props) => {
   // A crate rendered as a cover-art tile: the playlist artwork as a banner
   // (with the cross-search checkbox + favorite star overlaid), then title /
   // owner / cleaned description / track + tag chips, and a footer action row.
-  const renderCrateCard = (playlist) => {
-    const meta = metaFor(playlist.id);
-    const img = playlist.images[0] ? playlist.images[0].url : null;
-    const desc = cleanDescription(playlist.description);
-    const isSelected = selected.has(playlist.id);
+  const renderCrateCard = (crate) => {
+    const meta = metaFor(crate.uid);
+    const img = crate.image;
+    const desc = cleanDescription(crate.description);
+    const isSelected = selected.has(crate.uid);
     return (
       <Card
-        key={playlist.id}
+        key={crate.uid}
         className={classes.tileCard}
-        onClick={() => toggleSelect(playlist.id)}
+        onClick={() => toggleSelect(crate.uid)}
         style={{
           height: "100%",
           display: "flex",
@@ -810,14 +824,14 @@ let PLLibrary = (props) => {
             <MusicNote style={{ color: "#fff", fontSize: 42, opacity: 0.85 }} />
           )}
           <Checkbox
-            key={selected.has(playlist.id) ? "on" : "off"}
+            key={selected.has(crate.uid) ? "on" : "off"}
             className={`${classes.tileCheckbox} ${
-              selected.has(playlist.id) ? classes.iconPop : ""
+              selected.has(crate.uid) ? classes.iconPop : ""
             }`}
-            checked={selected.has(playlist.id)}
+            checked={selected.has(crate.uid)}
             onClick={(e) => {
               e.stopPropagation();
-              toggleSelect(playlist.id);
+              toggleSelect(crate.uid);
             }}
             title="Select for cross-search"
             size="small"
@@ -825,7 +839,7 @@ let PLLibrary = (props) => {
           <IconButton
             className={classes.tileFav}
             size="small"
-            onClick={(e) => toggleFavorite(e, playlist)}
+            onClick={(e) => toggleFavorite(e, crate)}
             title={meta.favorite ? "Unfavorite" : "Favorite"}
             aria-label="favorite crate"
           >
@@ -841,7 +855,7 @@ let PLLibrary = (props) => {
               )}
             </span>
           </IconButton>
-          {loadingId === playlist.id && (
+          {loadingId === crate.uid && (
             <Box className={classes.tileLoading}>
               <CircularProgress size={28} style={{ color: "#fff" }} />
             </Box>
@@ -852,19 +866,19 @@ let PLLibrary = (props) => {
           <Typography
             className={classes.playlistTitle}
             noWrap
-            title={playlist.name}
+            title={crate.name}
           >
-            {playlist.name}
+            {crate.name}
           </Typography>
           <Typography className={classes.ownerText} noWrap>
-            by {playlist.owner.display_name}
+            by {crate.ownerName}
           </Typography>
           {desc && (
             <Typography className={classes.tileDesc}>{desc}</Typography>
           )}
           <Box className={classes.tileMeta}>
             <Chip
-              label={`${playlist.tracks.total} tracks`}
+              label={`${crate.trackCount} tracks`}
               size="small"
               className={classes.trackChip}
               icon={<MusicNote style={{ color: "#fff" }} />}
@@ -886,7 +900,7 @@ let PLLibrary = (props) => {
         <Box className={classes.tileActions}>
           <IconButton
             size="small"
-            onClick={(e) => openTagEdit(e, playlist)}
+            onClick={(e) => openTagEdit(e, crate)}
             title="Tags, genres & folder"
             aria-label="organize crate"
           >
@@ -894,7 +908,7 @@ let PLLibrary = (props) => {
           </IconButton>
           <IconButton
             size="small"
-            onClick={(e) => toggleHidden(e, playlist)}
+            onClick={(e) => toggleHidden(e, crate)}
             title={meta.hidden ? "Unhide" : "Hide"}
             aria-label="hide crate"
           >
@@ -910,7 +924,7 @@ let PLLibrary = (props) => {
             startIcon={<MenuOpen fontSize="small" />}
             onClick={(e) => {
               e.stopPropagation();
-              handlePlaylistOpen(playlist);
+              handlePlaylistOpen(crate);
             }}
             title="Open crate for digging"
             aria-label="open crate"
@@ -949,7 +963,7 @@ let PLLibrary = (props) => {
           sm={6}
           md={4}
           lg={3}
-          key={p.id}
+          key={p.uid}
           className={classes.tileIn}
           style={{
             animationDelay: `${Math.min(i + (leadingTile ? 1 : 0), 14) * 35}ms`,
@@ -1295,7 +1309,7 @@ let PLLibrary = (props) => {
         </Box>
         <Box style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {(() => {
-            const shownIds = sortedCrates.map((c) => c.id);
+            const shownIds = sortedCrates.map((c) => c.uid);
             const allSelected =
               shownIds.length > 0 && shownIds.every((id) => selected.has(id));
             return (
