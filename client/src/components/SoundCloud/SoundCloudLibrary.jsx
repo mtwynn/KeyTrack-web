@@ -3,6 +3,7 @@ import axios from "axios";
 import {
   Avatar,
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
@@ -26,7 +27,11 @@ import {
   ArrowBack,
   OpenInNew,
   PlayArrow,
+  GraphicEq,
 } from "@material-ui/icons";
+
+import { camelotColor } from "../../utils/harmonic";
+import { getScAnalysis, saveScAnalysis } from "../../utils/scAnalysis";
 
 // SoundCloud's brand orange — used for the source badge so SoundCloud crates
 // are always visually distinct from Spotify's green (strict source separation).
@@ -114,6 +119,11 @@ let SoundCloudLibrary = (props) => {
   const [tracks, setTracks] = React.useState(null);
   // The track currently loaded into the embedded SoundCloud Widget player.
   const [playing, setPlaying] = React.useState(null);
+  // Our computed key/BPM per track URN: { status:'loading' } | result.
+  const [analysis, setAnalysis] = React.useState({});
+  const queueRef = React.useRef([]); // FIFO of tracks awaiting analysis
+  const seenRef = React.useRef(new Set()); // urns already queued/done (dedupe)
+  const processingRef = React.useRef(false);
 
   // Call the backend proxy with the SoundCloud token. On a 401 (expired access
   // token) refresh once and retry, mirroring the Spotify session handling.
@@ -139,6 +149,69 @@ let SoundCloudLibrary = (props) => {
     },
     [props]
   );
+
+  // --- Key/BPM analysis: a single-worker FIFO queue. Enqueuing never blocks
+  // (playback is independent); results fill in live and cache to Firestore so a
+  // track is only ever analyzed once for the whole app.
+  const trackUrn = (t) => t.urn || String(t.id);
+
+  const processQueue = React.useCallback(() => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    (async () => {
+      while (queueRef.current.length) {
+        const t = queueRef.current.shift();
+        const urn = trackUrn(t);
+        let result = await getScAnalysis(urn); // shared cache first
+        if (!result) {
+          try {
+            const tid = t.id || t.urn;
+            result = await scFetch(
+              `/soundcloud/analyze?track_id=${encodeURIComponent(tid)}` +
+                `&duration=${t.duration || 0}` +
+                `&genre=${encodeURIComponent(t.genre || "")}`
+            );
+            if (result && !result.isLikelySet && result.camelot) {
+              saveScAnalysis(urn, result);
+            }
+          } catch (e) {
+            result = { error: true };
+          }
+        }
+        setAnalysis((a) => ({ ...a, [urn]: result || { error: true } }));
+        // Failed (e.g. HLS-only / no progressive stream) → allow a retry later.
+        if (!result || result.error || (!result.camelot && !result.isLikelySet)) {
+          seenRef.current.delete(urn);
+        }
+      }
+      processingRef.current = false;
+    })();
+  }, [scFetch]);
+
+  const enqueueAnalysis = React.useCallback(
+    (t) => {
+      const urn = trackUrn(t);
+      if (seenRef.current.has(urn)) return; // already queued/done
+      seenRef.current.add(urn);
+      if (isLikelySet(t.duration)) {
+        setAnalysis((a) => ({ ...a, [urn]: { isLikelySet: true } }));
+        return;
+      }
+      setAnalysis((a) => ({ ...a, [urn]: { status: "loading" } }));
+      queueRef.current.push(t);
+      processQueue();
+    },
+    [processQueue]
+  );
+
+  // Play a track → load the Widget AND kick off analysis (non-blocking).
+  const playTrack = (t) => {
+    setPlaying(t);
+    enqueueAnalysis(t);
+  };
+
+  // "Analyze Crate" → enqueue every track in the open crate.
+  const analyzeCrate = () => (tracks || []).forEach((t) => enqueueAnalysis(t));
 
   // Open a crate → fetch its tracks. Likes/reposts have their own endpoints;
   // a playlist's tracks come from /playlists/:urn/tracks.
@@ -279,6 +352,18 @@ let SoundCloudLibrary = (props) => {
           <Typography variant="caption" color="textSecondary">
             {opened.count} tracks
           </Typography>
+          <Box style={{ flex: 1 }} />
+          {tracks && tracks.length > 0 && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<GraphicEq />}
+              onClick={analyzeCrate}
+              style={{ textTransform: "none", borderRadius: 8, borderColor: SC_ORANGE, color: SC_ORANGE }}
+            >
+              Analyze crate
+            </Button>
+          )}
         </Box>
 
         {playing && (
@@ -322,6 +407,7 @@ let SoundCloudLibrary = (props) => {
               {tracks.map((t) => {
                 const tid = t.urn || t.id;
                 const isPlaying = playing && (playing.urn || playing.id) === tid;
+                const a = analysis[tid];
                 return (
                 <TableRow
                   key={tid}
@@ -333,8 +419,8 @@ let SoundCloudLibrary = (props) => {
                   <TableCell style={{ width: 48 }}>
                     <IconButton
                       size="small"
-                      onClick={() => setPlaying(t)}
-                      title="Play on SoundCloud"
+                      onClick={() => playTrack(t)}
+                      title="Play + analyze"
                       style={{ padding: 2 }}
                     >
                       <Box style={{ position: "relative" }}>
@@ -366,7 +452,7 @@ let SoundCloudLibrary = (props) => {
                   </TableCell>
                   <TableCell style={{ fontWeight: 600 }}>{t.title}</TableCell>
                   <TableCell>{t.user && t.user.username}</TableCell>
-                  {isLikelySet(t.duration) ? (
+                  {isLikelySet(t.duration) || (a && a.isLikelySet) ? (
                     <TableCell colSpan={2}>
                       <Chip
                         size="small"
@@ -379,6 +465,41 @@ let SoundCloudLibrary = (props) => {
                         }}
                       />
                     </TableCell>
+                  ) : a && a.status === "loading" ? (
+                    <TableCell colSpan={2}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          color: "#888",
+                        }}
+                      >
+                        <CircularProgress size={13} style={{ color: SC_ORANGE }} />
+                        analyzing…
+                      </span>
+                    </TableCell>
+                  ) : a && a.camelot ? (
+                    <>
+                      <TableCell>
+                        <span
+                          style={{
+                            backgroundColor: camelotColor(a.camelot).bg,
+                            color: camelotColor(a.camelot).text,
+                            padding: "3px 8px",
+                            borderRadius: 10,
+                            fontWeight: 600,
+                            fontSize: "0.8rem",
+                            whiteSpace: "nowrap",
+                          }}
+                          title="Detected by KeyTrack"
+                        >
+                          {a.camelot}
+                          {a.key ? " · " + a.key : ""}
+                        </span>
+                      </TableCell>
+                      <TableCell>{a.bpm || "—"}</TableCell>
+                    </>
                   ) : (
                     <>
                       <TableCell>{t.key_signature || "—"}</TableCell>
@@ -412,8 +533,9 @@ let SoundCloudLibrary = (props) => {
           color="textSecondary"
           style={{ display: "block", marginTop: 12 }}
         >
-          Key &amp; BPM are artist-entered (usually blank) — KeyTrack analysis
-          comes next. Tracks link out to SoundCloud (source &amp; attribution).
+          Play a track or hit <b>Analyze crate</b> to compute its key + BPM with
+          KeyTrack (SoundCloud has none). Colored keys are ours; plain values are
+          artist-entered. Tracks link out to SoundCloud (source &amp; attribution).
         </Typography>
       </Box>
     );
