@@ -233,6 +233,10 @@ let SoundCloudCrate = (props) => {
   // key/BPM uses our analysis; un-analyzed tracks sort last.
   const view = React.useMemo(() => {
     let list = tracks || [];
+    // "Disable Sets" (KeyTrack setting): drop likely DJ sets/mixes entirely.
+    if (props.hideSets) {
+      list = list.filter((t) => !isLikelySet(t.duration));
+    }
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -267,7 +271,7 @@ let SoundCloudCrate = (props) => {
       });
     }
     return list;
-  }, [tracks, search, sort, analysis]);
+  }, [tracks, search, sort, analysis, props.hideSets]);
 
   const toggleSort = (col) =>
     setSort((s) =>
@@ -277,7 +281,9 @@ let SoundCloudCrate = (props) => {
     );
 
   return (
-    <Box style={{ padding: 16 }}>
+    // paddingBottom clears the fixed bottom player bar so the last rows /
+    // footer note aren't hidden behind it inside the full-screen modal.
+    <Box style={{ padding: 16, paddingBottom: 140 }}>
       <Box
         style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}
       >
@@ -353,9 +359,13 @@ let SoundCloudCrate = (props) => {
         <Box style={{ padding: 48, textAlign: "center" }}>
           <CircularProgress style={{ color: SC_ORANGE }} />
         </Box>
-      ) : tracks.length === 0 ? (
+      ) : view.length === 0 ? (
         <Typography color="textSecondary" style={{ padding: 16 }}>
-          No tracks in this crate.
+          {tracks.length === 0
+            ? "No tracks in this crate."
+            : props.hideSets && tracks.every((t) => isLikelySet(t.duration))
+            ? "Every track here is a set — hidden by your “Disable Sets” setting."
+            : "No tracks match your search."}
         </Typography>
       ) : (
         <Table size="small">
