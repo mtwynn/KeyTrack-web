@@ -71,6 +71,7 @@ import {
 import {
   buildScFetch,
   fetchSoundcloudCrates,
+  fetchScSetCounts,
 } from "../../utils/soundcloudCrates";
 
 // SoundCloud brand orange (source badge + toggle), distinct from Spotify green.
@@ -329,6 +330,9 @@ function normalizeSoundcloudCrate(c) {
     name: c.name || "",
     image: c.artwork || null,
     trackCount: c.count || 0,
+    // Non-set track count (null = not yet known). Used to hide all-set crates
+    // when "Disable Sets" is on.
+    nonSetCount: c.nonSetCount == null ? null : c.nonSetCount,
     ownerName: c.owner || "",
     description: "",
     raw: c,
@@ -344,6 +348,8 @@ let PLLibrary = (props) => {
   const scConnected = !!(props.soundcloud && props.soundcloud.connected);
   const scToken = props.soundcloud ? props.soundcloud.access_token : null;
   const [scCrates, setScCrates] = React.useState(null);
+  // Playlists we've already tried to resolve a set-count for (dedupe / no loop).
+  const setCountTriedRef = React.useRef(new Set());
   // The SoundCloud crate opened in the full-screen modal (null = closed).
   const [scOpened, setScOpened] = React.useState(null);
 
@@ -396,6 +402,36 @@ let PLLibrary = (props) => {
       cancelled = true;
     };
   }, [scFetch]);
+
+  // Only matters when "Disable Sets" is on: resolve the set-count of playlists
+  // whose tracks weren't embedded, so all-set crates can be dropped from the
+  // grid. Lazy (paid only when the toggle is used), cached, and the ref guards
+  // against refetching the same crate.
+  React.useEffect(() => {
+    if (!scFetch || !props.hideSets || !scCrates) return;
+    const todo = scCrates.filter(
+      (c) =>
+        c.kind === "playlist" &&
+        c.nonSetCount == null &&
+        !setCountTriedRef.current.has(c.id)
+    );
+    if (!todo.length) return;
+    todo.forEach((c) => setCountTriedRef.current.add(c.id));
+    let cancelled = false;
+    fetchScSetCounts(scFetch, todo).then((counts) => {
+      if (cancelled || !Object.keys(counts).length) return;
+      setScCrates((prev) =>
+        prev
+          ? prev.map((c) =>
+              counts[c.id] != null ? { ...c, nonSetCount: counts[c.id] } : c
+            )
+          : prev
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scFetch, props.hideSets, scCrates]);
 
   // Normalized, source-agnostic crate list — the merge of the active sources.
   // Everything below (search, sort, folders, selection, rendering) uses this.
@@ -529,6 +565,11 @@ let PLLibrary = (props) => {
       if (showHidden ? !hidden : hidden) return false;
       // "Favorites" view: only crates the user has starred.
       if (favoritesOnly && !showHidden && !m.favorite) return false;
+      // "Disable Sets": drop SoundCloud crates that are entirely sets (nothing
+      // would be left to show). Unknown counts (null) stay visible.
+      if (props.hideSets && c.source === "soundcloud" && c.nonSetCount === 0) {
+        return false;
+      }
       if (metaFilter.length > 0) {
         const vals = [...(m.tags || []), ...(m.genres || [])];
         if (!metaFilter.some((f) => vals.includes(f))) return false;
@@ -550,7 +591,15 @@ let PLLibrary = (props) => {
       return (a.name || "").localeCompare(b.name || "");
     });
     return arr;
-  }, [searchItems, crateSort, crateMeta, showHidden, favoritesOnly, metaFilter]);
+  }, [
+    searchItems,
+    crateSort,
+    crateMeta,
+    showHidden,
+    favoritesOnly,
+    metaFilter,
+    props.hideSets,
+  ]);
 
   const pagedCrates = sortedCrates.slice(
     cratePage * cratesPerPage,
