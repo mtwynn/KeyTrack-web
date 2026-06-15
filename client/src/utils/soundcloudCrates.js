@@ -45,13 +45,35 @@ const trackList = (d) =>
     .map((t) => (t && t.track ? t.track : t))
     .filter(Boolean);
 
+// Follow linked-partitioning `next_href` pages to collect a whole collection
+// (the backend caps each page at 50). Guarded so a runaway can't loop forever.
+async function fetchAllPages(scFetch, path) {
+  const first = await scFetch(path);
+  let items =
+    first && first.collection
+      ? first.collection.slice()
+      : Array.isArray(first)
+      ? first.slice()
+      : [];
+  let next = first && first.next_href;
+  for (let guard = 0; next && guard < 40; guard++) {
+    const page = await scFetch(
+      "/soundcloud/next?href=" + encodeURIComponent(next)
+    );
+    if (page && page.collection) items = items.concat(page.collection);
+    next = page && page.next_href;
+  }
+  return items;
+}
+
 // Fetch the user's SoundCloud crates: Liked Tracks + Reposts as virtual crates
 // (artwork from the first track) plus their playlists/sets. Returns a plain
 // array of crate descriptors:
 //   { id, kind: 'likes'|'reposts'|'playlist', name, owner, count, artwork, permalink }
 export async function fetchSoundcloudCrates(scFetch) {
   const [playlists, likes, reposts] = await Promise.all([
-    scFetch("/soundcloud/me/playlists").catch(() => ({ collection: [] })),
+    // Follow pagination so ALL playlists load, not just the first 50.
+    fetchAllPages(scFetch, "/soundcloud/me/playlists").catch(() => []),
     scFetch("/soundcloud/me/likes/tracks").catch(() => ({ collection: [] })),
     scFetch("/soundcloud/me/reposts").catch(() => ({ collection: [] })),
   ]);
@@ -88,7 +110,7 @@ export async function fetchSoundcloudCrates(scFetch) {
   // The user's playlists / sets. The list response sometimes embeds the full
   // track array (then nonSetCount is free); otherwise it's null = "unknown"
   // until fetchScSetCounts fills it in.
-  list(playlists).forEach((p) => {
+  playlists.forEach((p) => {
     const embedded = Array.isArray(p.tracks) ? p.tracks : [];
     const complete =
       embedded.length > 0 &&
