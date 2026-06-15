@@ -31,8 +31,8 @@ import {
 } from "@material-ui/icons";
 
 import { camelotColor } from "../../utils/harmonic";
-import { getScAnalysis, saveScAnalysis } from "../../utils/scAnalysis";
 import { fetchScTracks } from "../../utils/soundcloudCrates";
+import { useScAnalysisQueue } from "./useScAnalysisQueue";
 
 // SoundCloud's brand orange — keeps SoundCloud crates visually distinct from
 // Spotify's green (strict source separation).
@@ -80,13 +80,8 @@ const ScSortLabel = withStyles({
 let SoundCloudCrate = (props) => {
   const { crate, onBack } = props;
   const [tracks, setTracks] = React.useState(null);
-  // The track currently loaded into the embedded SoundCloud Widget player.
+  // The track currently highlighted as playing (playback is in the bottom bar).
   const [playing, setPlaying] = React.useState(null);
-  // Our computed key/BPM per track URN: { status:'loading' } | result.
-  const [analysis, setAnalysis] = React.useState({});
-  const queueRef = React.useRef([]); // FIFO of tracks awaiting analysis
-  const seenRef = React.useRef(new Set()); // urns already queued/done (dedupe)
-  const processingRef = React.useRef(false);
   // Within-crate search + column sort (parity with the Spotify track table).
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState({ col: null, dir: "asc" });
@@ -119,71 +114,20 @@ let SoundCloudCrate = (props) => {
     [props]
   );
 
-  // --- Key/BPM analysis: a single-worker FIFO queue. Enqueuing never blocks
-  // (playback is independent); results fill in live and cache to Firestore so a
-  // track is only ever analyzed once for the whole app.
-  const trackUrn = (t) => t.urn || String(t.id);
+  // Lazy key/BPM analysis (SoundCloud has none) via the shared single-worker
+  // queue. Results fill in live and cache app-wide.
+  const { analysis, enqueue, enqueueAll } = useScAnalysisQueue(scFetch);
 
-  const processQueue = React.useCallback(() => {
-    if (processingRef.current) return;
-    processingRef.current = true;
-    (async () => {
-      while (queueRef.current.length) {
-        const t = queueRef.current.shift();
-        const urn = trackUrn(t);
-        let result = await getScAnalysis(urn); // shared cache first
-        if (!result) {
-          try {
-            const tid = t.id || t.urn;
-            result = await scFetch(
-              `/soundcloud/analyze?track_id=${encodeURIComponent(tid)}` +
-                `&duration=${t.duration || 0}` +
-                `&genre=${encodeURIComponent(t.genre || "")}`
-            );
-            if (result && !result.isLikelySet && result.camelot) {
-              saveScAnalysis(urn, result);
-            }
-          } catch (e) {
-            result = { error: true };
-          }
-        }
-        setAnalysis((a) => ({ ...a, [urn]: result || { error: true } }));
-        // Failed (e.g. HLS-only / no progressive stream) → allow a retry later.
-        if (!result || result.error || (!result.camelot && !result.isLikelySet)) {
-          seenRef.current.delete(urn);
-        }
-      }
-      processingRef.current = false;
-    })();
-  }, [scFetch]);
-
-  const enqueueAnalysis = React.useCallback(
-    (t) => {
-      const urn = trackUrn(t);
-      if (seenRef.current.has(urn)) return; // already queued/done
-      seenRef.current.add(urn);
-      if (isLikelySet(t.duration)) {
-        setAnalysis((a) => ({ ...a, [urn]: { isLikelySet: true } }));
-        return;
-      }
-      setAnalysis((a) => ({ ...a, [urn]: { status: "loading" } }));
-      queueRef.current.push(t);
-      processQueue();
-    },
-    [processQueue]
-  );
-
-  // Play a track → load the Widget AND kick off analysis (non-blocking).
-  // Playback happens in the shared bottom player bar (lifted to App); we keep
-  // local `playing` only to highlight the active row. Analysis is independent.
+  // Play a track → bottom-bar playback (lifted to App) + kick off analysis
+  // (non-blocking). Local `playing` only highlights the active row.
   const playTrack = (t) => {
     setPlaying(t);
-    enqueueAnalysis(t);
+    enqueue(t);
     if (props.onPlaySoundcloud) props.onPlaySoundcloud(t);
   };
 
   // "Analyze Crate" → enqueue every track in the open crate.
-  const analyzeCrate = () => (tracks || []).forEach((t) => enqueueAnalysis(t));
+  const analyzeCrate = () => enqueueAll(tracks);
 
   // Load the crate's tracks. Likes/reposts have their own endpoints; a
   // playlist's tracks come from /playlists/:urn/tracks.
