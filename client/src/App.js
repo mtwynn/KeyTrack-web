@@ -189,6 +189,7 @@ class App extends React.Component {
     this.connectSoundcloud = this.connectSoundcloud.bind(this);
     this.disconnectSoundcloud = this.disconnectSoundcloud.bind(this);
     this.refreshSoundcloudToken = this.refreshSoundcloudToken.bind(this);
+    this.scheduleSoundcloudRefresh = this.scheduleSoundcloudRefresh.bind(this);
     this.openSoundcloud = this.openSoundcloud.bind(this);
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
@@ -235,10 +236,17 @@ class App extends React.Component {
     if (this.state.spotify.loggedIn) {
       this.scheduleTokenRefresh();
     }
+    // SoundCloud access tokens expire (~1h) and its refresh tokens are
+    // single-use, so keep the session alive proactively instead of waiting for
+    // a 401 (by which point a parallel-request 401 storm can burn the token).
+    if (this.state.soundcloud.connected) {
+      this.scheduleSoundcloudRefresh();
+    }
   }
 
   componentWillUnmount() {
     clearTimeout(this.refreshTimer);
+    clearTimeout(this.scRefreshTimer);
   }
 
   // Schedule a background token refresh shortly before the current token
@@ -424,6 +432,7 @@ class App extends React.Component {
   }
 
   disconnectSoundcloud() {
+    clearTimeout(this.scRefreshTimer);
     clearSoundcloudParams();
     this.setState({
       soundcloud: {
@@ -435,9 +444,47 @@ class App extends React.Component {
     });
   }
 
+  // Schedule a background SoundCloud token refresh shortly before the current
+  // token expires, re-arming after each refresh so the session stays alive
+  // without the user reconnecting (mirrors scheduleTokenRefresh for Spotify).
+  // Reads from localStorage rather than state so it sees the freshly-saved
+  // token right after a refresh, before setState has flushed.
+  scheduleSoundcloudRefresh() {
+    const params = getSoundcloudParams(isProduction);
+    clearTimeout(this.scRefreshTimer);
+    if (!params.refresh_token) return; // nothing to refresh with
+
+    const expiresAt = params.expires_at;
+    // No expiry recorded (older session) or already within the lead window:
+    // refresh right now.
+    if (!expiresAt || expiresAt - Date.now() <= REFRESH_LEAD_MS) {
+      this.refreshSoundcloudToken();
+      return;
+    }
+    this.scRefreshTimer = setTimeout(
+      this.refreshSoundcloudToken,
+      expiresAt - Date.now() - REFRESH_LEAD_MS
+    );
+  }
+
   // Exchange the (single-use) refresh token for a fresh access token, persist
   // the rotated refresh token, and return the new access token (or null).
-  async refreshSoundcloudToken() {
+  //
+  // Single-flight: SoundCloud refresh tokens rotate — spending one invalidates
+  // the previous, and reusing a spent token can invalidate the whole token
+  // family (forcing a reconnect). The library load fires several requests in
+  // parallel, so an expired access token makes them all 401 at once; without
+  // this guard each would POST the SAME single-use refresh token and all but
+  // one would fail. Concurrent callers share one in-flight refresh instead.
+  refreshSoundcloudToken() {
+    if (this.scRefreshPromise) return this.scRefreshPromise;
+    this.scRefreshPromise = this.doRefreshSoundcloudToken().finally(() => {
+      this.scRefreshPromise = null;
+    });
+    return this.scRefreshPromise;
+  }
+
+  async doRefreshSoundcloudToken() {
     const { refresh_token } = this.state.soundcloud;
     if (!refresh_token) return null;
     try {
@@ -455,6 +502,7 @@ class App extends React.Component {
       };
       saveSoundcloudParams(next);
       this.setState({ soundcloud: { connected: true, ...next } });
+      this.scheduleSoundcloudRefresh(); // re-arm before the new token expires
       return next.access_token;
     } catch (e) {
       console.error('SoundCloud token refresh failed', e);
