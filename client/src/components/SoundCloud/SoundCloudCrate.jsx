@@ -31,6 +31,7 @@ import {
 
 import { camelotColor } from "../../utils/harmonic";
 import { getScAnalysis, saveScAnalysis } from "../../utils/scAnalysis";
+import { fetchScTracks } from "../../utils/soundcloudCrates";
 
 // SoundCloud's brand orange — keeps SoundCloud crates visually distinct from
 // Spotify's green (strict source separation).
@@ -193,10 +194,9 @@ let SoundCloudCrate = (props) => {
         : "/soundcloud/playlists/" + encodeURIComponent(crate.id) + "/tracks";
     (async () => {
       try {
-        const data = await scFetch(path);
-        const list = data && data.collection ? data.collection : Array.isArray(data) ? data : [];
-        // Likes/reposts come back as { track: {...} } wrappers on some endpoints.
-        if (!cancelled) setTracks(list.map((t) => (t && t.track ? t.track : t)).filter(Boolean));
+        // Follow pagination so the whole crate loads, not just the first 50.
+        const list = await fetchScTracks(scFetch, path);
+        if (!cancelled) setTracks(list);
       } catch (e) {
         console.error("Failed to load SoundCloud crate", e);
         if (!cancelled) setTracks([]);
