@@ -10,11 +10,15 @@ import {
   CircularProgress,
   Grid,
   IconButton,
+  Input,
+  InputAdornment,
+  Paper,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  TableSortLabel,
   Typography,
   makeStyles,
   withStyles,
@@ -28,6 +32,7 @@ import {
   OpenInNew,
   PlayArrow,
   GraphicEq,
+  Search,
 } from "@material-ui/icons";
 
 import { camelotColor } from "../../utils/harmonic";
@@ -43,6 +48,13 @@ const SC_ORANGE = "#ff5500";
 // so it's easy to tune.
 const LIKELY_SET_MS = 6 * 60 * 1000;
 const isLikelySet = (ms) => ms && ms > LIKELY_SET_MS;
+
+// Sort rank for a Camelot code ("8B" -> 17) so the key column sorts around the
+// wheel; un-analyzed tracks sort last.
+const camelotRank = (c) => {
+  const m = /(\d+)([AB])/.exec(c || "");
+  return m ? parseInt(m[1], 10) * 2 + (m[2] === "B" ? 1 : 0) : 9999;
+};
 
 const useStyles = makeStyles((theme) => ({
   tile: {
@@ -110,6 +122,13 @@ const ScHeadCell = withStyles({
   head: { backgroundColor: SC_ORANGE, color: "#fff", fontWeight: "bold" },
 })(TableCell);
 
+// White sort arrows so they stay visible on the orange header.
+const ScSortLabel = withStyles({
+  root: { color: "#fff", "&:hover": { color: "#fff" }, "&$active": { color: "#fff" } },
+  active: {},
+  icon: { color: "#fff !important" },
+})(TableSortLabel);
+
 let SoundCloudLibrary = (props) => {
   const classes = useStyles();
   const [crates, setCrates] = React.useState(null);
@@ -124,6 +143,9 @@ let SoundCloudLibrary = (props) => {
   const queueRef = React.useRef([]); // FIFO of tracks awaiting analysis
   const seenRef = React.useRef(new Set()); // urns already queued/done (dedupe)
   const processingRef = React.useRef(false);
+  // Within-crate search + column sort (parity with the Spotify track table).
+  const [search, setSearch] = React.useState("");
+  const [sort, setSort] = React.useState({ col: null, dir: "asc" });
 
   // Call the backend proxy with the SoundCloud token. On a 401 (expired access
   // token) refresh once and retry, mirroring the Spotify session handling.
@@ -218,6 +240,8 @@ let SoundCloudLibrary = (props) => {
   const openCrate = async (crate) => {
     setOpened(crate);
     setTracks(null);
+    setSearch("");
+    setSort({ col: null, dir: "asc" });
     const path =
       crate.kind === "likes"
         ? "/soundcloud/me/likes/tracks"
@@ -329,6 +353,53 @@ let SoundCloudLibrary = (props) => {
     };
   }, [scFetch]);
 
+  // Filtered + sorted track view (search + clickable column sort). Sorting by
+  // key/BPM uses our analysis; un-analyzed tracks sort last.
+  const view = React.useMemo(() => {
+    let list = tracks || [];
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (t) =>
+          (t.title || "").toLowerCase().includes(q) ||
+          ((t.user && t.user.username) || "").toLowerCase().includes(q)
+      );
+    }
+    if (sort.col) {
+      const d = sort.dir === "desc" ? -1 : 1;
+      const an = (t) => analysis[t.urn || t.id] || {};
+      list = [...list].sort((a, b) => {
+        switch (sort.col) {
+          case "title":
+            return d * (a.title || "").localeCompare(b.title || "");
+          case "artist":
+            return (
+              d *
+              ((a.user && a.user.username) || "").localeCompare(
+                (b.user && b.user.username) || ""
+              )
+            );
+          case "length":
+            return d * ((a.duration || 0) - (b.duration || 0));
+          case "key":
+            return d * (camelotRank(an(a).camelot) - camelotRank(an(b).camelot));
+          case "bpm":
+            return d * ((an(a).bpm || 1e9) - (an(b).bpm || 1e9));
+          default:
+            return 0;
+        }
+      });
+    }
+    return list;
+  }, [tracks, search, sort, analysis]);
+
+  const toggleSort = (col) =>
+    setSort((s) =>
+      s.col === col
+        ? { col, dir: s.dir === "asc" ? "desc" : "asc" }
+        : { col, dir: "asc" }
+    );
+
   const kindIcon = (kind) => {
     if (kind === "likes") return <Favorite style={{ color: "#fff", fontSize: 40 }} />;
     if (kind === "reposts") return <Repeat style={{ color: "#fff", fontSize: 40 }} />;
@@ -381,6 +452,35 @@ let SoundCloudLibrary = (props) => {
           </Box>
         )}
 
+        {tracks && tracks.length > 0 && (
+          <Paper
+            elevation={0}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              maxWidth: 360,
+              borderRadius: 24,
+              padding: "2px 8px 2px 16px",
+              marginBottom: 12,
+              border: "1px solid rgba(128,128,128,0.28)",
+            }}
+          >
+            <Input
+              disableUnderline
+              fullWidth
+              type="text"
+              placeholder="Search this crate"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              endAdornment={
+                <InputAdornment position="end">
+                  <Search style={{ color: "rgba(128,128,128,0.8)" }} />
+                </InputAdornment>
+              }
+            />
+          </Paper>
+        )}
+
         {!tracks ? (
           <Box style={{ padding: 48, textAlign: "center" }}>
             <CircularProgress style={{ color: SC_ORANGE }} />
@@ -394,17 +494,57 @@ let SoundCloudLibrary = (props) => {
             <TableHead>
               <TableRow>
                 <ScHeadCell></ScHeadCell>
-                <ScHeadCell>Track</ScHeadCell>
-                <ScHeadCell>Artist</ScHeadCell>
-                <ScHeadCell>Key</ScHeadCell>
-                <ScHeadCell>BPM</ScHeadCell>
+                <ScHeadCell sortDirection={sort.col === "title" ? sort.dir : false}>
+                  <ScSortLabel
+                    active={sort.col === "title"}
+                    direction={sort.col === "title" ? sort.dir : "asc"}
+                    onClick={() => toggleSort("title")}
+                  >
+                    Track
+                  </ScSortLabel>
+                </ScHeadCell>
+                <ScHeadCell sortDirection={sort.col === "artist" ? sort.dir : false}>
+                  <ScSortLabel
+                    active={sort.col === "artist"}
+                    direction={sort.col === "artist" ? sort.dir : "asc"}
+                    onClick={() => toggleSort("artist")}
+                  >
+                    Artist
+                  </ScSortLabel>
+                </ScHeadCell>
+                <ScHeadCell sortDirection={sort.col === "key" ? sort.dir : false}>
+                  <ScSortLabel
+                    active={sort.col === "key"}
+                    direction={sort.col === "key" ? sort.dir : "asc"}
+                    onClick={() => toggleSort("key")}
+                  >
+                    Key
+                  </ScSortLabel>
+                </ScHeadCell>
+                <ScHeadCell sortDirection={sort.col === "bpm" ? sort.dir : false}>
+                  <ScSortLabel
+                    active={sort.col === "bpm"}
+                    direction={sort.col === "bpm" ? sort.dir : "asc"}
+                    onClick={() => toggleSort("bpm")}
+                  >
+                    BPM
+                  </ScSortLabel>
+                </ScHeadCell>
                 <ScHeadCell>Genre</ScHeadCell>
-                <ScHeadCell>Length</ScHeadCell>
+                <ScHeadCell sortDirection={sort.col === "length" ? sort.dir : false}>
+                  <ScSortLabel
+                    active={sort.col === "length"}
+                    direction={sort.col === "length" ? sort.dir : "asc"}
+                    onClick={() => toggleSort("length")}
+                  >
+                    Length
+                  </ScSortLabel>
+                </ScHeadCell>
                 <ScHeadCell></ScHeadCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {tracks.map((t) => {
+              {view.map((t) => {
                 const tid = t.urn || t.id;
                 const isPlaying = playing && (playing.urn || playing.id) === tid;
                 const a = analysis[tid];
