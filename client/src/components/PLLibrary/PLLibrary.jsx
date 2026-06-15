@@ -453,6 +453,13 @@ let PLLibrary = (props) => {
     return out;
   }, [spotifyLib, scLib, sources, scConnected]);
 
+  // An active source whose crates haven't arrived yet (Spotify playlists not
+  // loaded, or SoundCloud crates still fetching — which can be slow on a cold
+  // backend). Used so the grid shows a spinner instead of "No crates to show".
+  const scLoading = scConnected && sources.soundcloud && scCrates == null;
+  const libraryLoading =
+    (sources.spotify && props.pllibrary == null) || scLoading;
+
   const [loadingPlaylist, setLoadingPlaylist] = React.useState(false);
   const [loadingId, setLoadingId] = React.useState(null);
   const [loadingAll, setLoadingAll] = React.useState(false);
@@ -1603,6 +1610,16 @@ let PLLibrary = (props) => {
           <Typography variant="caption" color="textSecondary">
             {sortedCrates.length} crate{sortedCrates.length === 1 ? "" : "s"}
           </Typography>
+          {scLoading && sortedCrates.length > 0 && (
+            <Typography
+              variant="caption"
+              color="textSecondary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+            >
+              <CircularProgress size={11} style={{ color: SC_ORANGE }} />
+              loading SoundCloud…
+            </Typography>
+          )}
         </Box>
       </Box>
 
@@ -1640,17 +1657,29 @@ let PLLibrary = (props) => {
         </Box>
       )}
 
-      {sortedCrates.length === 0 && (
-        <Box sx={{ padding: isMobile ? 1 : 2 }}>
-          <Typography variant="body2" color="textSecondary">
-            {showHidden
-              ? "No hidden crates."
-              : favoritesOnly
-              ? "No favorite crates yet — tap the ★ on a crate to add one."
-              : "No crates to show."}
-          </Typography>
-        </Box>
-      )}
+      {sortedCrates.length === 0 &&
+        (libraryLoading ? (
+          <Box style={{ padding: 56, textAlign: "center" }}>
+            <CircularProgress style={{ color: "#1ED760" }} />
+            <Typography
+              variant="body2"
+              color="textSecondary"
+              style={{ marginTop: 12 }}
+            >
+              Loading your library…
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ padding: isMobile ? 1 : 2 }}>
+            <Typography variant="body2" color="textSecondary">
+              {showHidden
+                ? "No hidden crates."
+                : favoritesOnly
+                ? "No favorite crates yet — tap the ★ on a crate to add one."
+                : "No crates to show."}
+            </Typography>
+          </Box>
+        ))}
 
       <div
         key={folderView ? "folders" : "crates"}
