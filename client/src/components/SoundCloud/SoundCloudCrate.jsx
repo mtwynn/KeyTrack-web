@@ -16,6 +16,7 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
+  TablePagination,
   Typography,
   withStyles,
 } from "@material-ui/core";
@@ -89,6 +90,9 @@ let SoundCloudCrate = (props) => {
   // Within-crate search + column sort (parity with the Spotify track table).
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState({ col: null, dir: "asc" });
+  // Render only the current page of rows (parity with the Spotify track view).
+  const [page, setPage] = React.useState(0);
+  const [rowsPerPage, setRowsPerPage] = React.useState(100);
 
   // Call the backend proxy with the SoundCloud token. On a 401 (expired access
   // token) refresh once and retry, mirroring the Spotify session handling.
@@ -280,6 +284,13 @@ let SoundCloudCrate = (props) => {
         : { col, dir: "asc" }
     );
 
+  // Only the current page is rendered into the DOM (search/sort still run over
+  // the whole crate). Snap back to page 1 whenever the result set changes.
+  React.useEffect(() => {
+    setPage(0);
+  }, [search, sort, props.hideSets, crate]);
+  const pagedView = view.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
   return (
     // paddingBottom clears the fixed bottom player bar so the last rows /
     // footer note aren't hidden behind it inside the full-screen modal.
@@ -422,7 +433,7 @@ let SoundCloudCrate = (props) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {view.map((t) => {
+            {pagedView.map((t) => {
               const tid = t.urn || t.id;
               const isPlaying = playing && (playing.urn || playing.id) === tid;
               const a = analysis[tid];
@@ -544,6 +555,22 @@ let SoundCloudCrate = (props) => {
             })}
           </TableBody>
         </Table>
+      )}
+
+      {tracks && view.length > 50 && (
+        <TablePagination
+          component="div"
+          count={view.length}
+          page={page}
+          onChangePage={(e, p) => setPage(p)}
+          rowsPerPage={rowsPerPage}
+          onChangeRowsPerPage={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+          rowsPerPageOptions={[50, 100, 200]}
+          labelRowsPerPage="Tracks per page"
+        />
       )}
 
       <Typography
