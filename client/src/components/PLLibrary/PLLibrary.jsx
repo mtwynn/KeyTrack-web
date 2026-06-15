@@ -951,6 +951,12 @@ let PLLibrary = (props) => {
     const isSelected = selected.has(crate.uid);
     const isSc = crate.source === "soundcloud";
     const accent = isSc ? SC_ORANGE : SPOTIFY_GREEN;
+    // With "Disable Sets" on, show the non-set count (once known) so the chip
+    // matches what's actually inside the crate.
+    const displayCount =
+      isSc && props.hideSets && crate.nonSetCount != null
+        ? crate.nonSetCount
+        : crate.trackCount;
     return (
       <Card
         key={crate.uid}
@@ -1060,7 +1066,7 @@ let PLLibrary = (props) => {
           )}
           <Box className={classes.tileMeta}>
             <Chip
-              label={`${crate.trackCount} tracks`}
+              label={`${displayCount} tracks`}
               size="small"
               className={classes.trackChip}
               style={{ backgroundColor: accent }}
