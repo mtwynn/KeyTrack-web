@@ -368,9 +368,10 @@ let Playlist = (props) => {
 
   // Camelot code of the anchored track, derived from its key.
   const anchorKey = harmonicAnchorId ? getKey(harmonicAnchorId) : null;
-  const harmonicAnchorCamelot = anchorKey
-    ? KeyMap[anchorKey.key].camelot[anchorKey.mode]
-    : null;
+  const harmonicAnchorCamelot =
+    anchorKey && KeyMap[anchorKey.key]
+      ? KeyMap[anchorKey.key].camelot[anchorKey.mode]
+      : null;
 
   const toggleHarmonicAnchor = React.useCallback((item) => {
     setHarmonicAnchorId((prev) =>
@@ -424,9 +425,15 @@ let Playlist = (props) => {
         return dir * ((aKey.danceability || 0) - (bKey.danceability || 0));
       if (sortBy === "valence")
         return dir * ((aKey.valence || 0) - (bKey.valence || 0));
-      // Default ("key"): Camelot code, then BPM as a tiebreaker.
-      const aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
-      const bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
+      // Default ("key"): Camelot code, then BPM as a tiebreaker. A track with
+      // no valid key (e.g. Spotify key === -1) sorts last rather than crashing.
+      const aMap = KeyMap[aKey.key];
+      const bMap = KeyMap[bKey.key];
+      if (!aMap && !bMap) return 0;
+      if (!aMap) return 1;
+      if (!bMap) return -1;
+      const aCamelot = aMap.camelot[aKey.mode];
+      const bCamelot = bMap.camelot[bKey.mode];
       const cmp = aCamelot.localeCompare(bCamelot);
       if (cmp !== 0) return dir * cmp;
       return dir * (aKey.bpm - bKey.bpm);
@@ -493,7 +500,7 @@ let Playlist = (props) => {
           if (keyFilter.length !== 0) {
             filteredItems = filteredItems.filter((item) => {
               let trackKey = getKey(item.track.id);
-              if (!trackKey) return false;
+              if (!trackKey || !KeyMap[trackKey.key]) return false;
               // keyFilter holds Camelot codes (set via the wheel).
               let camelot = KeyMap[trackKey.key].camelot[trackKey.mode];
               return keyFilter.includes(camelot);

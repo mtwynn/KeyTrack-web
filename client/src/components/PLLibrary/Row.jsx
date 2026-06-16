@@ -10,21 +10,24 @@ import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 let Row = (props) => {
   const { item } = props;
 
-  // Key/Camelot info for this track, computed once.
+  // Key/Camelot info for this track, computed once. Spotify's audio-features
+  // `key` can be -1 (no key detected), so KeyMap[key] may be undefined — guard
+  // it so such a track renders as "N/A" instead of crashing the whole table.
   const trackKey = props.getKey(item.track.id);
-  const camelot = trackKey ? KeyMap[trackKey.key].camelot[trackKey.mode] : null;
+  const keyInfo = trackKey && KeyMap[trackKey.key] ? KeyMap[trackKey.key] : null;
+  const camelot = keyInfo ? keyInfo.camelot[trackKey.mode] : null;
   const keyColor = camelot ? camelotColor(camelot) : null;
 
   // Label for the single key column, rendered in the selected notation. On
   // mobile (no separate Quality column) the musical key includes Maj/Min.
   let keyLabel = null;
-  if (trackKey) {
+  if (keyInfo) {
     if (props.wheel === "Camelot") {
       keyLabel = camelot;
     } else if (props.wheel === "Open") {
-      keyLabel = KeyMap[trackKey.key].open[trackKey.mode];
+      keyLabel = keyInfo.open[trackKey.mode];
     } else {
-      keyLabel = `${KeyMap[trackKey.key].key}${
+      keyLabel = `${keyInfo.key}${
         props.isMobile ? (trackKey.mode === 1 ? " Maj" : " Min") : ""
       }`;
     }
@@ -212,7 +215,7 @@ let Row = (props) => {
           {item.track.artists.map((artist) => artist.name).join(", ")}
         </TableCell>
       )}
-      <TableCell>{trackKey ? keyChip(keyLabel) : "N/A"}</TableCell>
+      <TableCell>{keyInfo ? keyChip(keyLabel) : "N/A"}</TableCell>
       {!props.isMobile && (
         <TableCell>
           {trackKey ? (trackKey.mode === 1 ? "Major" : "Minor") : "N/A"}
