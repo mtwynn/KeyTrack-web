@@ -17,6 +17,14 @@ export function useScAnalysisQueue(scFetch) {
   const queueRef = React.useRef([]); // FIFO of tracks awaiting analysis
   const seenRef = React.useRef(new Set()); // urns already queued/done (dedupe)
   const processingRef = React.useRef(false);
+  // For the global progress indicator: track metadata (urn -> {urn,title,
+  // artist}) and a {done,total} counter for the CURRENT run, reset to 0/0 when
+  // the queue drains so the next batch starts fresh (not a cumulative session
+  // total).
+  const metaRef = React.useRef({});
+  const totalRef = React.useRef(0);
+  const doneRef = React.useRef(0);
+  const [progress, setProgress] = React.useState({ done: 0, total: 0 });
 
   const trackUrn = (t) => t.urn || String(t.id);
 
@@ -55,6 +63,8 @@ export function useScAnalysisQueue(scFetch) {
           }
         }
         setAnalysis((a) => ({ ...a, [urn]: result || { error: true } }));
+        doneRef.current += 1;
+        setProgress({ done: doneRef.current, total: totalRef.current });
         // Allow a retry only for genuine failures or an analyzed-but-no-key
         // result — NOT for terminal `unavailable` verdicts.
         if (
@@ -66,6 +76,10 @@ export function useScAnalysisQueue(scFetch) {
         }
       }
       processingRef.current = false;
+      // Run drained — reset the counter so the next batch starts at 0/0.
+      totalRef.current = 0;
+      doneRef.current = 0;
+      setProgress({ done: 0, total: 0 });
     })();
   }, [scFetch]);
 
@@ -78,8 +92,15 @@ export function useScAnalysisQueue(scFetch) {
         setAnalysis((a) => ({ ...a, [urn]: { isLikelySet: true } }));
         return;
       }
+      metaRef.current[urn] = {
+        urn,
+        title: t.title || "",
+        artist: (t.user && t.user.username) || "",
+      };
       setAnalysis((a) => ({ ...a, [urn]: { status: "loading" } }));
       queueRef.current.push(t);
+      totalRef.current += 1;
+      setProgress({ done: doneRef.current, total: totalRef.current });
       processQueue();
     },
     [processQueue]
@@ -90,5 +111,5 @@ export function useScAnalysisQueue(scFetch) {
     [enqueue]
   );
 
-  return { analysis, enqueue, enqueueAll };
+  return { analysis, enqueue, enqueueAll, meta: metaRef.current, progress };
 }

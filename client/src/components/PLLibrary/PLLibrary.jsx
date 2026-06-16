@@ -713,6 +713,32 @@ let PLLibrary = (props) => {
   // for now SoundCloud crates open individually.
   const openScCrate = (crate) => setScOpened(crate);
 
+  // Retry a Spotify API call on 429 (rate limit), honoring the Retry-After
+  // header. Opening many crates at once bursts past Spotify's limit; without
+  // this a single 429 would fail the whole Open(N) batch.
+  const spotifyRetry = async (fn, attempts = 6) => {
+    for (let i = 0; ; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        const status = (e && e.status) || (e && e.response && e.response.status);
+        if (status === 429 && i < attempts) {
+          let waitS = 1;
+          try {
+            const ra =
+              (e && e.getResponseHeader && e.getResponseHeader("Retry-After")) ||
+              (e && e.response && e.response.headers &&
+                e.response.headers["retry-after"]);
+            if (ra) waitS = parseInt(ra, 10) || 1;
+          } catch (_) {}
+          await new Promise((r) => setTimeout(r, (waitS + 0.5) * 1000));
+          continue;
+        }
+        throw e;
+      }
+    }
+  };
+
   // --- Cross-playlist search: load every crate's tracks into one virtual
   // playlist, then reuse the normal Playlist view to search/filter across them.
   const fetchAllTracks = async (playlistId) => {
@@ -720,10 +746,10 @@ let PLLibrary = (props) => {
     let offset = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      const res = await spotifyWebApi.getPlaylistTracks(playlistId, {
-        offset,
-        limit: 100,
-      });
+      const off = offset; // per-iteration capture for the retry closure
+      const res = await spotifyRetry(() =>
+        spotifyWebApi.getPlaylistTracks(playlistId, { offset: off, limit: 100 })
+      );
       items = items.concat(res.items || []);
       if (!res.next) break;
       offset += 100;
@@ -734,8 +760,8 @@ let PLLibrary = (props) => {
   const fetchFeatures = async (ids) => {
     const out = [];
     for (let i = 0; i < ids.length; i += 100) {
-      const res = await spotifyWebApi.getAudioFeaturesForTracks(
-        ids.slice(i, i + 100)
+      const res = await spotifyRetry(() =>
+        spotifyWebApi.getAudioFeaturesForTracks(ids.slice(i, i + 100))
       );
       out.push(...(res.audio_features || []));
     }
@@ -914,10 +940,10 @@ let PLLibrary = (props) => {
           let offset = 0;
           // eslint-disable-next-line no-constant-condition
           while (true) {
-            const res = await spotifyWebApi.getMySavedTracks({
-              limit: 50,
-              offset,
-            });
+            const off = offset; // per-iteration capture for the retry closure
+            const res = await spotifyRetry(() =>
+              spotifyWebApi.getMySavedTracks({ limit: 50, offset: off })
+            );
             items = items.concat(res.items || []);
             if (!res.next) break;
             offset += 50;

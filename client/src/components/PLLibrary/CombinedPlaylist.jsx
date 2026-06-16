@@ -1,9 +1,9 @@
 import React from "react";
-import { CircularProgress, Button } from "@material-ui/core";
+import { Button } from "@material-ui/core";
 
 import Playlist from "./Playlist";
 import { camelotToKeyMode } from "../../utils/harmonic";
-import { useScAnalysisQueue } from "../SoundCloud/useScAnalysisQueue";
+import { useScAnalysis } from "../SoundCloud/ScAnalysis";
 
 // Parse a SoundCloud date string into the Spotify album.release_date shape so a
 // SoundCloud track reuses the exact same release-date formatting as Spotify
@@ -35,7 +35,6 @@ let CombinedPlaylist = (props) => {
     spotifyItems,
     spotifyFeatures,
     scTracks,
-    scFetch,
     token,
     userId,
     updatePlayer,
@@ -45,7 +44,9 @@ let CombinedPlaylist = (props) => {
     setCount,
   } = props;
 
-  const { analysis, enqueueAll } = useScAnalysisQueue(scFetch);
+  // The app-level shared queue (so analysis continues after close + a global
+  // indicator shows progress).
+  const { analysis, enqueueAll } = useScAnalysis();
 
   // Auto-analyze the SoundCloud tracks on open so their key/BPM fill in live.
   React.useEffect(() => {
@@ -126,15 +127,11 @@ let CombinedPlaylist = (props) => {
     whiteSpace: "nowrap",
     marginRight: 8,
   };
+  // Live progress is shown by the GLOBAL floating indicator now (one source of
+  // truth), so the header only surfaces the "couldn't analyze + Retry"
+  // affordance once analysis has finished and some retryable failures remain.
   let combinedStatus = null;
-  if (scStatus && scStatus.done < scStatus.total) {
-    combinedStatus = (
-      <span style={statusWrap}>
-        <CircularProgress size={13} style={{ color: "#ff5500" }} />
-        analyzing SoundCloud… {scStatus.done}/{scStatus.total}
-      </span>
-    );
-  } else if (scStatus && scStatus.failed.length) {
+  if (scStatus && scStatus.done >= scStatus.total && scStatus.failed.length) {
     combinedStatus = (
       <span style={statusWrap}>
         {scStatus.failed.length} couldn't analyze
