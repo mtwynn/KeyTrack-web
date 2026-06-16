@@ -1,5 +1,11 @@
 import React from "react";
-import { Avatar, TableCell, TableRow, IconButton } from "@material-ui/core";
+import {
+  Avatar,
+  TableCell,
+  TableRow,
+  IconButton,
+  CircularProgress,
+} from "@material-ui/core";
 import PlaylistAddIcon from "@material-ui/icons/PlaylistAdd";
 
 import KeyMap from "../../utils/KeyMap";
@@ -215,7 +221,55 @@ let Row = (props) => {
           {item.track.artists.map((artist) => artist.name).join(", ")}
         </TableCell>
       )}
-      <TableCell>{keyInfo ? keyChip(keyLabel) : "N/A"}</TableCell>
+      <TableCell>
+        {keyInfo ? (
+          keyChip(keyLabel)
+        ) : props.scStatus === "loading" ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              color: "#888",
+              fontSize: "0.8rem",
+            }}
+          >
+            <CircularProgress size={12} style={{ color: "#ff5500" }} />
+            analyzing…
+          </span>
+        ) : props.scStatus === "failed" ? (
+          <span
+            title="Couldn't analyze — use Retry"
+            style={{
+              backgroundColor: "#ff5500",
+              color: "#fff",
+              padding: "2px 8px",
+              borderRadius: 10,
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            ⚠ Failed
+          </span>
+        ) : props.scStatus === "set" ? (
+          <span
+            title="Long DJ set — not analyzed"
+            style={{
+              backgroundColor: "#ff5500",
+              color: "#fff",
+              padding: "2px 8px",
+              borderRadius: 10,
+              fontSize: "0.72rem",
+              fontWeight: 700,
+            }}
+          >
+            Set
+          </span>
+        ) : (
+          "N/A"
+        )}
+      </TableCell>
       {!props.isMobile && (
         <TableCell>
           {trackKey ? (trackKey.mode === 1 ? "Major" : "Minor") : "N/A"}

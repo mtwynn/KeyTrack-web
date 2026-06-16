@@ -147,6 +147,28 @@ let CombinedPlaylist = (props) => {
     );
   }
 
+  // Per-row SoundCloud status for the Key-column marker: still analyzing,
+  // failed, or flagged as a Set. Analyzed tracks (have a key) get no marker —
+  // their real key shows. Keyed by the same id as the combined item's track.id.
+  const scStatusById = React.useMemo(() => {
+    const m = {};
+    (scTracks || []).forEach((t) => {
+      const urn = t.urn || String(t.id);
+      const a = analysis[urn];
+      if (a && a.camelot) return;
+      if (a && a.isLikelySet) m[urn] = "set";
+      else if (a && a.error) m[urn] = "failed";
+      else m[urn] = "loading";
+    });
+    return m;
+  }, [scTracks, analysis]);
+
+  // Mount the Playlist only while open, so it initializes its internal
+  // searchItems from the FULL track list (the data is ready by the time `open`
+  // flips true). Keeping it mounted-but-closed left searchItems stuck on the
+  // empty initial list — the table showed nothing until "clear filters".
+  if (!open) return null;
+
   return (
     <Playlist
       open={open}
@@ -164,6 +186,7 @@ let CombinedPlaylist = (props) => {
       onOpenSet={onOpenSet}
       setCount={setCount}
       combinedStatus={combinedStatus}
+      scStatusById={scStatusById}
     />
   );
 };

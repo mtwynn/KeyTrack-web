@@ -1036,6 +1036,11 @@ let Playlist = (props) => {
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
                     onToggleAnchor={toggleHarmonicAnchor}
                     onAddToSet={handleAddToSet}
+                    scStatus={
+                      props.scStatusById
+                        ? props.scStatusById[item.track.id]
+                        : undefined
+                    }
                   />
                 ))}
             </TableBody>
