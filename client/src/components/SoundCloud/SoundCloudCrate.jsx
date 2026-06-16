@@ -32,7 +32,7 @@ import {
 
 import { camelotColor } from "../../utils/harmonic";
 import { fetchScTracks } from "../../utils/soundcloudCrates";
-import { useScAnalysisQueue } from "./useScAnalysisQueue";
+import { useScAnalysis } from "./ScAnalysis";
 
 // SoundCloud's brand orange — keeps SoundCloud crates visually distinct from
 // Spotify's green (strict source separation).
@@ -119,9 +119,9 @@ let SoundCloudCrate = (props) => {
     [backend, token, onRefreshToken]
   );
 
-  // Lazy key/BPM analysis (SoundCloud has none) via the shared single-worker
-  // queue. Results fill in live and cache app-wide.
-  const { analysis, enqueue, enqueueAll } = useScAnalysisQueue(scFetch);
+  // Lazy key/BPM analysis (SoundCloud has none) via the app-level shared queue,
+  // so it continues after this crate is closed and feeds the global indicator.
+  const { analysis, enqueue, enqueueAll } = useScAnalysis();
 
   // Play a track → bottom-bar playback (lifted to App) + kick off analysis
   // (non-blocking). Local `playing` only highlights the active row.

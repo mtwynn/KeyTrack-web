@@ -3,7 +3,7 @@ import { CircularProgress, Button } from "@material-ui/core";
 
 import Playlist from "./Playlist";
 import { camelotToKeyMode } from "../../utils/harmonic";
-import { useScAnalysisQueue } from "../SoundCloud/useScAnalysisQueue";
+import { useScAnalysis } from "../SoundCloud/ScAnalysis";
 
 // Parse a SoundCloud date string into the Spotify album.release_date shape so a
 // SoundCloud track reuses the exact same release-date formatting as Spotify
@@ -35,7 +35,6 @@ let CombinedPlaylist = (props) => {
     spotifyItems,
     spotifyFeatures,
     scTracks,
-    scFetch,
     token,
     userId,
     updatePlayer,
@@ -45,7 +44,9 @@ let CombinedPlaylist = (props) => {
     setCount,
   } = props;
 
-  const { analysis, enqueueAll } = useScAnalysisQueue(scFetch);
+  // The app-level shared queue (so analysis continues after close + a global
+  // indicator shows progress).
+  const { analysis, enqueueAll } = useScAnalysis();
 
   // Auto-analyze the SoundCloud tracks on open so their key/BPM fill in live.
   React.useEffect(() => {

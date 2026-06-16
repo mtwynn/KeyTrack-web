@@ -69,6 +69,7 @@ import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
 import SpotifyIcon from './components/SpotifyIcon';
 import { scWidgetSrc, scTrackUrl, loadScWidgetApi } from './utils/soundcloudCrates';
+import { ScAnalysisProvider } from './components/SoundCloud/ScAnalysis';
 import { makeAppTheme, THEME_STORAGE_KEY } from './theme';
 
 // Utils
@@ -1389,6 +1390,15 @@ class App extends React.Component {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <div className="App">
+          {/* One app-level SoundCloud analysis queue + floating progress
+              indicator, so analysis keeps running after a crate is closed. */}
+          <ScAnalysisProvider
+            token={this.state.soundcloud.access_token}
+            connected={this.state.soundcloud.connected}
+            backend={soundcloudBackend}
+            onRefreshToken={this.refreshSoundcloudToken}
+            playerInset={this.state.scNowPlaying ? 130 : loggedIn ? 96 : 0}
+          >
           {loggedIn ? (
             <>
               {this.renderHome(version)}
@@ -1511,6 +1521,7 @@ class App extends React.Component {
             // (updatePlayer), and playing another SC track just swaps.
             <ScBottomPlayer track={this.state.scNowPlaying} />
           )}
+          </ScAnalysisProvider>
         </div>
       </ThemeProvider>
     );
