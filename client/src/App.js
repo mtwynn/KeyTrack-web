@@ -152,11 +152,12 @@ const BottomPlayer = React.memo(({ token, uris, play }) => (
 ));
 
 // SoundCloud playback reuses the same bottom player-bar slot via SoundCloud's
-// sanctioned Widget API: ONE persistent iframe (the big visual waveform, which
-// is itself the play/pause/scrub/seek surface) driven imperatively by
-// widget.load() when the track changes — no per-track iframe re-mount/reload —
-// plus our own volume slider (widget.setVolume), since the widget bar exposes
-// no volume control. Shown instead of the Spotify player while a SC track is
+// sanctioned Widget API: ONE persistent iframe (the CLASSIC compact player,
+// whose full-width waveform is the play/pause/scrub/seek surface) driven
+// imperatively by widget.load() when the track changes — no per-track iframe
+// re-mount/reload. Our volume slider + close sit in a side column so they never
+// overlap the waveform (the big `visual=true` player squished into a bottom bar
+// scrubbed unreliably). Shown instead of the Spotify player while a SC track is
 // active (one source plays at a time).
 const SC_VOLUME_KEY = 'keytrack_sc_volume';
 const ScBottomPlayer = ({ track, onClose }) => {
@@ -166,7 +167,7 @@ const ScBottomPlayer = ({ track, onClose }) => {
   // `src` autoplays) so the swap effect doesn't reload it.
   const loadedUrlRef = React.useRef(scTrackUrl(track));
   // Stable initial iframe src so React never rewrites it (that would re-mount).
-  const initialSrcRef = React.useRef(scWidgetSrc(track, { visual: true }));
+  const initialSrcRef = React.useRef(scWidgetSrc(track, { visual: false }));
   // Latest track/volume for use inside async widget callbacks (avoid stale closures).
   const trackRef = React.useRef(track);
   trackRef.current = track;
@@ -193,7 +194,7 @@ const ScBottomPlayer = ({ track, onClose }) => {
             loadedUrlRef.current = current;
             w.load(current, {
               auto_play: true,
-              visual: true,
+              visual: false,
               show_comments: false,
               color: '#ff5500',
               callback: () => w.setVolume(volumeRef.current),
@@ -218,7 +219,7 @@ const ScBottomPlayer = ({ track, onClose }) => {
     loadedUrlRef.current = url;
     w.load(url, {
       auto_play: true,
-      visual: true,
+      visual: false,
       show_comments: false,
       color: '#ff5500',
       callback: () => w.setVolume(volumeRef.current),
@@ -234,30 +235,27 @@ const ScBottomPlayer = ({ track, onClose }) => {
 
   return (
     <div style={SC_PLAYER_WRAP_STYLE}>
-      <div style={{ position: 'relative', backgroundColor: '#111', lineHeight: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', backgroundColor: '#111', lineHeight: 0 }}>
+        {/* The waveform iframe takes all remaining width; the controls sit in a
+            fixed side column so they NEVER overlap the scrub strip. */}
         <iframe
           ref={iframeRef}
           title="SoundCloud player"
-          width="100%"
           height="120"
           scrolling="no"
           frameBorder="no"
           allow="autoplay"
           src={initialSrcRef.current}
+          style={{ flex: 1, minWidth: 0, border: 0 }}
         />
-        {/* Volume control (the widget bar has none) + close, overlaid top-right
-            on a dark scrim for legibility over the waveform. */}
         <div
           style={{
-            position: 'absolute',
-            top: 6,
-            right: 6,
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            padding: '0 8px',
-            borderRadius: 18,
-            backgroundColor: 'rgba(0,0,0,0.55)',
+            padding: '0 10px',
+            flexShrink: 0,
+            backgroundColor: '#111',
           }}
         >
           <VolumeDown style={{ color: '#fff', fontSize: 18 }} />
@@ -267,7 +265,7 @@ const ScBottomPlayer = ({ track, onClose }) => {
             min={0}
             max={100}
             aria-label="SoundCloud volume"
-            style={{ width: 80, color: '#ff5500' }}
+            style={{ width: 72, color: '#ff5500' }}
           />
           <VolumeUp style={{ color: '#fff', fontSize: 18 }} />
           <IconButton
