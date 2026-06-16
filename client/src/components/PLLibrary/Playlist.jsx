@@ -482,20 +482,11 @@ let Playlist = (props) => {
     if (page > lastPage) setPage(lastPage);
   }, [sortedItems.length, rowsPerPage, page]);
 
-  // Single source of truth for scrolling back to the top of the table — used by
-  // both the "Back to Top" Fab and the bottom pager. `block: "center"` clears
-  // the sticky filter AppBar (a plain "start" tucked the header underneath it,
-  // so it looked like it stopped short).
+  // Scroll back to the top of the table — used by the "Back to Top" Fab only.
+  // `block: "center"` clears the sticky filter AppBar.
   const scrollToTop = () => {
     if (topRef.current)
       topRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-  };
-
-  // Change page and bring the top of the table into view, so paginating from
-  // the BOTTOM controls lands the user at the top of the new page.
-  const goToPage = (p) => {
-    setPage(p);
-    scrollToTop();
   };
 
   const pageCount = Math.max(1, Math.ceil(sortedItems.length / rowsPerPage));
@@ -1079,8 +1070,8 @@ let Playlist = (props) => {
             </TableBody>
           </Table>
 
-          {/* Bottom pagination — prev/next only (no rows-per-page), so you can
-              change pages without scrolling back up to the top pager. */}
+          {/* Bottom pagination — prev/next only (no rows-per-page). Paginates
+              in place; deliberately does NOT scroll (use Back to Top for that). */}
           {sortedItems.length > rowsPerPage && (
             <Box
               style={{
@@ -1095,7 +1086,7 @@ let Playlist = (props) => {
                 aria-label="previous page"
                 size="small"
                 disabled={page === 0}
-                onClick={() => goToPage(Math.max(0, page - 1))}
+                onClick={() => setPage(Math.max(0, page - 1))}
               >
                 <ChevronLeft />
               </IconButton>
@@ -1106,7 +1097,7 @@ let Playlist = (props) => {
                 aria-label="next page"
                 size="small"
                 disabled={page >= pageCount - 1}
-                onClick={() => goToPage(Math.min(pageCount - 1, page + 1))}
+                onClick={() => setPage(Math.min(pageCount - 1, page + 1))}
               >
                 <ChevronRight />
               </IconButton>
