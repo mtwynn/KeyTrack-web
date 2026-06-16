@@ -147,6 +147,17 @@ let CombinedPlaylist = (props) => {
     );
   }
 
+  // TEMP diagnostic — remove before merge.
+  const dbgId = items[0] && items[0].track && items[0].track.id;
+  console.log("[combinedPlaylist] render", {
+    items: items.length,
+    playlistKeys: playlistKeys.length,
+    spotifyFeaturesProp: (spotifyFeatures || []).length,
+    scTracksProp: (scTracks || []).length,
+    firstItemId: dbgId,
+    keyForFirstItem: dbgId ? playlistKeys.find((k) => k.id === dbgId) : null,
+  });
+
   return (
     <Playlist
       open={open}

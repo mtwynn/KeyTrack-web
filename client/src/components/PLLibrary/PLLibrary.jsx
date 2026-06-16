@@ -892,6 +892,17 @@ let PLLibrary = (props) => {
 
       if (cancelAllRef.current) return;
       const spotifyFeatures = Array.from(featById.values());
+      // TEMP diagnostic — remove before merge.
+      const sampleId =
+        spotifyItems[0] && spotifyItems[0].track && spotifyItems[0].track.id;
+      console.log("[combined] gather", {
+        spotifyItems: spotifyItems.length,
+        spotifyFeatures: spotifyFeatures.length,
+        scTracks: scTracksAll.length,
+        sampleSpotifyId: sampleId,
+        featHasSample: sampleId ? featById.has(sampleId) : null,
+        sampleFeatureKeys: spotifyFeatures[0] && Object.keys(spotifyFeatures[0]),
+      });
       setCombinedData({
         spotifyItems,
         spotifyFeatures,
