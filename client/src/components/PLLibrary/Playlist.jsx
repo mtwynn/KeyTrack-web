@@ -767,7 +767,13 @@ let Playlist = (props) => {
                   variant="outlined"
                   size="small"
                   startIcon={<DonutLarge />}
-                  onClick={() => setPickerOpen(true)}
+                  // Blur the trigger before opening this focus-untrapped
+                  // (disableEnforceFocus) picker, so it isn't left focused
+                  // inside the aria-hidden root (Chrome aria-hidden warning).
+                  onClick={(e) => {
+                    e.currentTarget.blur();
+                    setPickerOpen(true);
+                  }}
                   style={{
                     height: "100%",
                     textTransform: "none",

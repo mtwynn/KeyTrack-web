@@ -18,7 +18,11 @@ import { camelotColor, camelotInfo, compatibleCamelot } from "./harmonic";
 // Interactive key calculator: tap a key on the Camelot wheel to see it in all
 // three notations (Musical / Camelot / Open) at once, plus its harmonic matches.
 let KeyCalculator = (props) => {
-  const { onClose, open } = props;
+  // bottomInset = height (px) of the always-on bottom player bar, so the dialog
+  // centers in the box BETWEEN the top of the page and the top of the player
+  // instead of the full viewport (the player sits at a higher z-index and was
+  // covering/clipping the dialog's lower half — esp. on mobile).
+  const { onClose, open, bottomInset = 0 } = props;
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("xs"));
 
@@ -47,6 +51,10 @@ let KeyCalculator = (props) => {
       maxWidth="xs"
       disableEnforceFocus
       disableScrollLock
+      // Reserve the player's height at the bottom: the modal root ends above the
+      // player, so the centered (or fullScreen) paper + its max-height fit
+      // entirely in frame and the player can't overlap the content.
+      style={bottomInset ? { bottom: bottomInset } : undefined}
     >
       <DialogTitle
         disableTypography
