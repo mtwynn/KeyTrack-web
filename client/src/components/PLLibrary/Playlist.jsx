@@ -319,12 +319,19 @@ let Playlist = (props) => {
   // re-render every time Playlist re-renders for unrelated reasons.
   const handleRowClick = React.useCallback(
     (event, item) => {
+      // Combined-view only: SoundCloud rows play through the Widget bar, never
+      // the Spotify Web Playback player. Spotify / no-__source rows are
+      // untouched and fall through to the existing updatePlayer call.
+      if (item.__source === "soundcloud") {
+        if (props.onPlaySoundcloud) props.onPlaySoundcloud(item.__scRaw);
+        return;
+      }
       let uri = item.track.uri;
       if (props.updatePlayer) {
         props.updatePlayer([uri], true);
       }
     },
-    [props.updatePlayer]
+    [props.updatePlayer, props.onPlaySoundcloud]
   );
 
   const spotifyWebApi = new Spotify();
@@ -361,9 +368,10 @@ let Playlist = (props) => {
 
   // Camelot code of the anchored track, derived from its key.
   const anchorKey = harmonicAnchorId ? getKey(harmonicAnchorId) : null;
-  const harmonicAnchorCamelot = anchorKey
-    ? KeyMap[anchorKey.key].camelot[anchorKey.mode]
-    : null;
+  const harmonicAnchorCamelot =
+    anchorKey && KeyMap[anchorKey.key]
+      ? KeyMap[anchorKey.key].camelot[anchorKey.mode]
+      : null;
 
   const toggleHarmonicAnchor = React.useCallback((item) => {
     setHarmonicAnchorId((prev) =>
@@ -417,9 +425,15 @@ let Playlist = (props) => {
         return dir * ((aKey.danceability || 0) - (bKey.danceability || 0));
       if (sortBy === "valence")
         return dir * ((aKey.valence || 0) - (bKey.valence || 0));
-      // Default ("key"): Camelot code, then BPM as a tiebreaker.
-      const aCamelot = KeyMap[aKey.key].camelot[aKey.mode];
-      const bCamelot = KeyMap[bKey.key].camelot[bKey.mode];
+      // Default ("key"): Camelot code, then BPM as a tiebreaker. A track with
+      // no valid key (e.g. Spotify key === -1) sorts last rather than crashing.
+      const aMap = KeyMap[aKey.key];
+      const bMap = KeyMap[bKey.key];
+      if (!aMap && !bMap) return 0;
+      if (!aMap) return 1;
+      if (!bMap) return -1;
+      const aCamelot = aMap.camelot[aKey.mode];
+      const bCamelot = bMap.camelot[bKey.mode];
       const cmp = aCamelot.localeCompare(bCamelot);
       if (cmp !== 0) return dir * cmp;
       return dir * (aKey.bpm - bKey.bpm);
@@ -486,7 +500,7 @@ let Playlist = (props) => {
           if (keyFilter.length !== 0) {
             filteredItems = filteredItems.filter((item) => {
               let trackKey = getKey(item.track.id);
-              if (!trackKey) return false;
+              if (!trackKey || !KeyMap[trackKey.key]) return false;
               // keyFilter holds Camelot codes (set via the wheel).
               let camelot = KeyMap[trackKey.key].camelot[trackKey.mode];
               return keyFilter.includes(camelot);
@@ -578,6 +592,25 @@ let Playlist = (props) => {
 
   // TODO: Abstract this to new component
 
+  // Combined-view header tint. `__source` is only set in the combined adapter,
+  // so for a pure-Spotify playlist hasSC is false and headerBg stays null —
+  // every header cell keeps its green `head` class and the row gets no bg
+  // (i.e. the Spotify-only path is byte-for-byte unchanged). With SoundCloud
+  // present: a diagonal green/orange split when Spotify is also there, else
+  // solid orange for an all-SoundCloud crate.
+  const hasSC = (props.playlist || []).some((i) => i.__source === "soundcloud");
+  const hasSP = (props.playlist || []).some((i) => i.__source !== "soundcloud");
+  const headerBg = !hasSC
+    ? null
+    : hasSP
+    ? "linear-gradient(115deg, #1ED760 0%, #1ED760 calc(50% - 1px), #fff calc(50% - 1px), #fff calc(50% + 1px), #ff5500 calc(50% + 1px), #ff5500 100%)"
+    : "#ff5500";
+  // When a header tint is active, make every cell transparent so the row's
+  // color/gradient shows through continuously; otherwise (Spotify-only) leave
+  // the cells alone so they keep their green `head` background. White bold text
+  // is unchanged either way (it comes from StyledTableCell's `head` class).
+  const headCellStyle = headerBg ? { backgroundColor: "transparent" } : undefined;
+
   return (
     <div className="m-div">
       <Dialog
@@ -613,6 +646,9 @@ let Playlist = (props) => {
             >
               {props.playlistName}
             </Typography>
+            {/* Combined-view only: SoundCloud analysis progress (undefined for
+                a Spotify-only playlist, so nothing renders). */}
+            {props.combinedStatus}
             <IconButton
               edge="end"
               color="inherit"
@@ -919,10 +955,10 @@ let Playlist = (props) => {
           )}
           <Table>
             <TableHead ref={topRef}>
-              <TableRow>
-                {!isMobile && <StyledTableCell></StyledTableCell>}
-                {!isMobile && <StyledTableCell>Cover Art</StyledTableCell>}
-                <StyledTableCell sortDirection={sortBy === "track" ? sortDir : false}>
+              <TableRow style={headerBg ? { background: headerBg } : undefined}>
+                {!isMobile && <StyledTableCell style={headCellStyle}></StyledTableCell>}
+                {!isMobile && <StyledTableCell style={headCellStyle}>Cover Art</StyledTableCell>}
+                <StyledTableCell style={headCellStyle} sortDirection={sortBy === "track" ? sortDir : false}>
                   <HeadSortLabel
                     active={sortBy === "track"}
                     direction={sortBy === "track" ? sortDir : "asc"}
@@ -932,7 +968,7 @@ let Playlist = (props) => {
                   </HeadSortLabel>
                 </StyledTableCell>
                 {!isMobile && (
-                  <StyledTableCell sortDirection={sortBy === "artist" ? sortDir : false}>
+                  <StyledTableCell style={headCellStyle} sortDirection={sortBy === "artist" ? sortDir : false}>
                     <HeadSortLabel
                       active={sortBy === "artist"}
                       direction={sortBy === "artist" ? sortDir : "asc"}
@@ -942,7 +978,7 @@ let Playlist = (props) => {
                     </HeadSortLabel>
                   </StyledTableCell>
                 )}
-                <StyledTableCell sortDirection={sortBy === "key" ? sortDir : false}>
+                <StyledTableCell style={headCellStyle} sortDirection={sortBy === "key" ? sortDir : false}>
                   <HeadSortLabel
                     active={sortBy === "key"}
                     direction={sortBy === "key" ? sortDir : "asc"}
@@ -951,8 +987,8 @@ let Playlist = (props) => {
                     {isMobile ? "Key" : `Key (${wheel})`}
                   </HeadSortLabel>
                 </StyledTableCell>
-                {!isMobile && <StyledTableCell>Quality</StyledTableCell>}
-                <StyledTableCell sortDirection={sortBy === "bpm" ? sortDir : false}>
+                {!isMobile && <StyledTableCell style={headCellStyle}>Quality</StyledTableCell>}
+                <StyledTableCell style={headCellStyle} sortDirection={sortBy === "bpm" ? sortDir : false}>
                   <HeadSortLabel
                     active={sortBy === "bpm"}
                     direction={sortBy === "bpm" ? sortDir : "asc"}
@@ -962,7 +998,7 @@ let Playlist = (props) => {
                   </HeadSortLabel>
                 </StyledTableCell>
                 {!isTablet && (
-                  <StyledTableCell sortDirection={sortBy === "released" ? sortDir : false}>
+                  <StyledTableCell style={headCellStyle} sortDirection={sortBy === "released" ? sortDir : false}>
                     <HeadSortLabel
                       active={sortBy === "released"}
                       direction={sortBy === "released" ? sortDir : "asc"}
@@ -973,7 +1009,7 @@ let Playlist = (props) => {
                   </StyledTableCell>
                 )}
                 {!isTablet && (
-                  <StyledTableCell sortDirection={sortBy === "energy" ? sortDir : false}>
+                  <StyledTableCell style={headCellStyle} sortDirection={sortBy === "energy" ? sortDir : false}>
                     <HeadSortLabel
                       active={sortBy === "energy"}
                       direction={sortBy === "energy" ? sortDir : "asc"}
@@ -1000,6 +1036,11 @@ let Playlist = (props) => {
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
                     onToggleAnchor={toggleHarmonicAnchor}
                     onAddToSet={handleAddToSet}
+                    scStatus={
+                      props.scStatusById
+                        ? props.scStatusById[item.track.id]
+                        : undefined
+                    }
                   />
                 ))}
             </TableBody>

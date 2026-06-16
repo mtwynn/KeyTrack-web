@@ -1,29 +1,39 @@
 import React from "react";
-import { Avatar, TableCell, TableRow, IconButton } from "@material-ui/core";
+import {
+  Avatar,
+  TableCell,
+  TableRow,
+  IconButton,
+  CircularProgress,
+} from "@material-ui/core";
 import PlaylistAddIcon from "@material-ui/icons/PlaylistAdd";
 
 import KeyMap from "../../utils/KeyMap";
 import { camelotColor, harmonicRelation } from "../../utils/harmonic";
 import { formatReleaseDate } from "../../utils/release";
+import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 
 let Row = (props) => {
   const { item } = props;
 
-  // Key/Camelot info for this track, computed once.
+  // Key/Camelot info for this track, computed once. Spotify's audio-features
+  // `key` can be -1 (no key detected), so KeyMap[key] may be undefined — guard
+  // it so such a track renders as "N/A" instead of crashing the whole table.
   const trackKey = props.getKey(item.track.id);
-  const camelot = trackKey ? KeyMap[trackKey.key].camelot[trackKey.mode] : null;
+  const keyInfo = trackKey && KeyMap[trackKey.key] ? KeyMap[trackKey.key] : null;
+  const camelot = keyInfo ? keyInfo.camelot[trackKey.mode] : null;
   const keyColor = camelot ? camelotColor(camelot) : null;
 
   // Label for the single key column, rendered in the selected notation. On
   // mobile (no separate Quality column) the musical key includes Maj/Min.
   let keyLabel = null;
-  if (trackKey) {
+  if (keyInfo) {
     if (props.wheel === "Camelot") {
       keyLabel = camelot;
     } else if (props.wheel === "Open") {
-      keyLabel = KeyMap[trackKey.key].open[trackKey.mode];
+      keyLabel = keyInfo.open[trackKey.mode];
     } else {
-      keyLabel = `${KeyMap[trackKey.key].key}${
+      keyLabel = `${keyInfo.key}${
         props.isMobile ? (trackKey.mode === 1 ? " Maj" : " Min") : ""
       }`;
     }
@@ -74,7 +84,10 @@ let Row = (props) => {
     </span>
   );
 
-  const addButton = (
+  // Combined-view only: SoundCloud rows can't be added to the Spotify set, so
+  // the add button is suppressed; for no-__source (Spotify) rows it's unchanged.
+  const isSoundcloud = item.__source === "soundcloud";
+  const addButton = isSoundcloud ? null : (
     <IconButton
       aria-label="add to set"
       size="small"
@@ -88,6 +101,66 @@ let Row = (props) => {
     </IconButton>
   );
 
+  // A tiny brand badge pinned to a cover's bottom-right corner. Only rendered in
+  // the combined view (item.__source set) — Spotify-only rows get nothing, so
+  // their cover Avatars are byte-for-byte unchanged.
+  const sourceBadge = !item.__source ? null : isSoundcloud ? (
+    <a
+      href={item.__scRaw ? item.__scRaw.permalink_url : undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title="Open on SoundCloud"
+      style={{
+        position: "absolute",
+        right: -3,
+        bottom: -3,
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        backgroundColor: "#ff5500",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 0 0 1.5px #fff",
+      }}
+    >
+      <SoundcloudIcon size={10} color="#fff" />
+    </a>
+  ) : (
+    <span
+      title="Spotify"
+      style={{
+        position: "absolute",
+        right: -3,
+        bottom: -3,
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        backgroundColor: "#1ED760",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 0 0 1.5px #fff",
+        pointerEvents: "none",
+      }}
+    >
+      <SpotifyIcon size={10} color="#fff" />
+    </span>
+  );
+
+  // Wrap an Avatar so the source badge can sit in its corner. Without a badge
+  // (Spotify-only rows) the Avatar is returned as-is — no wrapper, no change.
+  const withBadge = (avatar, wrapperStyle) =>
+    sourceBadge ? (
+      <div style={{ position: "relative", display: "inline-flex", ...wrapperStyle }}>
+        {avatar}
+        {sourceBadge}
+      </div>
+    ) : (
+      avatar
+    );
+
   return (
     <TableRow
       key={item.track.id}
@@ -98,14 +171,16 @@ let Row = (props) => {
       {!props.isMobile && <TableCell>{addButton}</TableCell>}
       {!props.isMobile && (
         <TableCell>
-          <Avatar
-            variant="square"
-            src={
-              item.track.album.images[0]
-                ? item.track.album.images[0].url
-                : null
-            }
-          ></Avatar>
+          {withBadge(
+            <Avatar
+              variant="square"
+              src={
+                item.track.album.images[0]
+                  ? item.track.album.images[0].url
+                  : null
+              }
+            ></Avatar>
+          )}
         </TableCell>
       )}
       <TableCell>
@@ -118,15 +193,17 @@ let Row = (props) => {
               marginBottom: "4px",
             }}
           >
-            <Avatar
-              variant="square"
-              src={
-                item.track.album.images[0]
-                  ? item.track.album.images[0].url
-                  : null
-              }
-              style={{ width: 40, height: 40 }}
-            ></Avatar>
+            {withBadge(
+              <Avatar
+                variant="square"
+                src={
+                  item.track.album.images[0]
+                    ? item.track.album.images[0].url
+                    : null
+                }
+                style={{ width: 40, height: 40 }}
+              ></Avatar>
+            )}
             {addButton}
           </div>
         )}
@@ -144,7 +221,55 @@ let Row = (props) => {
           {item.track.artists.map((artist) => artist.name).join(", ")}
         </TableCell>
       )}
-      <TableCell>{trackKey ? keyChip(keyLabel) : "N/A"}</TableCell>
+      <TableCell>
+        {keyInfo ? (
+          keyChip(keyLabel)
+        ) : props.scStatus === "loading" ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              color: "#888",
+              fontSize: "0.8rem",
+            }}
+          >
+            <CircularProgress size={12} style={{ color: "#ff5500" }} />
+            analyzing…
+          </span>
+        ) : props.scStatus === "failed" ? (
+          <span
+            title="Couldn't analyze — use Retry"
+            style={{
+              backgroundColor: "#ff5500",
+              color: "#fff",
+              padding: "2px 8px",
+              borderRadius: 10,
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            ⚠ Failed
+          </span>
+        ) : props.scStatus === "set" ? (
+          <span
+            title="Long DJ set — not analyzed"
+            style={{
+              backgroundColor: "#ff5500",
+              color: "#fff",
+              padding: "2px 8px",
+              borderRadius: 10,
+              fontSize: "0.72rem",
+              fontWeight: 700,
+            }}
+          >
+            Set
+          </span>
+        ) : (
+          "N/A"
+        )}
+      </TableCell>
       {!props.isMobile && (
         <TableCell>
           {trackKey ? (trackKey.mode === 1 ? "Major" : "Minor") : "N/A"}
