@@ -514,6 +514,14 @@ app.get(
           streams.code != null
         ) {
           const scMessage = streams.message || streams.error || null;
+          // 403/404 = SoundCloud won't stream this track to our API token at all
+          // (monetized / "only available on SoundCloud" / removed). That's an
+          // EXPECTED "can't analyze" outcome, not a server error — return 200
+          // with an `unavailable` flag (so it doesn't spam the console with red
+          // 502s and gets cached), reserving 502 for genuine/transient errors.
+          if (scStatus === 403 || scStatus === 404) {
+            return res.send({ unavailable: true, scStatus, scMessage });
+          }
           console.error('sc streams error', scStatus, scMessage, 'track', trackId);
           return res.status(502).send({
             error: 'stream_lookup_failed',
@@ -551,11 +559,14 @@ app.get(
         const isHls = !progressive && !!hlsUrl;
         const isPreview = !progressive && !hlsUrl && !!previewUrl;
         if (!audioUrl) {
-          // Surface what WAS available so genuinely streamless tracks are
-          // distinguishable from a selection gap.
-          return res
-            .status(422)
-            .send({ error: 'no_stream', available: Object.keys(streams || {}) });
+          // No usable stream at all (not even a preview) — also an expected
+          // "can't analyze" outcome, not an error. 200 + unavailable; `available`
+          // lists the stream keys SoundCloud returned, for debugging.
+          return res.send({
+            unavailable: true,
+            reason: 'no_stream',
+            available: Object.keys(streams || {}),
+          });
         }
         // 2) hand it to the analysis service
         request.post(

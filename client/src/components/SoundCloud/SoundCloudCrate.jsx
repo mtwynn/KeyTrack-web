@@ -453,7 +453,7 @@ let SoundCloudCrate = (props) => {
                     </TableCell>
                     <TableCell>{a.bpm || "—"}</TableCell>
                   </>
-                ) : a && a.error && a.unavailable ? (
+                ) : a && a.unavailable ? (
                   <TableCell colSpan={2}>
                     <Chip
                       size="small"
