@@ -58,7 +58,6 @@ import {
 import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
-import SoundCloudCrate from "../SoundCloud/SoundCloudCrate";
 import CombinedPlaylist from "./CombinedPlaylist";
 import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 import { useEffect } from "react";
@@ -74,6 +73,7 @@ import {
   fetchSoundcloudCrates,
   fetchScSetCounts,
   fetchScTracks,
+  isLikelySet,
 } from "../../utils/soundcloudCrates";
 
 // SoundCloud brand orange (source badge + toggle), distinct from Spotify green.
@@ -355,9 +355,8 @@ let PLLibrary = (props) => {
   const [scCrates, setScCrates] = React.useState(null);
   // Playlists we've already tried to resolve a set-count for (dedupe / no loop).
   const setCountTriedRef = React.useRef(new Set());
-  // The SoundCloud crate opened in the full-screen modal (null = closed).
-  const [scOpened, setScOpened] = React.useState(null);
-  // Combined multi-source browser, opened from a SoundCloud-inclusive Open(N).
+  // Combined multi-source browser — opened from a SoundCloud-inclusive Open(N)
+  // OR a single SoundCloud crate (which now routes through the same view).
   // Holds the raw per-source material ({ spotifyItems, spotifyFeatures,
   // scTracks, title }) that CombinedPlaylist adapts into the real Playlist view.
   const [combinedData, setCombinedData] = React.useState(null);
@@ -708,10 +707,32 @@ let PLLibrary = (props) => {
     setShowPlaylist(false);
   };
 
-  // SoundCloud crates open in a full-screen modal (their own track view) rather
-  // than the Spotify Playlist dialog. Cross-source combining is a later phase —
-  // for now SoundCloud crates open individually.
-  const openScCrate = (crate) => setScOpened(crate);
+  // SoundCloud crates open through the SAME Playlist view as Spotify/mixed
+  // crates — via CombinedPlaylist with no Spotify items, which gives the orange
+  // header, the full filter toolbar, auto-analysis + the global indicator, and
+  // bottom-bar playback for free. Tracks load through the cached getScCrate;
+  // "Disable Sets" drops likely DJ sets, matching the old standalone view.
+  const openScCrate = async (crate) => {
+    setLoadingPlaylist(true);
+    setLoadingId(crate.uid);
+    try {
+      let scTracks = await getScCrate(crate);
+      if (props.hideSets) {
+        scTracks = scTracks.filter((t) => !isLikelySet(t.duration));
+      }
+      setCombinedData({
+        spotifyItems: [],
+        spotifyFeatures: [],
+        scTracks,
+        title: `${crate.name} · ${scTracks.length} tracks`,
+      });
+    } catch (e) {
+      console.error("Failed to open SoundCloud crate", e);
+    } finally {
+      setLoadingPlaylist(false);
+      setLoadingId(null);
+    }
+  };
 
   // Retry a Spotify API call on 429 (rate limit), honoring the Retry-After
   // header. Opening many crates at once bursts past Spotify's limit; without
@@ -1898,23 +1919,9 @@ let PLLibrary = (props) => {
         />
       ) : null}
 
-      {/* SoundCloud crate opens in its own full-screen modal (its track view). */}
-      <Dialog fullScreen open={Boolean(scOpened)} onClose={() => setScOpened(null)}>
-        {scOpened && (
-          <SoundCloudCrate
-            crate={scOpened.raw}
-            token={scToken}
-            backend={props.soundcloudBackend}
-            onRefreshToken={props.onRefreshSoundcloud}
-            onBack={() => setScOpened(null)}
-            hideSets={props.hideSets}
-            onPlaySoundcloud={props.onPlaySoundcloud}
-          />
-        )}
-      </Dialog>
-
       {/* Combined multi-source view — rendered through the real Playlist so it's
-          pixel-identical to the Spotify view (a SoundCloud-inclusive Open(N)). */}
+          pixel-identical to the Spotify view. Used for a SoundCloud-inclusive
+          Open(N) AND for a single SoundCloud crate (spotifyItems = []). */}
       <CombinedPlaylist
         open={Boolean(combinedData)}
         onClose={() => setCombinedData(null)}

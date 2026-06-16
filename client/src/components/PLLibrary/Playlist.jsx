@@ -632,6 +632,13 @@ let Playlist = (props) => {
   // is unchanged either way (it comes from StyledTableCell's `head` class).
   const headCellStyle = headerBg ? { backgroundColor: "transparent" } : undefined;
 
+  // SoundCloud has no energy/danceability/valence audio features, so an all-SC
+  // view hides the Energy column + filter + those sort options. The full-width
+  // "Back to Top" bar follows the same accent as the header: green (Spotify),
+  // orange (all-SC), or the green→orange split (mixed).
+  const hideEnergy = !hasSP;
+  const backToTopBg = headerBg || "#1ED760";
+
   return (
     <div className="m-div">
       <Dialog
@@ -890,28 +897,35 @@ let Playlist = (props) => {
                   <MenuItem value="bpm">BPM</MenuItem>
                   <MenuItem value="released-desc">Newest</MenuItem>
                   <MenuItem value="released-asc">Oldest</MenuItem>
-                  <MenuItem value="energy">Energy</MenuItem>
-                  <MenuItem value="danceability">Danceability</MenuItem>
-                  <MenuItem value="valence">Valence (happy)</MenuItem>
+                  {/* Energy/Danceability/Valence are Spotify-only features. */}
+                  {!hideEnergy && <MenuItem value="energy">Energy</MenuItem>}
+                  {!hideEnergy && (
+                    <MenuItem value="danceability">Danceability</MenuItem>
+                  )}
+                  {!hideEnergy && (
+                    <MenuItem value="valence">Valence (happy)</MenuItem>
+                  )}
                 </Select>
               </FormControl>
-              <FormControl className={classes.filter}>
-                <InputLabel id="demo-simple-select-label">Energy</InputLabel>
-                <Select
-                  value={energyFilter}
-                  label="Energy"
-                  onChange={(e) => setEnergyFilter(e.target.value)}
-                  inputProps={{
-                    classes: { icon: classes.icon, root: classes.root },
-                  }}
-                  input={<Input />}
-                >
-                  <MenuItem value="any">Any energy</MenuItem>
-                  <MenuItem value="low">Chill</MenuItem>
-                  <MenuItem value="med">Medium</MenuItem>
-                  <MenuItem value="high">Hype</MenuItem>
-                </Select>
-              </FormControl>
+              {!hideEnergy && (
+                <FormControl className={classes.filter}>
+                  <InputLabel id="demo-simple-select-label">Energy</InputLabel>
+                  <Select
+                    value={energyFilter}
+                    label="Energy"
+                    onChange={(e) => setEnergyFilter(e.target.value)}
+                    inputProps={{
+                      classes: { icon: classes.icon, root: classes.root },
+                    }}
+                    input={<Input />}
+                  >
+                    <MenuItem value="any">Any energy</MenuItem>
+                    <MenuItem value="low">Chill</MenuItem>
+                    <MenuItem value="med">Medium</MenuItem>
+                    <MenuItem value="high">Hype</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
 
               <IconButton
                   aria-label="clear filters"
@@ -1038,7 +1052,7 @@ let Playlist = (props) => {
                     </HeadSortLabel>
                   </StyledTableCell>
                 )}
-                {!isTablet && (
+                {!isTablet && !hideEnergy && (
                   <StyledTableCell style={headCellStyle} sortDirection={sortBy === "energy" ? sortDir : false}>
                     <HeadSortLabel
                       active={sortBy === "energy"}
@@ -1061,6 +1075,7 @@ let Playlist = (props) => {
                     getKey={getKey}
                     isMobile={isMobile}
                     isTablet={isTablet}
+                    hideEnergy={hideEnergy}
                     wheel={wheel}
                     harmonicAnchorId={harmonicAnchorId}
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
@@ -1126,7 +1141,7 @@ let Playlist = (props) => {
           <Fab
             variant="extended"
             style={{
-              backgroundColor: "#1ED760",
+              background: backToTopBg,
               color: "#FFF",
               borderRadius: "0",
               width: "100%",

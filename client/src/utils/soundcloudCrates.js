@@ -31,8 +31,8 @@ export function buildScFetch({ token, backend, onRefreshToken }) {
 // Swap SoundCloud's small "-large" artwork variant for a bigger one.
 const bigArtwork = (url) => (url ? url.replace("-large", "-t500x500") : null);
 
-// Tracks longer than this are almost certainly DJ sets/mixes (shared with
-// SoundCloudCrate). One tunable constant.
+// Tracks longer than this are almost certainly DJ sets/mixes — one tunable
+// constant shared by the crate views, the analysis queue, and the backend.
 export const LIKELY_SET_MS = 6 * 60 * 1000;
 export const isLikelySet = (ms) => ms && ms > LIKELY_SET_MS;
 

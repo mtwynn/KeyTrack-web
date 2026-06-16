@@ -309,7 +309,7 @@ let Row = (props) => {
           {formatReleaseDate(item.track)}
         </TableCell>
       )}
-      {!props.isTablet && (
+      {!props.isTablet && !props.hideEnergy && (
         <TableCell>
           {trackKey && trackKey.energy != null ? (
             <div
