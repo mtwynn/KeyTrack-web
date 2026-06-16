@@ -22,7 +22,13 @@ import {
 } from "@material-ui/icons";
 
 import KeyMap from "../../utils/KeyMap";
-import { camelotColor, compatibleCamelot } from "../../utils/harmonic";
+import {
+  camelotColor,
+  compatibleCamelot,
+  camelotToKeyMode,
+} from "../../utils/harmonic";
+import { getScAnalysis } from "../../utils/scAnalysis";
+import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 import {
   fetchSets,
   saveSet,
@@ -31,7 +37,9 @@ import {
   deserializeTracks,
 } from "../../utils/sets";
 
-const codeOf = (k) => (k ? KeyMap[k.key].camelot[k.mode] : null);
+// Guard KeyMap: a Spotify key can be -1 (no key) so KeyMap[k.key] may be
+// undefined — return null instead of crashing the whole panel.
+const codeOf = (k) => (k && KeyMap[k.key] ? KeyMap[k.key].camelot[k.mode] : null);
 
 // The ordered set, shown in a slide-out panel (bottom sheet on mobile, right
 // drawer on desktop). Each entry is { item, key } so the set is self-contained
@@ -46,6 +54,8 @@ const SetBuilder = ({
   onClear,
   userId,
   onLoadSet,
+  updatePlayer,
+  onPlaySoundcloud,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -116,9 +126,54 @@ const SetBuilder = ({
     }
   };
 
+  // Backfill key/BPM for SoundCloud entries added before analysis finished (or
+  // loaded from a saved set without a key) — look them up in the shared
+  // analysis cache. Keyed by the entry's track id (= the SC urn). Non-blocking:
+  // already-analyzed tracks resolve instantly, others stay "analyzing…".
+  const [scKeys, setScKeys] = React.useState({});
+  React.useEffect(() => {
+    let cancelled = false;
+    (set || []).forEach((entry) => {
+      const it = entry.item;
+      if (!it || it.__source !== "soundcloud") return;
+      if (entry.key && KeyMap[entry.key.key]) return; // already has a usable key
+      const urn = it.track.id;
+      if (!urn || scKeys[urn]) return;
+      getScAnalysis(urn).then((a) => {
+        if (cancelled || !a || !a.camelot) return;
+        const km = camelotToKeyMode(a.camelot);
+        if (!km) return;
+        setScKeys((m) =>
+          m[urn] ? m : { ...m, [urn]: { key: km.key, mode: km.mode, bpm: a.bpm } }
+        );
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [set]);
+
+  // Play a set entry through the right source: SoundCloud → the Widget bottom
+  // bar; Spotify → Web Playback.
+  const playEntry = (item) => {
+    if (item.__source === "soundcloud") {
+      if (onPlaySoundcloud && item.__scRaw) onPlaySoundcloud(item.__scRaw);
+    } else if (updatePlayer && item.track.uri) {
+      updatePlayer([item.track.uri], true);
+    }
+  };
+
   const rows = set.map((entry) => {
-    const k = entry.key;
-    return { item: entry.item, code: codeOf(k), bpm: k ? Math.round(k.bpm) : null };
+    let k = entry.key && KeyMap[entry.key.key] ? entry.key : null;
+    if (!k && entry.item.__source === "soundcloud") {
+      k = scKeys[entry.item.track.id] || null;
+    }
+    return {
+      item: entry.item,
+      code: codeOf(k),
+      bpm: k && k.bpm != null ? Math.round(k.bpm) : null,
+    };
   });
 
   const transition = (a, b) => {
@@ -261,17 +316,37 @@ const SetBuilder = ({
                         }}
                       />
                     )}
-                    <Box style={{ flex: 1, minWidth: 0 }}>
+                    <Box
+                      style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+                      onClick={() => playEntry(r.item)}
+                      title="Play"
+                    >
                       <Typography
                         variant="body2"
                         style={{
                           fontWeight: 600,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
                           overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
                         }}
                       >
-                        {r.item.track.name}
+                        <span style={{ flexShrink: 0, display: "inline-flex" }}>
+                          {r.item.__source === "soundcloud" ? (
+                            <SoundcloudIcon size={13} color="#ff5500" />
+                          ) : (
+                            <SpotifyIcon size={13} color="#1ED760" />
+                          )}
+                        </span>
+                        <span
+                          style={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {r.item.track.name}
+                        </span>
                       </Typography>
                       <Typography
                         variant="caption"
@@ -283,8 +358,8 @@ const SetBuilder = ({
                           display: "block",
                         }}
                       >
-                        {r.item.track.artists.map((a) => a.name).join(", ")} ·{" "}
-                        {r.bpm} BPM
+                        {r.item.track.artists.map((a) => a.name).join(", ")}
+                        {r.bpm != null ? ` · ${r.bpm} BPM` : " · analyzing…"}
                       </Typography>
                     </Box>
                     <IconButton
