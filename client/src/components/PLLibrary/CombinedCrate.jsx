@@ -1,10 +1,17 @@
 import React from "react";
 import {
+  makeStyles,
+  withStyles,
   Dialog,
   Box,
   Typography,
   IconButton,
   Avatar,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Table,
   TableHead,
   TableBody,
@@ -12,20 +19,94 @@ import {
   TableCell,
   TableSortLabel,
   TablePagination,
+  AppBar,
+  Toolbar,
   Input,
   InputAdornment,
-  Paper,
   CircularProgress,
 } from "@material-ui/core";
-import { ArrowBack, Search, OpenInNew } from "@material-ui/icons";
+import { ArrowBack, Close, Search, OpenInNew, DonutLarge } from "@material-ui/icons";
 
-import { camelotColor } from "../../utils/harmonic";
+import {
+  camelotColor,
+  camelotInfo,
+  musicalLabel,
+  harmonicRelation,
+} from "../../utils/harmonic";
 import { camelotRank, fmtDuration } from "../../utils/unifiedTrack";
 import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 import { useScAnalysisQueue } from "../SoundCloud/useScAnalysisQueue";
+import KeyFilterPicker from "./KeyFilterPicker";
 
 const SC_ORANGE = "#ff5500";
 const SPOTIFY_GREEN = "#1ED760";
+
+// Dark Spotify-style toolbar, mirroring Playlist's useStyles (dark appBar,
+// white search, white select icon/text, outlined white filter button).
+const useStyles = makeStyles((theme) => ({
+  appBar: {
+    position: "sticky",
+    backgroundColor: "#191414",
+  },
+  title: {
+    flex: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  search: {
+    flex: 1,
+    color: "white",
+    marginRight: theme.spacing(3),
+    marginLeft: theme.spacing(3),
+    [theme.breakpoints.down("sm")]: {
+      marginRight: 0,
+      marginLeft: 0,
+    },
+  },
+  filter: {
+    marginLeft: theme.spacing(3),
+    marginBottom: theme.spacing(1),
+    minWidth: 120,
+    maxWidth: 300,
+    [theme.breakpoints.down("sm")]: {
+      marginLeft: 0,
+      marginBottom: theme.spacing(0.5),
+      minWidth: "45%",
+      maxWidth: "100%",
+    },
+  },
+  icon: {
+    fill: "white",
+  },
+  root: {
+    fill: "white",
+    color: "white",
+  },
+}));
+
+// Header cells sit on the colored (green / orange / split) header row, so they
+// must be transparent with white bold text, and the sort labels must stay white
+// — same approach SoundCloudCrate's ScHeadCell/ScSortLabel use.
+const HeadCell = withStyles((theme) => ({
+  head: {
+    backgroundColor: "transparent",
+    color: theme.palette.common.white,
+    fontWeight: "bold",
+  },
+  body: { fontSize: 14 },
+}))(TableCell);
+
+const HeadSortLabel = withStyles({
+  root: {
+    color: "#fff",
+    "&:hover": { color: "#fff" },
+    "&:focus": { color: "#fff" },
+    "&$active": { color: "#fff" },
+  },
+  active: { color: "#fff" },
+  icon: { color: "#fff !important" },
+})(TableSortLabel);
 
 // The combined multi-source track browser: Spotify + SoundCloud tracks in one
 // table. Spotify rows come fully populated (key/BPM/energy/released from audio
@@ -38,11 +119,21 @@ const SPOTIFY_GREEN = "#1ED760";
 // onPlaySoundcloud.
 let CombinedCrate = (props) => {
   const { tracks, open, onClose, title } = props;
+  const classes = useStyles();
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState({ col: null, dir: "asc" });
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(100);
   const [playingUid, setPlayingUid] = React.useState(null);
+
+  // The combined view is harmonic-first, so Camelot is the default notation.
+  const [notation, setNotation] = React.useState("Camelot");
+  // Key filter (Camelot codes) + the bottom-sheet picker.
+  const [keyFilter, setKeyFilter] = React.useState([]);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [filterMode, setFilterMode] = React.useState("camelot");
+  // The "anchored" row's uid for harmonic-mixing highlighting (or null).
+  const [anchorUid, setAnchorUid] = React.useState(null);
 
   const { analysis, enqueueAll } = useScAnalysisQueue(props.scFetch);
 
@@ -71,6 +162,11 @@ let CombinedCrate = (props) => {
     });
   }, [tracks, analysis]);
 
+  const toggleKey = (code) =>
+    setKeyFilter((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+
   const view = React.useMemo(() => {
     let list = merged;
     const q = search.trim().toLowerCase();
@@ -80,6 +176,11 @@ let CombinedCrate = (props) => {
           (t.title || "").toLowerCase().includes(q) ||
           (t.artist || "").toLowerCase().includes(q)
       );
+    }
+    // Key filter holds Camelot codes; un-analyzed SoundCloud tracks (no camelot
+    // yet) drop out while a key filter is active.
+    if (keyFilter.length) {
+      list = list.filter((t) => t.camelot && keyFilter.includes(t.camelot));
     }
     if (sort.col) {
       const d = sort.dir === "desc" ? -1 : 1;
@@ -105,11 +206,11 @@ let CombinedCrate = (props) => {
       });
     }
     return list;
-  }, [merged, search, sort]);
+  }, [merged, search, keyFilter, sort]);
 
   React.useEffect(() => {
     setPage(0);
-  }, [search, sort, tracks]);
+  }, [search, sort, keyFilter, tracks]);
   const paged = view.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
   const toggleSort = (col) =>
     setSort((s) =>
@@ -126,6 +227,17 @@ let CombinedCrate = (props) => {
       props.onPlaySoundcloud(t.raw);
     }
   };
+
+  const toggleAnchor = (t) =>
+    setAnchorUid((prev) => (prev === t.uid ? null : t.uid));
+
+  // Camelot code of the anchored track (from the merged rows so SoundCloud
+  // anchors work once analyzed).
+  const anchorCamelot = React.useMemo(() => {
+    if (!anchorUid) return null;
+    const a = merged.find((t) => t.uid === anchorUid);
+    return a ? a.camelot : null;
+  }, [anchorUid, merged]);
 
   // Small per-row source badge.
   const sourceBadge = (source) => {
@@ -150,12 +262,28 @@ let CombinedCrate = (props) => {
     );
   };
 
-  // The Key cell — colored Camelot pill, or a per-source placeholder.
+  // Render a Camelot code in the selected notation, keeping the colored pill.
+  const keyLabel = (code) => {
+    if (notation === "Musical") return musicalLabel(code) || code;
+    if (notation === "Open") {
+      const info = camelotInfo(code);
+      return info ? info.open : code;
+    }
+    return code;
+  };
+
+  // The Key cell — a colored, clickable Camelot pill (clicking anchors the
+  // track for harmonic highlighting), or a per-source placeholder.
   const keyCell = (t) => {
     if (t.camelot) {
       const c = camelotColor(t.camelot);
       return (
         <span
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleAnchor(t);
+          }}
+          title="Click to highlight harmonic matches"
           style={{
             backgroundColor: c.bg,
             color: c.text,
@@ -164,10 +292,11 @@ let CombinedCrate = (props) => {
             fontWeight: 600,
             fontSize: "0.8rem",
             whiteSpace: "nowrap",
+            cursor: "pointer",
+            display: "inline-block",
           }}
         >
-          {t.camelot}
-          {t.keyName ? " · " + t.keyName : ""}
+          {keyLabel(t.camelot)}
         </span>
       );
     }
@@ -219,15 +348,15 @@ let CombinedCrate = (props) => {
   };
 
   const headCell = (col, label, align) => (
-    <TableCell sortDirection={sort.col === col ? sort.dir : false} align={align}>
-      <TableSortLabel
+    <HeadCell sortDirection={sort.col === col ? sort.dir : false} align={align}>
+      <HeadSortLabel
         active={sort.col === col}
         direction={sort.col === col ? sort.dir : "asc"}
         onClick={() => toggleSort(col)}
       >
         {label}
-      </TableSortLabel>
-    </TableCell>
+      </HeadSortLabel>
+    </HeadCell>
   );
 
   const scCount = (tracks || []).filter((t) => t.source === "soundcloud").length;
@@ -235,96 +364,142 @@ let CombinedCrate = (props) => {
     scCount > 0 &&
     merged.filter((t) => t.source === "soundcloud" && t.scStatus === "loading").length > 0;
 
+  // Tri-state header color from which sources are present. Only Spotify → green;
+  // only SoundCloud → orange; both → a diagonal split (green left / orange right)
+  // with a thin white dividing line.
+  const hasSpotify = (tracks || []).some((t) => t.source === "spotify");
+  const hasSoundcloud = (tracks || []).some((t) => t.source === "soundcloud");
+  let headerBg = SPOTIFY_GREEN;
+  if (hasSpotify && hasSoundcloud) {
+    headerBg =
+      "linear-gradient(115deg, #1ED760 0%, #1ED760 calc(50% - 1px), #fff calc(50% - 1px), #fff calc(50% + 1px), #ff5500 calc(50% + 1px), #ff5500 100%)";
+  } else if (hasSoundcloud && !hasSpotify) {
+    headerBg = SC_ORANGE;
+  }
+
   return (
     <Dialog fullScreen open={open} onClose={onClose}>
-      {/* paddingBottom clears the fixed bottom player bar. */}
-      <Box style={{ padding: 16, paddingBottom: 140 }}>
-        <Box style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <IconButton size="small" onClick={onClose} title="Back to crates">
+      <AppBar className={classes.appBar}>
+        <Toolbar>
+          <IconButton edge="start" color="inherit" onClick={onClose} aria-label="back" title="Back to crates">
             <ArrowBack />
           </IconButton>
-          <Typography variant="h6" style={{ fontWeight: 700 }} noWrap>
+          <Typography variant="h6" className={classes.title}>
             {title}
           </Typography>
           {analyzing && (
             <Typography
               variant="caption"
-              color="textSecondary"
-              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+              style={{ color: "rgba(255,255,255,0.7)", display: "inline-flex", alignItems: "center", gap: 5, marginRight: 8, whiteSpace: "nowrap" }}
             >
               <CircularProgress size={12} style={{ color: SC_ORANGE }} />
               analyzing SoundCloud keys…
             </Typography>
           )}
-        </Box>
+          <IconButton edge="end" color="inherit" onClick={onClose} aria-label="close">
+            <Close />
+          </IconButton>
+        </Toolbar>
+        <Toolbar
+          style={{
+            flexWrap: "wrap",
+            alignItems: "center",
+            paddingTop: 4,
+            paddingBottom: 8,
+          }}
+        >
+          <Input
+            classes={{ root: classes.search }}
+            type="text"
+            placeholder="Search these tracks"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            endAdornment={
+              <InputAdornment position="end">
+                <Search style={{ color: "rgba(255,255,255,0.8)" }} />
+              </InputAdornment>
+            }
+          />
+          <FormControl className={classes.filter}>
+            <InputLabel style={{ color: "rgba(255,255,255,0.7)" }}>Notation</InputLabel>
+            <Select
+              value={notation}
+              onChange={(e) => setNotation(e.target.value)}
+              inputProps={{ classes: { icon: classes.icon, root: classes.root } }}
+              input={<Input />}
+            >
+              {["Musical", "Camelot", "Open"].map((type) => (
+                <MenuItem key={type} value={type}>
+                  {type}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl className={classes.filter}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<DonutLarge />}
+              onClick={() => setPickerOpen(true)}
+              style={{
+                height: "100%",
+                textTransform: "none",
+                color: "#fff",
+                borderColor: "rgba(255,255,255,0.6)",
+              }}
+            >
+              Filter by Key{keyFilter.length ? ` (${keyFilter.length})` : ""}
+            </Button>
+          </FormControl>
+        </Toolbar>
+      </AppBar>
+
+      {/* paddingBottom clears the fixed bottom player bar. */}
+      <Box style={{ padding: 16, paddingBottom: 140 }}>
         <Typography variant="caption" color="textSecondary" style={{ display: "block", marginBottom: 12, paddingLeft: 4 }}>
           Combined crate · {(tracks || []).length} tracks. Spotify keys are from
           audio features; SoundCloud keys are computed by KeyTrack.
         </Typography>
 
-        {(tracks || []).length > 0 && (
-          <Paper
-            elevation={0}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              maxWidth: 360,
-              borderRadius: 24,
-              padding: "2px 8px 2px 16px",
-              marginBottom: 12,
-              border: "1px solid rgba(128,128,128,0.28)",
-            }}
-          >
-            <Input
-              disableUnderline
-              fullWidth
-              type="text"
-              placeholder="Search these tracks"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              endAdornment={
-                <InputAdornment position="end">
-                  <Search style={{ color: "rgba(128,128,128,0.8)" }} />
-                </InputAdornment>
-              }
-            />
-          </Paper>
-        )}
-
         <Box style={{ overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
-              <TableRow>
-                <TableCell></TableCell>
+              <TableRow style={{ background: headerBg }}>
+                <HeadCell></HeadCell>
                 {headCell("source", "Src")}
                 {headCell("title", "Track")}
                 {headCell("artist", "Artist")}
-                {headCell("key", "Key")}
+                {headCell("key", `Key (${notation})`)}
                 {headCell("bpm", "BPM")}
                 {headCell("energy", "Energy")}
-                <TableCell>Genre</TableCell>
-                <TableCell>Released</TableCell>
+                <HeadCell>Genre</HeadCell>
+                <HeadCell>Released</HeadCell>
                 {headCell("length", "Length")}
-                <TableCell></TableCell>
+                <HeadCell></HeadCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {paged.map((t) => {
                 const isPlaying = playingUid === t.uid;
+                const isAnchor = anchorUid === t.uid;
+                const relation = harmonicRelation(anchorCamelot, t.camelot, isAnchor);
+                const rowStyle = { cursor: "pointer" };
+                if (relation === "incompatible") rowStyle.opacity = 0.4;
+                if (relation === "compatible")
+                  rowStyle.backgroundColor = "rgba(30, 215, 96, 0.12)";
+                if (relation === "anchor") {
+                  rowStyle.backgroundColor = "rgba(30, 215, 96, 0.2)";
+                  const kc = t.camelot ? camelotColor(t.camelot) : null;
+                  rowStyle.boxShadow = `inset 3px 0 0 ${kc ? kc.bg : "#1ED760"}`;
+                } else if (isPlaying) {
+                  // Per-source play tint when this row isn't the harmonic anchor.
+                  rowStyle.backgroundColor =
+                    t.source === "soundcloud"
+                      ? "rgba(255,85,0,0.08)"
+                      : "rgba(30,215,96,0.10)";
+                }
                 return (
-                  <TableRow
-                    key={t.uid}
-                    hover
-                    style={{
-                      cursor: "pointer",
-                      backgroundColor: isPlaying
-                        ? t.source === "soundcloud"
-                          ? "rgba(255,85,0,0.08)"
-                          : "rgba(30,215,96,0.10)"
-                        : undefined,
-                    }}
-                    onClick={() => playRow(t)}
-                  >
+                  <TableRow key={t.uid} hover style={rowStyle} onClick={() => playRow(t)}>
                     <TableCell style={{ width: 44 }}>
                       <Avatar variant="rounded" src={t.artwork} style={{ width: 34, height: 34 }} />
                     </TableCell>
@@ -374,6 +549,17 @@ let CombinedCrate = (props) => {
           />
         )}
       </Box>
+
+      <KeyFilterPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        notation={notation}
+        selected={keyFilter}
+        onToggle={toggleKey}
+        onClear={() => setKeyFilter([])}
+        filterMode={filterMode}
+        onChangeFilterMode={setFilterMode}
+      />
     </Dialog>
   );
 };
