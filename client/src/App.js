@@ -31,6 +31,8 @@ import {
   ListItemText,
   ListSubheader,
   Paper,
+  Popover,
+  Slider,
   Switch,
   Toolbar,
   Typography,
@@ -41,7 +43,6 @@ import {
   Brightness4,
   Brightness7,
   Build,
-  Close,
   Cloud,
   ExitToApp,
   GraphicEq,
@@ -54,6 +55,9 @@ import {
   Star,
   Tune,
   VisibilityOff,
+  VolumeDown,
+  VolumeOff,
+  VolumeUp,
 } from '@material-ui/icons';
 import FadeIn from 'react-fade-in';
 
@@ -64,7 +68,7 @@ import SetBuilder from './components/PLLibrary/SetBuilder';
 import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
 import SpotifyIcon from './components/SpotifyIcon';
-import { scWidgetSrc } from './utils/soundcloudCrates';
+import { scWidgetSrc, scTrackUrl, loadScWidgetApi } from './utils/soundcloudCrates';
 import { makeAppTheme, THEME_STORAGE_KEY } from './theme';
 
 // Utils
@@ -148,40 +152,164 @@ const BottomPlayer = React.memo(({ token, uris, play }) => (
   </div>
 ));
 
-// SoundCloud playback reuses the same bottom player-bar slot: the sanctioned
-// SoundCloud Widget (iframe), keyed by track so it reloads + autoplays when the
-// track changes. Shown instead of the Spotify player while a SC track is active
-// (one source plays at a time).
-const ScBottomPlayer = React.memo(({ track, onClose }) => (
-  <div style={SC_PLAYER_WRAP_STYLE}>
-    <div style={{ position: 'relative', backgroundColor: '#111', lineHeight: 0 }}>
-      <iframe
-        key={track.urn || track.id}
-        title="SoundCloud player"
-        width="100%"
-        height="120"
-        scrolling="no"
-        frameBorder="no"
-        allow="autoplay"
-        src={scWidgetSrc(track)}
-      />
-      <IconButton
-        size="small"
-        onClick={onClose}
-        title="Close SoundCloud player"
-        style={{
-          position: 'absolute',
-          top: 4,
-          right: 4,
-          color: '#fff',
-          backgroundColor: 'rgba(0,0,0,0.45)',
-        }}
-      >
-        <Close fontSize="small" />
-      </IconButton>
+// SoundCloud playback reuses the same bottom player-bar slot via SoundCloud's
+// sanctioned Widget API: ONE persistent iframe (the CLASSIC compact player,
+// whose full-width waveform is the play/pause/scrub/seek surface) driven
+// imperatively by widget.load() when the track changes — no per-track iframe
+// re-mount/reload. The only thing we add is a volume control (the widget has
+// none): a speaker icon OVERLAID on the player's top-right cluster (we can't
+// inject into the cross-origin iframe, but we can position over it), clear of
+// the waveform + logo. Shown instead of the Spotify player while a SC track is
+// active (one source plays at a time); no explicit close (see render).
+const SC_VOLUME_KEY = 'keytrack_sc_volume';
+const ScBottomPlayer = ({ track }) => {
+  const iframeRef = React.useRef(null);
+  const widgetRef = React.useRef(null);
+  // The currently-loaded track URL, seeded to the mount track (which the iframe
+  // `src` autoplays) so the swap effect doesn't reload it.
+  const loadedUrlRef = React.useRef(scTrackUrl(track));
+  // Stable initial iframe src so React never rewrites it (that would re-mount).
+  const initialSrcRef = React.useRef(scWidgetSrc(track, { visual: false }));
+  // Latest track/volume for use inside async widget callbacks (avoid stale closures).
+  const trackRef = React.useRef(track);
+  trackRef.current = track;
+  const [volume, setVolume] = React.useState(() => {
+    const v = parseInt(window.localStorage.getItem(SC_VOLUME_KEY), 10);
+    return Number.isFinite(v) ? v : 80;
+  });
+  const volumeRef = React.useRef(volume);
+  volumeRef.current = volume;
+  // Volume popover anchor (the speaker icon). Click → vertical slider above it.
+  const [volAnchor, setVolAnchor] = React.useState(null);
+  const VolIcon = volume === 0 ? VolumeOff : volume < 50 ? VolumeDown : VolumeUp;
+
+  // Attach the Widget API to the iframe once. On READY, sync volume; if the
+  // track changed before the widget was ready (rare race), load the latest.
+  React.useEffect(() => {
+    let cancelled = false;
+    loadScWidgetApi()
+      .then(() => {
+        if (cancelled || !window.SC || !iframeRef.current) return;
+        const w = window.SC.Widget(iframeRef.current);
+        widgetRef.current = w;
+        w.bind(window.SC.Widget.Events.READY, () => {
+          w.setVolume(volumeRef.current);
+          const current = scTrackUrl(trackRef.current);
+          if (loadedUrlRef.current !== current) {
+            loadedUrlRef.current = current;
+            w.load(current, {
+              auto_play: true,
+              visual: false,
+              show_comments: false,
+              color: '#ff5500',
+              callback: () => w.setVolume(volumeRef.current),
+            });
+          }
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      widgetRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Swap tracks imperatively (no iframe re-mount) when the prop changes.
+  React.useEffect(() => {
+    const w = widgetRef.current;
+    if (!w || !track) return;
+    const url = scTrackUrl(track);
+    if (loadedUrlRef.current === url) return;
+    loadedUrlRef.current = url;
+    w.load(url, {
+      auto_play: true,
+      visual: false,
+      show_comments: false,
+      color: '#ff5500',
+      callback: () => w.setVolume(volumeRef.current),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [track]);
+
+  // Push volume changes to the widget + persist for next session.
+  React.useEffect(() => {
+    if (widgetRef.current) widgetRef.current.setVolume(volume);
+    window.localStorage.setItem(SC_VOLUME_KEY, String(volume));
+  }, [volume]);
+
+  return (
+    <div style={SC_PLAYER_WRAP_STYLE}>
+      <div style={{ position: 'relative', backgroundColor: '#fff', lineHeight: 0 }}>
+        <iframe
+          ref={iframeRef}
+          title="SoundCloud player"
+          width="100%"
+          height="120"
+          scrolling="no"
+          frameBorder="no"
+          allow="autoplay"
+          src={initialSrcRef.current}
+          style={{ border: 0, display: 'block' }}
+        />
+        {/* We can't inject into the cross-origin player iframe, but we CAN
+            overlay our own element on top of it. Sit the volume icon in the
+            player's own top-right control cluster (by the like/download
+            buttons) — clear of both the waveform scrub strip below and the
+            SoundCloud logo above. Click pops a vertical slider above it. */}
+        <IconButton
+          onClick={(e) => setVolAnchor(e.currentTarget)}
+          title="Volume"
+          aria-label="volume"
+          style={{
+            position: 'absolute',
+            top: 28,
+            right: 65,
+            width: 25,
+            height: 22,
+            padding: 0,
+            backgroundColor: '#fff',
+            border: '1px solid rgba(0,0,0,0.12)',
+            borderRadius: 4,
+            color: '#333',
+          }}
+        >
+          <VolIcon style={{ fontSize: 16 }} />
+        </IconButton>
+        <Popover
+          open={Boolean(volAnchor)}
+          anchorEl={volAnchor}
+          onClose={() => setVolAnchor(null)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          disableScrollLock
+          // Above the player bar (z 10000), else the slider's lower half hides
+          // behind it and you can't drag volume down.
+          style={{ zIndex: 11000 }}
+          PaperProps={{
+            style: {
+              height: 120,
+              padding: '12px 4px',
+              display: 'flex',
+              justifyContent: 'center',
+              overflow: 'visible',
+            },
+          }}
+        >
+          <Slider
+            orientation="vertical"
+            value={volume}
+            onChange={(e, v) => setVolume(v)}
+            min={0}
+            max={100}
+            aria-label="SoundCloud volume"
+            style={{ color: '#ff5500' }}
+          />
+        </Popover>
+      </div>
     </div>
-  </div>
-));
+  );
+};
 
 class App extends React.Component {
   constructor(props) {
@@ -949,7 +1077,11 @@ class App extends React.Component {
             <Wordmark variant="h6" />
             <Box style={{ flexGrow: 1 }} />
             <Hidden smDown>
-              <CurrentSong token={this.state.access_token} compact />
+              <CurrentSong
+                token={this.state.access_token}
+                scTrack={this.state.scNowPlaying}
+                compact
+              />
             </Hidden>
             <IconButton
               edge="end"
@@ -1026,7 +1158,10 @@ class App extends React.Component {
               <Box style={{ marginTop: 'auto' }}>
                 <Divider />
                 <Box style={{ padding: 16 }}>
-                  <CurrentSong token={this.state.access_token} />
+                  <CurrentSong
+                    token={this.state.access_token}
+                    scTrack={this.state.scNowPlaying}
+                  />
                 </Box>
               </Box>
             </Box>
@@ -1370,10 +1505,9 @@ class App extends React.Component {
             </div>
           )}
           {this.state.scNowPlaying && (
-            <ScBottomPlayer
-              track={this.state.scNowPlaying}
-              onClose={() => this.setState({ scNowPlaying: null })}
-            />
+            // No explicit close: playing a Spotify track clears scNowPlaying
+            // (updatePlayer), and playing another SC track just swaps.
+            <ScBottomPlayer track={this.state.scNowPlaying} />
           )}
         </div>
       </ThemeProvider>
