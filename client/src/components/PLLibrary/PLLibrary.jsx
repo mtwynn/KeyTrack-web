@@ -1507,6 +1507,7 @@ let PLLibrary = (props) => {
         onClose={cancelSearchAll}
         PaperProps={{
           style: {
+            position: "relative",
             padding: "28px 44px",
             display: "flex",
             flexDirection: "column",
@@ -1516,6 +1517,16 @@ let PLLibrary = (props) => {
           },
         }}
       >
+        {/* Small close (X) in the corner cancels the load. */}
+        <IconButton
+          size="small"
+          onClick={cancelSearchAll}
+          aria-label="cancel"
+          title="Cancel"
+          style={{ position: "absolute", top: 6, right: 6 }}
+        >
+          <Close fontSize="small" />
+        </IconButton>
         {/* Always indeterminate (perpetual spin): the counter only ticks once
             per whole crate, so a determinate ring sat near 0% and read as
             "stuck" even while lots of per-track/feature fetching was happening.
@@ -1526,16 +1537,6 @@ let PLLibrary = (props) => {
         />
         <Typography variant="body1" style={{ fontWeight: 600 }}>
           Loading all crates… {allProgress.done}/{allProgress.total}
-        </Typography>
-        <Button
-          size="small"
-          onClick={cancelSearchAll}
-          style={{ textTransform: "none" }}
-        >
-          Cancel
-        </Button>
-        <Typography variant="caption" color="textSecondary">
-          or click outside to cancel
         </Typography>
       </Dialog>
 
