@@ -59,7 +59,9 @@ import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
 import SoundCloudCrate from "../SoundCloud/SoundCloudCrate";
+import CombinedCrate from "./CombinedCrate";
 import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
+import { spotifyToUnified, soundcloudToUnified } from "../../utils/unifiedTrack";
 import { useEffect } from "react";
 import { fetchCrateMeta, setCrateMeta } from "../../utils/crateMeta";
 import {
@@ -72,6 +74,7 @@ import {
   buildScFetch,
   fetchSoundcloudCrates,
   fetchScSetCounts,
+  fetchScTracks,
 } from "../../utils/soundcloudCrates";
 
 // SoundCloud brand orange (source badge + toggle), distinct from Spotify green.
@@ -355,6 +358,9 @@ let PLLibrary = (props) => {
   const setCountTriedRef = React.useRef(new Set());
   // The SoundCloud crate opened in the full-screen modal (null = closed).
   const [scOpened, setScOpened] = React.useState(null);
+  // Combined multi-source browser, opened from a SoundCloud-inclusive Open(N).
+  const [combinedTracks, setCombinedTracks] = React.useState(null);
+  const [combinedTitle, setCombinedTitle] = React.useState("");
 
   // Library source toggles (Spotify / SoundCloud). At least one must stay on;
   // both default on; persisted. The SoundCloud toggle only matters once a
@@ -794,63 +800,103 @@ let PLLibrary = (props) => {
   };
 
   const handleOpenSelected = async () => {
-    // Open the selected crates as one combined view ("Select all" selects them
-    // all). Hidden crates never feed this even if somehow selected.
-    // Cross-search is Spotify-only (it relies on Spotify audio-features);
-    // SoundCloud crates open individually. Hidden crates never feed this.
-    const playlists = library.filter(
-      (c) =>
-        c.source === "spotify" &&
-        selected.has(c.uid) &&
-        !(crateMeta[c.uid] && crateMeta[c.uid].hidden)
+    // Selected, non-hidden crates across both sources.
+    const chosen = library.filter(
+      (c) => selected.has(c.uid) && !(crateMeta[c.uid] && crateMeta[c.uid].hidden)
     );
-    if (playlists.length === 0) return;
+    if (chosen.length === 0) return;
+    const spotifyCrates = chosen.filter((c) => c.source === "spotify");
+    const scCratesSel = chosen.filter((c) => c.source === "soundcloud");
 
     cancelAllRef.current = false;
-    setAllProgress({ done: 0, total: playlists.length });
+    setAllProgress({ done: 0, total: chosen.length });
     setLoadingAll(true);
     try {
-      const perPlaylist = await mapWithLimit(playlists, 4, async (c) => {
-        // Skip queued/in-flight work once the user has cancelled.
-        if (cancelAllRef.current) return { tracks: [], features: [] };
-        const tracks = await fetchAllTracks(c.uid);
-        if (cancelAllRef.current) return { tracks: [], features: [] };
-        const features = await fetchFeatures(tracks.map((t) => t.track.id));
+      // Pure-Spotify selection → the rich Playlist view (audio features +
+      // recommendations + set builder). Unchanged behavior.
+      if (scCratesSel.length === 0) {
+        const perPlaylist = await mapWithLimit(spotifyCrates, 4, async (c) => {
+          if (cancelAllRef.current) return { tracks: [], features: [] };
+          const tracks = await fetchAllTracks(c.uid);
+          if (cancelAllRef.current) return { tracks: [], features: [] };
+          const features = await fetchFeatures(tracks.map((t) => t.track.id));
+          setAllProgress((p) => ({ ...p, done: p.done + 1 }));
+          return { tracks, features };
+        });
+        if (cancelAllRef.current) return;
+        const seen = new Set();
+        const allTracks = [];
+        const featById = new Map();
+        perPlaylist.forEach(({ tracks, features }) => {
+          tracks.forEach((item) => {
+            if (!seen.has(item.track.id)) {
+              seen.add(item.track.id);
+              allTracks.push(item);
+            }
+          });
+          features.forEach((f) => {
+            if (f) featById.set(f.id, f);
+          });
+        });
+        setPlaylistName(
+          `${spotifyCrates.length} crate${spotifyCrates.length === 1 ? "" : "s"} · ${allTracks.length} tracks`
+        );
+        setPlaylistId("__all_crates__");
+        setPlaylistOwnerId(null); // hides owner-only Recommendations
+        setCurrPlaylist(allTracks);
+        setPlaylistKeys(Array.from(featById.values()));
+        setShowPlaylist(true);
+        return;
+      }
+
+      // SoundCloud-inclusive selection → the combined browser (unified tracks).
+      const unified = [];
+      const seenSp = new Set();
+      await mapWithLimit(spotifyCrates, 4, async (c) => {
+        if (cancelAllRef.current) return;
+        const items = await fetchAllTracks(c.uid);
+        const feats = await fetchFeatures(items.map((it) => it.track.id));
+        const fById = new Map();
+        feats.forEach((f) => f && fById.set(f.id, f));
+        items.forEach((item) => {
+          if (seenSp.has(item.track.id)) return;
+          seenSp.add(item.track.id);
+          const raw = fById.get(item.track.id);
+          const feat = raw
+            ? { key: raw.key, mode: raw.mode, bpm: raw.tempo, energy: raw.energy }
+            : null;
+          unified.push(spotifyToUnified(item, feat));
+        });
         setAllProgress((p) => ({ ...p, done: p.done + 1 }));
-        return { tracks, features };
       });
 
-      // The user dismissed the loader mid-run — discard partial results.
+      const seenSc = new Set();
+      await mapWithLimit(scCratesSel, 4, async (c) => {
+        if (cancelAllRef.current) return;
+        const k = c.raw.kind;
+        const path =
+          k === "likes"
+            ? "/soundcloud/me/likes/tracks"
+            : k === "reposts"
+            ? "/soundcloud/me/reposts"
+            : "/soundcloud/playlists/" + encodeURIComponent(c.raw.id) + "/tracks";
+        const scTracks = await fetchScTracks(scFetch, path);
+        scTracks.forEach((tr) => {
+          const urn = tr.urn || String(tr.id);
+          if (seenSc.has(urn)) return;
+          seenSc.add(urn);
+          unified.push(soundcloudToUnified(tr, null));
+        });
+        setAllProgress((p) => ({ ...p, done: p.done + 1 }));
+      });
+
       if (cancelAllRef.current) return;
-
-      // Aggregate + dedupe by track id.
-      const seen = new Set();
-      const allTracks = [];
-      const featById = new Map();
-      perPlaylist.forEach(({ tracks, features }) => {
-        tracks.forEach((item) => {
-          if (!seen.has(item.track.id)) {
-            seen.add(item.track.id);
-            allTracks.push(item);
-          }
-        });
-        features.forEach((f) => {
-          if (f) featById.set(f.id, f);
-        });
-      });
-
-      setPlaylistName(
-        `${playlists.length} crate${playlists.length === 1 ? "" : "s"} · ${
-          allTracks.length
-        } tracks`
+      setCombinedTitle(
+        `${chosen.length} crate${chosen.length === 1 ? "" : "s"} · ${unified.length} tracks`
       );
-      setPlaylistId("__all_crates__");
-      setPlaylistOwnerId(null); // hides owner-only Recommendations
-      setCurrPlaylist(allTracks);
-      setPlaylistKeys(Array.from(featById.values()));
-      setShowPlaylist(true);
+      setCombinedTracks(unified);
     } catch (error) {
-      console.error("Failed to load all crates", error);
+      console.error("Failed to load selected crates", error);
     } finally {
       setLoadingAll(false);
     }
@@ -971,7 +1017,7 @@ let PLLibrary = (props) => {
       <Card
         key={crate.uid}
         className={classes.tileCard}
-        onClick={() => (isSc ? openScCrate(crate) : toggleSelect(crate.uid))}
+        onClick={() => toggleSelect(crate.uid)}
         style={{
           height: "100%",
           display: "flex",
@@ -1018,22 +1064,20 @@ let PLLibrary = (props) => {
             )}
             {isSc ? "SoundCloud" : "Spotify"}
           </span>
-          {/* Cross-search selection is Spotify-only (Phase 2 adds mixed sets). */}
-          {!isSc && (
-            <Checkbox
-              key={selected.has(crate.uid) ? "on" : "off"}
-              className={`${classes.tileCheckbox} ${
-                selected.has(crate.uid) ? classes.iconPop : ""
-              }`}
-              checked={selected.has(crate.uid)}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleSelect(crate.uid);
-              }}
-              title="Select for cross-search"
-              size="small"
-            />
-          )}
+          {/* Select for a combined open — Spotify + SoundCloud mix freely. */}
+          <Checkbox
+            key={selected.has(crate.uid) ? "on" : "off"}
+            className={`${classes.tileCheckbox} ${
+              selected.has(crate.uid) ? classes.iconPop : ""
+            }`}
+            checked={selected.has(crate.uid)}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSelect(crate.uid);
+            }}
+            title="Select to open combined"
+            size="small"
+          />
           <IconButton
             className={classes.tileFav}
             size="small"
@@ -1550,9 +1594,7 @@ let PLLibrary = (props) => {
         </Box>
         <Box style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {(() => {
-            const shownIds = sortedCrates
-              .filter((c) => c.source === "spotify")
-              .map((c) => c.uid);
+            const shownIds = sortedCrates.map((c) => c.uid);
             const allSelected =
               shownIds.length > 0 && shownIds.every((id) => selected.has(id));
             return (
@@ -1840,6 +1882,17 @@ let PLLibrary = (props) => {
           />
         )}
       </Dialog>
+
+      {/* Combined multi-source browser (a SoundCloud-inclusive Open(N)). */}
+      <CombinedCrate
+        open={Boolean(combinedTracks)}
+        onClose={() => setCombinedTracks(null)}
+        title={combinedTitle}
+        tracks={combinedTracks || []}
+        scFetch={scFetch}
+        updatePlayer={props.updatePlayer}
+        onPlaySoundcloud={props.onPlaySoundcloud}
+      />
     </>
   );
 };
