@@ -36,16 +36,32 @@ export function useScAnalysisQueue(scFetch) {
                 `&duration=${t.duration || 0}` +
                 `&genre=${encodeURIComponent(t.genre || "")}`
             );
-            if (result && !result.isLikelySet && result.camelot) {
+            // Cache successes AND terminal "unavailable" verdicts (a
+            // SoundCloud-only track won't become analyzable) so we don't re-hit
+            // the API for them.
+            if (result && !result.isLikelySet && (result.camelot || result.unavailable)) {
               saveScAnalysis(urn, result);
             }
           } catch (e) {
-            result = { error: true };
+            // A thrown error is now only a genuine/transient failure — the
+            // backend returns 200 for expected "unavailable" tracks. Capture the
+            // reason so the marker can show why.
+            const data = e && e.response && e.response.data;
+            const reason =
+              (data && (data.reason || data.scMessage || data.error)) ||
+              (e && e.message) ||
+              null;
+            result = { error: true, reason };
           }
         }
         setAnalysis((a) => ({ ...a, [urn]: result || { error: true } }));
-        // Failed (e.g. HLS-only / no progressive stream) → allow a retry later.
-        if (!result || result.error || (!result.camelot && !result.isLikelySet)) {
+        // Allow a retry only for genuine failures or an analyzed-but-no-key
+        // result — NOT for terminal `unavailable` verdicts.
+        if (
+          !result ||
+          result.error ||
+          (!result.camelot && !result.isLikelySet && !result.unavailable)
+        ) {
           seenRef.current.delete(urn);
         }
       }

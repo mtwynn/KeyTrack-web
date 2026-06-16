@@ -223,7 +223,19 @@ let Row = (props) => {
       )}
       <TableCell>
         {keyInfo ? (
-          keyChip(keyLabel)
+          props.scStatus === "preview" ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {keyChip(keyLabel)}
+              <span
+                title="Approximate — analyzed from a 30s SoundCloud preview"
+                style={{ color: "#ff5500", fontWeight: 700 }}
+              >
+                ~
+              </span>
+            </span>
+          ) : (
+            keyChip(keyLabel)
+          )
         ) : props.scStatus === "loading" ? (
           <span
             style={{
@@ -236,6 +248,21 @@ let Row = (props) => {
           >
             <CircularProgress size={12} style={{ color: "#ff5500" }} />
             analyzing…
+          </span>
+        ) : props.scStatus === "unavailable" ? (
+          <span
+            title="Only available on SoundCloud — no stream we can analyze"
+            style={{
+              backgroundColor: "rgba(0,0,0,0.08)",
+              color: "#666",
+              padding: "2px 8px",
+              borderRadius: 10,
+              fontSize: "0.72rem",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            SC-only
           </span>
         ) : props.scStatus === "failed" ? (
           <span

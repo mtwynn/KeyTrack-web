@@ -497,11 +497,77 @@ app.get(
       },
       function (err, r, streams) {
         if (err || !streams) {
-          return res.status(502).send({ error: 'stream_lookup_failed' });
+          return res.status(502).send({
+            error: 'stream_lookup_failed',
+            reason: (err && err.message) || 'no_response',
+          });
         }
-        const audioUrl =
-          streams.http_mp3_128_url || streams.hls_aac_160_url || null;
-        if (!audioUrl) return res.status(422).send({ error: 'no_stream' });
+        // SoundCloud returns a JSON ERROR envelope (code/message/errors) on a
+        // non-2xx — e.g. 403 for tracks not streamable via the API, 404 for
+        // removed/region-locked tracks. Detect it instead of treating the
+        // envelope as a (streamless) streams object and mislabeling no_stream.
+        const scStatus = r && r.statusCode;
+        if (
+          (scStatus && scStatus >= 400) ||
+          streams.errors ||
+          streams.error ||
+          streams.code != null
+        ) {
+          const scMessage = streams.message || streams.error || null;
+          // 403/404 = SoundCloud won't stream this track to our API token at all
+          // (monetized / "only available on SoundCloud" / removed). That's an
+          // EXPECTED "can't analyze" outcome, not a server error — return 200
+          // with an `unavailable` flag (so it doesn't spam the console with red
+          // 502s and gets cached), reserving 502 for genuine/transient errors.
+          if (scStatus === 403 || scStatus === 404) {
+            return res.send({ unavailable: true, scStatus, scMessage });
+          }
+          console.error('sc streams error', scStatus, scMessage, 'track', trackId);
+          return res.status(502).send({
+            error: 'stream_lookup_failed',
+            scStatus: scStatus || null,
+            scMessage,
+          });
+        }
+        // Prefer a progressive MP3 (a simple download); otherwise fall back to
+        // ANY HLS variant the API exposes (mp3/aac/opus, or any other hls_*_url)
+        // and let the analysis service decode the playlist with ffmpeg.
+        // Previously we only checked http_mp3_128_url || hls_aac_160_url, so
+        // HLS-only tracks (which usually expose hls_mp3_128_url) returned
+        // no_stream — the bulk of the "couldn't analyze" failures.
+        const progressive = streams.http_mp3_128_url || null;
+        let hlsUrl = null;
+        if (!progressive) {
+          hlsUrl =
+            streams.hls_mp3_128_url ||
+            streams.hls_aac_160_url ||
+            streams.hls_opus_64_url ||
+            null;
+          if (!hlsUrl) {
+            const anyHls = Object.keys(streams).find(
+              (k) => /^hls_.*url$/i.test(k) && streams[k]
+            );
+            if (anyHls) hlsUrl = streams[anyHls];
+          }
+        }
+        // Last resort: a 30s preview clip. Some tracks expose only
+        // preview_mp3_128_url to the API; analyze that and mark the result
+        // preview-based (approximate) rather than giving up.
+        const previewUrl =
+          !progressive && !hlsUrl ? streams.preview_mp3_128_url || null : null;
+        const audioUrl = progressive || hlsUrl || previewUrl;
+        const isHls = !progressive && !!hlsUrl;
+        const isPreview = !progressive && !hlsUrl && !!previewUrl;
+        if (!audioUrl) {
+          // No usable stream at all (not even a preview) — also an expected
+          // "can't analyze" outcome, not an error. 200 + unavailable; `available`
+          // lists the stream keys SoundCloud returned, for debugging.
+          return res.send({
+            unavailable: true,
+            reason: 'no_stream',
+            available: Object.keys(streams || {}),
+          });
+        }
         // 2) hand it to the analysis service
         request.post(
           {
@@ -512,15 +578,28 @@ app.get(
               authHeader: 'OAuth ' + token,
               durationMs,
               genre,
+              isHls,
             },
             timeout: 60000,
           },
           function (e2, r2, result) {
             if (e2 || !r2 || r2.statusCode !== 200) {
-              console.error('analysis service error', e2 && e2.message, r2 && r2.statusCode);
-              return res.status(502).send({ error: 'analysis_failed' });
+              // Pass the service's specific reason through so the UI/logs can
+              // show WHY (download_failed / decode_failed / …), not just a
+              // generic failure.
+              const reason =
+                (result && result.error) ||
+                (e2 && e2.message) ||
+                'analysis_failed';
+              console.error('analysis service error', reason, r2 && r2.statusCode);
+              return res.status(502).send({ error: 'analysis_failed', reason });
             }
-            res.send(result);
+            // Flag preview-derived results so the client can mark them approximate.
+            res.send(
+              isPreview && result && !result.error
+                ? { ...result, preview: true }
+                : result
+            );
           }
         );
       }
