@@ -263,18 +263,18 @@ const ScBottomPlayer = ({ track }) => {
           aria-label="volume"
           style={{
             position: 'absolute',
-            top: 27,
-            right: 88,
-            width: 30,
-            height: 30,
+            top: 28,
+            right: 65,
+            width: 25,
+            height: 22,
             padding: 0,
             backgroundColor: '#fff',
             border: '1px solid rgba(0,0,0,0.12)',
             borderRadius: 4,
-            color: 'rgba(0,0,0,0.55)',
+            color: '#333',
           }}
         >
-          <VolIcon style={{ fontSize: 18 }} />
+          <VolIcon style={{ fontSize: 16 }} />
         </IconButton>
         <Popover
           open={Boolean(volAnchor)}
