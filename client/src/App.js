@@ -258,19 +258,23 @@ const ScBottomPlayer = ({ track }) => {
             buttons) — clear of both the waveform scrub strip below and the
             SoundCloud logo above. Click pops a vertical slider above it. */}
         <IconButton
-          size="small"
           onClick={(e) => setVolAnchor(e.currentTarget)}
           title="Volume"
           aria-label="volume"
           style={{
             position: 'absolute',
-            top: 34,
-            right: 10,
+            top: 27,
+            right: 88,
+            width: 30,
+            height: 30,
+            padding: 0,
+            backgroundColor: '#fff',
+            border: '1px solid rgba(0,0,0,0.12)',
+            borderRadius: 4,
             color: 'rgba(0,0,0,0.55)',
-            padding: 4,
           }}
         >
-          <VolIcon fontSize="small" />
+          <VolIcon style={{ fontSize: 18 }} />
         </IconButton>
         <Popover
           open={Boolean(volAnchor)}
@@ -279,6 +283,9 @@ const ScBottomPlayer = ({ track }) => {
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
           transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
           disableScrollLock
+          // Above the player bar (z 10000), else the slider's lower half hides
+          // behind it and you can't drag volume down.
+          style={{ zIndex: 11000 }}
           PaperProps={{
             style: {
               height: 120,
