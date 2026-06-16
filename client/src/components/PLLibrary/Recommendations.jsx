@@ -211,15 +211,11 @@ const Recommendations = (props) => {
         return;
       }
 
-      console.log("Selected random tracks:", randomTracks.map(t => t.track.name));
-
       // Step 2: Extract artist IDs
       const artistIds = extractArtistIds(randomTracks);
-      console.log("Artist IDs:", artistIds);
 
       // Step 3: Build playlist lookup sets
       const { trackIds: playlistTrackIds, trackNames: playlistTrackNames } = buildPlaylistLookup();
-      console.log("Playlist has", playlistTrackIds.size, "tracks");
 
       // Step 4: Fetch top tracks for each artist (parallel API calls)
       const topTracksPromises = artistIds.map((artistId) =>
@@ -230,7 +226,6 @@ const Recommendations = (props) => {
       );
 
       const topTracksResults = await Promise.all(topTracksPromises);
-      console.log("Fetched top tracks for", topTracksResults.length, "artists");
 
       // Step 5: Collect ALL unique candidate tracks across artists (excluding
       // tracks already in the playlist), to give ranking a real pool.
@@ -303,8 +298,7 @@ const Recommendations = (props) => {
     setAdding({ ...adding, [trackId]: true });
     try {
       await spotifyWebApi.addTracksToPlaylist(props.playlistId, [trackUri]);
-      console.log("Track added successfully");
-      
+
       // Update parent playlist state without refetching
       const addedTrack = recommendations.find((track) => track.id === trackId);
       const audioFeature = getAudioFeatureForTrack(trackId);
