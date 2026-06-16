@@ -121,6 +121,17 @@ const PLAYER_STYLES = {
 // The SoundCloud bar sits on TOP of the (always-mounted) Spotify player.
 const SC_PLAYER_WRAP_STYLE = { ...PLAYER_WRAP_STYLE, zIndex: 10000 };
 
+// Blur whatever has focus before opening a focus-untrapped dialog (the ones
+// with disableEnforceFocus: Key Calculator, Set Builder, Key-filter picker).
+// Otherwise the trigger button keeps focus while MUI aria-hides #root around
+// it, which Chrome flags: "Blocked aria-hidden on an element because its
+// descendant retained focus." Blurring first moves focus to <body>, outside
+// the aria-hidden subtree, so the warning never fires.
+const blurActive = () => {
+  const el = document.activeElement;
+  if (el && typeof el.blur === 'function') el.blur();
+};
+
 // Memoized so the Spotify Web Playback player only re-renders (and never
 // reconnects) when its own props change — not on every unrelated App re-render
 // like opening a drawer or dialog.
@@ -407,6 +418,7 @@ class App extends React.Component {
   }
 
   openKeyCalculator() {
+    blurActive();
     this.setState({
       showKeyCalculator: !this.state.showKeyCalculator,
     });
@@ -442,11 +454,13 @@ class App extends React.Component {
   }
 
   openSet() {
+    blurActive();
     this.setState({ setOpen: true });
   }
 
   // Replace the current set with a loaded saved set.
   loadSet(entries) {
+    blurActive();
     this.setState({ set: entries, setOpen: true });
   }
 
@@ -1253,6 +1267,9 @@ class App extends React.Component {
             <KeyCalculator
               open={this.state.showKeyCalculator}
               onClose={this.openKeyCalculator}
+              bottomInset={
+                this.state.scNowPlaying ? 130 : loggedIn ? 96 : 0
+              }
             />
           )}
 
@@ -1340,14 +1357,17 @@ class App extends React.Component {
 
           {/* The Spotify player stays mounted at all times — unmounting it
               tears down its Web Playback device ("Device not found"). While a
-              SoundCloud track plays, the SC widget overlays it (higher z-index)
-              and Spotify is paused. */}
+              SoundCloud track plays we HIDE it (display:none keeps the device
+              alive) so it no longer peeks out behind the shorter SC widget;
+              only the SC bar shows. Spotify is already paused on SC play. */}
           {loggedIn && (
-            <BottomPlayer
-              token={this.state.access_token}
-              uris={this.state.player.uris}
-              play={this.state.player.isPlaying}
-            />
+            <div style={{ display: this.state.scNowPlaying ? 'none' : 'block' }}>
+              <BottomPlayer
+                token={this.state.access_token}
+                uris={this.state.player.uris}
+                play={this.state.player.isPlaying}
+              />
+            </div>
           )}
           {this.state.scNowPlaying && (
             <ScBottomPlayer
