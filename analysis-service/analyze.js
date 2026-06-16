@@ -25,10 +25,29 @@ const run = (cmd, args) =>
   execFileP(cmd, args, { maxBuffer: 1 << 26 }).then((r) => r.stdout.trim());
 
 // Decode to mono 44.1k WAV + a steady ~90s mid-segment (start at 25% in).
-async function decode(input, durationMs, dir) {
+// `headers` (an HLS auth header) is given to ffmpeg for REMOTE inputs so it can
+// fetch the m3u8 playlist + its segments itself; omitted for a local file.
+async function decode(input, durationMs, dir, headers) {
   const wav = path.join(dir, "a.wav");
   const seg = path.join(dir, "seg.wav");
-  await run(FFMPEG, ["-y", "-i", input, "-ac", "1", "-ar", "44100", wav]);
+  // For an HLS/remote input, let ffmpeg follow the playlist (a downloaded .m3u8
+  // has no base URL to resolve its segments). Whitelist the nested protocols
+  // and carry auth on every request.
+  const pre = headers
+    ? [
+        "-protocol_whitelist",
+        "file,http,https,tcp,tls,crypto",
+        "-headers",
+        `Authorization: ${headers}\r\n`,
+      ]
+    : [];
+  await run(FFMPEG, ["-y", ...pre, "-i", input, "-ac", "1", "-ar", "44100", wav]).catch(
+    () => {
+      const err = new Error("decode_failed");
+      err.code = "decode_failed";
+      throw err;
+    }
+  );
   const start = Math.max(20, Math.floor(((durationMs || 0) / 1000) * 0.25));
   await run(FFMPEG, ["-y", "-ss", String(start), "-t", "90", "-i", wav, "-ac", "1", seg]).catch(
     () => {}
@@ -58,12 +77,13 @@ function detectBpm(seg, genre) {
   });
 }
 
-// Analyze a local audio file path.
-async function analyzeFile(input, { durationMs, genre } = {}) {
+// Analyze a local file path OR a remote URL. `headers` is passed to ffmpeg for
+// remote (HLS) inputs so it can fetch the playlist + segments with auth.
+async function analyzeFile(input, { durationMs, genre, headers } = {}) {
   if (durationMs && durationMs > LIKELY_SET_MS) return { isLikelySet: true };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kt-an-"));
   try {
-    const { wav, seg } = await decode(input, durationMs, dir);
+    const { wav, seg } = await decode(input, durationMs, dir, headers);
     const [key, bpm] = await Promise.all([detectKey(wav), detectBpm(seg, genre)]);
     return { isLikelySet: false, camelot: key.camelot, key: key.key, bpm };
   } finally {
@@ -71,10 +91,24 @@ async function analyzeFile(input, { durationMs, genre } = {}) {
   }
 }
 
-// Analyze a remote audio URL (downloads first, with an optional auth header —
-// SoundCloud stream URLs need `Authorization: OAuth <token>`).
-async function analyzeUrl(audioUrl, { authHeader, durationMs, genre } = {}) {
+// Does this URL look like an HLS playlist? SoundCloud's hls_* stream URLs
+// resolve to .m3u8 (sometimes behind a query string).
+function looksLikeHls(url) {
+  return /\.m3u8(\?|$)/i.test(url) || /(^|[?&/])hls/i.test(url);
+}
+
+// Analyze a remote audio URL. SoundCloud stream URLs need
+// `Authorization: OAuth <token>`.
+//   - Progressive MP3: download the bytes, then decode the local file.
+//   - HLS (m3u8): hand the URL straight to ffmpeg so it fetches the playlist +
+//     segments itself (a saved .m3u8 has no base URL to resolve them).
+async function analyzeUrl(audioUrl, { authHeader, durationMs, genre, isHls } = {}) {
   if (durationMs && durationMs > LIKELY_SET_MS) return { isLikelySet: true };
+
+  if (isHls || looksLikeHls(audioUrl)) {
+    return await analyzeFile(audioUrl, { durationMs, genre, headers: authHeader });
+  }
+
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kt-an-"));
   const file = path.join(dir, "in.audio");
   try {
@@ -82,7 +116,11 @@ async function analyzeUrl(audioUrl, { authHeader, durationMs, genre } = {}) {
       headers: authHeader ? { Authorization: authHeader } : {},
       redirect: "follow",
     });
-    if (!res.ok) throw new Error("download failed " + res.status);
+    if (!res.ok) {
+      const err = new Error("download_failed " + res.status);
+      err.code = "download_failed";
+      throw err;
+    }
     fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
     return await analyzeFile(file, { durationMs, genre });
   } finally {

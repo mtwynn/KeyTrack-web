@@ -40,7 +40,13 @@ export function useScAnalysisQueue(scFetch) {
               saveScAnalysis(urn, result);
             }
           } catch (e) {
-            result = { error: true };
+            // Capture the backend's specific reason (no_stream / decode_failed /
+            // download_failed / …) instead of a bare flag, so a failed track can
+            // show WHY rather than an indistinguishable error.
+            const data = e && e.response && e.response.data;
+            const reason =
+              (data && (data.reason || data.error)) || (e && e.message) || null;
+            result = { error: true, reason };
           }
         }
         setAnalysis((a) => ({ ...a, [urn]: result || { error: true } }));
