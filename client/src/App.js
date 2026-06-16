@@ -235,9 +235,10 @@ const ScBottomPlayer = ({ track, onClose }) => {
 
   return (
     <div style={SC_PLAYER_WRAP_STYLE}>
-      <div style={{ display: 'flex', alignItems: 'stretch', backgroundColor: '#111', lineHeight: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', backgroundColor: '#fff', lineHeight: 0 }}>
         {/* The waveform iframe takes all remaining width; the controls sit in a
-            fixed side column so they NEVER overlap the scrub strip. */}
+            fixed side column so they NEVER overlap the scrub strip. The column
+            is styled white to blend with SoundCloud's classic player bar. */}
         <iframe
           ref={iframeRef}
           title="SoundCloud player"
@@ -252,13 +253,14 @@ const ScBottomPlayer = ({ track, onClose }) => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 4,
-            padding: '0 10px',
+            gap: 6,
+            padding: '0 14px',
             flexShrink: 0,
-            backgroundColor: '#111',
+            backgroundColor: '#fff',
+            borderLeft: '1px solid rgba(0,0,0,0.08)',
           }}
         >
-          <VolumeDown style={{ color: '#fff', fontSize: 18 }} />
+          <VolumeDown style={{ color: 'rgba(0,0,0,0.38)', fontSize: 18 }} />
           <Slider
             value={volume}
             onChange={(e, v) => setVolume(v)}
@@ -267,12 +269,12 @@ const ScBottomPlayer = ({ track, onClose }) => {
             aria-label="SoundCloud volume"
             style={{ width: 72, color: '#ff5500' }}
           />
-          <VolumeUp style={{ color: '#fff', fontSize: 18 }} />
+          <VolumeUp style={{ color: 'rgba(0,0,0,0.55)', fontSize: 18 }} />
           <IconButton
             size="small"
             onClick={onClose}
             title="Close SoundCloud player"
-            style={{ color: '#fff', padding: 4 }}
+            style={{ color: 'rgba(0,0,0,0.5)', padding: 4, marginLeft: 2 }}
           >
             <Close fontSize="small" />
           </IconButton>
