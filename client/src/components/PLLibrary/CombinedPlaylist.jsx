@@ -1,5 +1,5 @@
 import React from "react";
-import { CircularProgress, Button } from "@material-ui/core";
+import { Button } from "@material-ui/core";
 
 import Playlist from "./Playlist";
 import { camelotToKeyMode } from "../../utils/harmonic";
@@ -127,15 +127,11 @@ let CombinedPlaylist = (props) => {
     whiteSpace: "nowrap",
     marginRight: 8,
   };
+  // Live progress is shown by the GLOBAL floating indicator now (one source of
+  // truth), so the header only surfaces the "couldn't analyze + Retry"
+  // affordance once analysis has finished and some retryable failures remain.
   let combinedStatus = null;
-  if (scStatus && scStatus.done < scStatus.total) {
-    combinedStatus = (
-      <span style={statusWrap}>
-        <CircularProgress size={13} style={{ color: "#ff5500" }} />
-        analyzing SoundCloud… {scStatus.done}/{scStatus.total}
-      </span>
-    );
-  } else if (scStatus && scStatus.failed.length) {
+  if (scStatus && scStatus.done >= scStatus.total && scStatus.failed.length) {
     combinedStatus = (
       <span style={statusWrap}>
         {scStatus.failed.length} couldn't analyze
