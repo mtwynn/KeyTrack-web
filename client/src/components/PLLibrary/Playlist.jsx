@@ -31,7 +31,7 @@ import {
 } from "@material-ui/core";
 
 import { useTheme } from "@material-ui/core/styles";
-import { ArrowUpward, Close, Search, Delete, DonutLarge, FilterList, ExpandMore, ExpandLess, QueueMusic, Equalizer } from "@material-ui/icons";
+import { ArrowUpward, Close, Search, Delete, DonutLarge, FilterList, ExpandMore, ExpandLess, QueueMusic, Equalizer, ChevronLeft, ChevronRight } from "@material-ui/icons";
 import Spotify from "spotify-web-api-js";
 
 import { initializeApp } from "firebase/app";
@@ -465,10 +465,32 @@ let Playlist = (props) => {
     [sortedItems, page, rowsPerPage]
   );
 
-  // Reset to the first page whenever the filtered result set changes.
+  // Reset to the first page only on USER-driven changes (search, key/BPM/Year/
+  // energy filters, sort) — NOT when `sortedItems` merely re-fills as live
+  // SoundCloud analysis resolves keys. Depending on `sortedItems` reset the
+  // page on every analysis completion, yanking the user back to page 1 mid-run.
   React.useEffect(() => {
     setPage(0);
-  }, [sortedItems]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, keyFilter, minBpm, maxBpm, minYear, maxYear, energyFilter, sortBy, sortDir]);
+
+  // Safety net: if the current page falls past the end of the result set (e.g.
+  // a filter shrank it), clamp back into range instead of showing a blank page.
+  // This does NOT force page 0, so live data fills don't disturb the page.
+  React.useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(sortedItems.length / rowsPerPage) - 1);
+    if (page > lastPage) setPage(lastPage);
+  }, [sortedItems.length, rowsPerPage, page]);
+
+  // Change page and bring the top of the table into view, so paginating from
+  // the BOTTOM controls lands the user at the top of the new page.
+  const goToPage = (p) => {
+    setPage(p);
+    if (topRef.current)
+      topRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const pageCount = Math.max(1, Math.ceil(sortedItems.length / rowsPerPage));
 
   useEffect(() => {
     if (
@@ -659,7 +681,10 @@ let Playlist = (props) => {
             </IconButton>
           </Toolbar>
           
-          <Collapse in={showFilters} timeout="auto">
+          {/* Filters always show on desktop (force-open); the collapse toggle
+              only applies on mobile. Without `!isMobile`, resizing mobile→desktop
+              after hiding filters left the desktop toolbar collapsed. */}
+          <Collapse in={!isMobile || showFilters} timeout="auto">
             <Toolbar style={{ 
               minHeight: isMobile ? '48px' : '64px',
               padding: isMobile ? theme.spacing(0.5, 1) : theme.spacing(0, 2)
@@ -1045,6 +1070,40 @@ let Playlist = (props) => {
                 ))}
             </TableBody>
           </Table>
+
+          {/* Bottom pagination — prev/next only (no rows-per-page), so you can
+              change pages without scrolling back up to the top pager. */}
+          {sortedItems.length > rowsPerPage && (
+            <Box
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 16,
+                padding: "12px 16px",
+              }}
+            >
+              <IconButton
+                aria-label="previous page"
+                size="small"
+                disabled={page === 0}
+                onClick={() => goToPage(Math.max(0, page - 1))}
+              >
+                <ChevronLeft />
+              </IconButton>
+              <Typography variant="body2" style={{ color: "#666" }}>
+                Page {page + 1} of {pageCount}
+              </Typography>
+              <IconButton
+                aria-label="next page"
+                size="small"
+                disabled={page >= pageCount - 1}
+                onClick={() => goToPage(Math.min(pageCount - 1, page + 1))}
+              >
+                <ChevronRight />
+              </IconButton>
+            </Box>
+          )}
 
           {props.userId === props.playlistOwnerId && (
             <Recommendations

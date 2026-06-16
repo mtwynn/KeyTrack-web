@@ -650,9 +650,6 @@ let PLLibrary = (props) => {
     // Add audio features to playlistKeys if provided
     if (audioFeatures.length > 0 && playlistKeys) {
       setPlaylistKeys([...playlistKeys, ...audioFeatures]);
-      console.log(`Added ${newItems.length} track(s) with metadata to playlist state`);
-    } else {
-      console.log(`Added ${newItems.length} track(s) to playlist state (no metadata)`);
     }
   };
 
@@ -800,9 +797,14 @@ let PLLibrary = (props) => {
   };
 
   const handleOpenSelected = async () => {
-    // Selected, non-hidden crates across both sources.
+    // Selected crates across both sources. The `!hidden` guard keeps hidden
+    // crates out of Open(N) from the NORMAL library, but must NOT apply inside
+    // the Hidden-crates view (showHidden) — otherwise Open(N) there strips every
+    // crate and silently no-ops.
     const chosen = library.filter(
-      (c) => selected.has(c.uid) && !(crateMeta[c.uid] && crateMeta[c.uid].hidden)
+      (c) =>
+        selected.has(c.uid) &&
+        (showHidden || !(crateMeta[c.uid] && crateMeta[c.uid].hidden))
     );
     if (chosen.length === 0) return;
     const spotifyCrates = chosen.filter((c) => c.source === "spotify");
@@ -1468,15 +1470,13 @@ let PLLibrary = (props) => {
           },
         }}
       >
+        {/* Always indeterminate (perpetual spin): the counter only ticks once
+            per whole crate, so a determinate ring sat near 0% and read as
+            "stuck" even while lots of per-track/feature fetching was happening.
+            The x/y text below still conveys overall progress. */}
         <CircularProgress
           classes={{ colorPrimary: classes.colorPrimary }}
           size={64}
-          variant={allProgress.total ? "determinate" : "indeterminate"}
-          value={
-            allProgress.total
-              ? (allProgress.done / allProgress.total) * 100
-              : 0
-          }
         />
         <Typography variant="body1" style={{ fontWeight: 600 }}>
           Loading all crates… {allProgress.done}/{allProgress.total}
