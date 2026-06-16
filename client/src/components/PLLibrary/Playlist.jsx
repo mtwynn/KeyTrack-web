@@ -482,12 +482,20 @@ let Playlist = (props) => {
     if (page > lastPage) setPage(lastPage);
   }, [sortedItems.length, rowsPerPage, page]);
 
+  // Single source of truth for scrolling back to the top of the table — used by
+  // both the "Back to Top" Fab and the bottom pager. `block: "center"` clears
+  // the sticky filter AppBar (a plain "start" tucked the header underneath it,
+  // so it looked like it stopped short).
+  const scrollToTop = () => {
+    if (topRef.current)
+      topRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   // Change page and bring the top of the table into view, so paginating from
   // the BOTTOM controls lands the user at the top of the new page.
   const goToPage = (p) => {
     setPage(p);
-    if (topRef.current)
-      topRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    scrollToTop();
   };
 
   const pageCount = Math.max(1, Math.ceil(sortedItems.length / rowsPerPage));
@@ -1128,12 +1136,7 @@ let Playlist = (props) => {
               minHeight: isMobile ? "56px" : "48px",
               fontSize: isMobile ? "1rem" : "0.875rem",
             }}
-            onClick={() => {
-              topRef.current.scrollIntoView({
-                behavior: "smooth",
-                block: "center",
-              });
-            }}
+            onClick={scrollToTop}
           >
             <ArrowUpward />
             Back To Top
