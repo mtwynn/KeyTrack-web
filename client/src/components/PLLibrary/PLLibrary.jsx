@@ -473,6 +473,13 @@ let PLLibrary = (props) => {
   // Set when the user dismisses the "Search all crates" loader; in-flight and
   // queued fetches check this and bail so a big library doesn't trap them.
   const cancelAllRef = React.useRef(false);
+  // Per-session in-memory cache of crate track/audio-feature fetches, keyed by
+  // crate uid (`sp:<id>` / `sc:<id>`). Re-opening a crate already loaded this
+  // session is then instant — no re-fetch of tracks + features. Lives on a ref
+  // so it persists across re-renders but clears on refresh AND on logout (when
+  // PLLibrary unmounts), so it never leaks one account's data to another.
+  // Minor staleness if a crate is edited mid-session is acceptable.
+  const crateCacheRef = React.useRef(new Map());
   // Crates selected (by id) to scope "Search all crates" to a subset.
   const [selected, setSelected] = React.useState(() => new Set());
 
@@ -673,12 +680,7 @@ let PLLibrary = (props) => {
     setSearch(String(event.target.value).toLowerCase());
   }, 500);
 
-  let handlePlaylistOpen = (crate) => {
-    const id = crate.uid;
-    let numRequests = Math.ceil(crate.trackCount / 100);
-    let playlistPromises = [];
-    let audioFeaturesPromises = [];
-
+  let handlePlaylistOpen = async (crate) => {
     setLoadingPlaylist(true);
     setLoadingId(crate.uid);
 
@@ -686,54 +688,20 @@ let PLLibrary = (props) => {
     setPlaylistId(crate.uid);
     setPlaylistOwnerId(crate.raw.owner.id);
 
-    for (var i = 0; i < numRequests; ++i) {
-      playlistPromises.push(
-        spotifyWebApi.getPlaylistTracks(id, { offset: i * 100 })
-      );
-    }
-
-    Promise.all(playlistPromises)
-      .then((results) => {
-        let tempArr = [];
-
-        results.forEach((result) => {
-          tempArr = tempArr.concat(result.items);
-
-          let playlistItems = result.items;
-          let playlistItemIds = [];
-
-          for (var j = 0; j < playlistItems.length; ++j) {
-            let id = playlistItems[j].track.id;
-            playlistItemIds.push(id);
-          }
-
-          audioFeaturesPromises.push(
-            spotifyWebApi.getAudioFeaturesForTracks(playlistItemIds)
-          );
-        });
-
-        // Returned so the chain waits for audio features before resolving.
-        return Promise.all(audioFeaturesPromises).then((results) => {
-          let keysArr = [];
-
-          results.forEach((result) => {
-            keysArr = keysArr.concat(result.audio_features);
-          });
-
-          setCurrPlaylist(tempArr);
-          setPlaylistKeys(keysArr);
-          setShowPlaylist(true);
-        });
-      })
-      .catch((error) => {
-        console.error("Failed to load playlist", error);
-      })
+    try {
+      // Cached by uid — instant on a re-open this session.
+      const { items, features } = await getSpotifyCrate(crate.uid);
+      setCurrPlaylist(items);
+      setPlaylistKeys(features);
+      setShowPlaylist(true);
+    } catch (error) {
+      console.error("Failed to load playlist", error);
+    } finally {
       // Always clear the loading state, even if a request failed, so the
       // spinner never gets stuck.
-      .finally(() => {
-        setLoadingPlaylist(false);
-        setLoadingId(null);
-      });
+      setLoadingPlaylist(false);
+      setLoadingId(null);
+    }
   };
 
   let handlePlaylistClose = () => {
@@ -772,6 +740,39 @@ let PLLibrary = (props) => {
       out.push(...(res.audio_features || []));
     }
     return out;
+  };
+
+  // Run `fetcher` once per cache key, reusing the result for the rest of the
+  // session. Failures aren't cached (the throw happens before the set).
+  const cachedCrate = async (key, fetcher) => {
+    const hit = crateCacheRef.current.get(key);
+    if (hit) return hit;
+    const val = await fetcher();
+    crateCacheRef.current.set(key, val);
+    return val;
+  };
+
+  // A Spotify crate's tracks + audio features, cached by uid.
+  const getSpotifyCrate = (uid) =>
+    cachedCrate(`sp:${uid}`, async () => {
+      const items = await fetchAllTracks(uid);
+      const features = await fetchFeatures(items.map((t) => t.track.id));
+      return { items, features };
+    });
+
+  // A SoundCloud crate's full track list, cached by uid.
+  const getScCrate = async (c) => {
+    const k = c.raw.kind;
+    const path =
+      k === "likes"
+        ? "/soundcloud/me/likes/tracks"
+        : k === "reposts"
+        ? "/soundcloud/me/reposts"
+        : "/soundcloud/playlists/" + encodeURIComponent(c.raw.id) + "/tracks";
+    const { tracks } = await cachedCrate(`sc:${c.uid}`, async () => ({
+      tracks: await fetchScTracks(scFetch, path),
+    }));
+    return tracks;
   };
 
   // Concurrency-capped map to avoid bursting the Spotify rate limit.
@@ -819,11 +820,9 @@ let PLLibrary = (props) => {
       if (scCratesSel.length === 0) {
         const perPlaylist = await mapWithLimit(spotifyCrates, 4, async (c) => {
           if (cancelAllRef.current) return { tracks: [], features: [] };
-          const tracks = await fetchAllTracks(c.uid);
-          if (cancelAllRef.current) return { tracks: [], features: [] };
-          const features = await fetchFeatures(tracks.map((t) => t.track.id));
+          const { items, features } = await getSpotifyCrate(c.uid);
           setAllProgress((p) => ({ ...p, done: p.done + 1 }));
-          return { tracks, features };
+          return { tracks: items, features };
         });
         if (cancelAllRef.current) return;
         const seen = new Set();
@@ -860,8 +859,7 @@ let PLLibrary = (props) => {
       const featById = new Map();
       await mapWithLimit(spotifyCrates, 4, async (c) => {
         if (cancelAllRef.current) return;
-        const items = await fetchAllTracks(c.uid);
-        const feats = await fetchFeatures(items.map((it) => it.track.id));
+        const { items, features: feats } = await getSpotifyCrate(c.uid);
         feats.forEach((f) => f && featById.set(f.id, f));
         items.forEach((item) => {
           if (seenSp.has(item.track.id)) return;
@@ -875,14 +873,7 @@ let PLLibrary = (props) => {
       const seenSc = new Set();
       await mapWithLimit(scCratesSel, 4, async (c) => {
         if (cancelAllRef.current) return;
-        const k = c.raw.kind;
-        const path =
-          k === "likes"
-            ? "/soundcloud/me/likes/tracks"
-            : k === "reposts"
-            ? "/soundcloud/me/reposts"
-            : "/soundcloud/playlists/" + encodeURIComponent(c.raw.id) + "/tracks";
-        const scTracks = await fetchScTracks(scFetch, path);
+        const scTracks = await getScCrate(c);
         scTracks.forEach((tr) => {
           const urn = tr.urn || String(tr.id);
           if (seenSc.has(urn)) return;
@@ -914,26 +905,34 @@ let PLLibrary = (props) => {
     setLoadingPlaylist(true);
     setLoadingId("__liked__");
     try {
-      let items = [];
-      let offset = 0;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const res = await spotifyWebApi.getMySavedTracks({
-          limit: 50,
-          offset,
-        });
-        items = items.concat(res.items || []);
-        if (!res.next) break;
-        offset += 50;
-      }
-      const tracks = items.filter((it) => it.track && it.track.id);
-      const features = await fetchFeatures(tracks.map((t) => t.track.id));
+      // Cached by uid — re-opening Liked Songs this session is instant instead
+      // of re-paging the whole saved-tracks library.
+      const { items: tracks, features } = await cachedCrate(
+        "sp:__liked__",
+        async () => {
+          let items = [];
+          let offset = 0;
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const res = await spotifyWebApi.getMySavedTracks({
+              limit: 50,
+              offset,
+            });
+            items = items.concat(res.items || []);
+            if (!res.next) break;
+            offset += 50;
+          }
+          const filtered = items.filter((it) => it.track && it.track.id);
+          const feats = await fetchFeatures(filtered.map((t) => t.track.id));
+          return { items: filtered, features: feats.filter(Boolean) };
+        }
+      );
 
       setPlaylistName(`Liked Songs · ${tracks.length} tracks`);
       setPlaylistId("__liked__");
       setPlaylistOwnerId(null); // hides owner-only Recommendations
       setCurrPlaylist(tracks);
-      setPlaylistKeys(features.filter(Boolean));
+      setPlaylistKeys(features);
       setShowPlaylist(true);
     } catch (error) {
       console.error("Failed to load liked songs", error);
