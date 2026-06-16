@@ -639,6 +639,9 @@ let Playlist = (props) => {
             >
               {props.playlistName}
             </Typography>
+            {/* Combined-view only: SoundCloud analysis progress (undefined for
+                a Spotify-only playlist, so nothing renders). */}
+            {props.combinedStatus}
             <IconButton
               edge="end"
               color="inherit"

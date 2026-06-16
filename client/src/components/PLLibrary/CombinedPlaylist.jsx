@@ -1,4 +1,5 @@
 import React from "react";
+import { CircularProgress, Button } from "@material-ui/core";
 
 import Playlist from "./Playlist";
 import { camelotToKeyMode } from "../../utils/harmonic";
@@ -97,6 +98,55 @@ let CombinedPlaylist = (props) => {
     return [...(spotifyFeatures || []), ...scKeys];
   }, [spotifyFeatures, scTracks, analysis]);
 
+  // SoundCloud analysis progress for the header status slot: how many of the
+  // SoundCloud tracks have reached a terminal result (key, "Set", or error).
+  const scStatus = React.useMemo(() => {
+    const scList = scTracks || [];
+    if (!scList.length) return null;
+    let done = 0;
+    const failed = [];
+    scList.forEach((t) => {
+      const a = analysis[t.urn || String(t.id)];
+      if (a && (a.camelot || a.isLikelySet || a.error)) {
+        done += 1;
+        if (a.error) failed.push(t);
+      }
+    });
+    return { total: scList.length, done, failed };
+  }, [scTracks, analysis]);
+
+  const statusWrap = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    color: "rgba(255,255,255,0.75)",
+    fontSize: "0.8rem",
+    whiteSpace: "nowrap",
+    marginRight: 8,
+  };
+  let combinedStatus = null;
+  if (scStatus && scStatus.done < scStatus.total) {
+    combinedStatus = (
+      <span style={statusWrap}>
+        <CircularProgress size={13} style={{ color: "#ff5500" }} />
+        analyzing SoundCloud… {scStatus.done}/{scStatus.total}
+      </span>
+    );
+  } else if (scStatus && scStatus.failed.length) {
+    combinedStatus = (
+      <span style={statusWrap}>
+        {scStatus.failed.length} couldn't analyze
+        <Button
+          size="small"
+          onClick={() => enqueueAll(scStatus.failed)}
+          style={{ color: "#ff5500", textTransform: "none", minWidth: 0 }}
+        >
+          Retry
+        </Button>
+      </span>
+    );
+  }
+
   return (
     <Playlist
       open={open}
@@ -113,6 +163,7 @@ let CombinedPlaylist = (props) => {
       onAddToSet={onAddToSet}
       onOpenSet={onOpenSet}
       setCount={setCount}
+      combinedStatus={combinedStatus}
     />
   );
 };
