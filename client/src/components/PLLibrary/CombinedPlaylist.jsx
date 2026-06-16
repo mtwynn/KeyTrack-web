@@ -7,8 +7,8 @@ import { useScAnalysisQueue } from "../SoundCloud/useScAnalysisQueue";
 
 // Parse a SoundCloud date string into the Spotify album.release_date shape so a
 // SoundCloud track reuses the exact same release-date formatting as Spotify
-// rows. Mirrors unifiedTrack's scReleaseDate regex: "YYYY-MM..." → "YYYY-MM-01",
-// else a bare year. Returns { date, precision } or null.
+// rows: "YYYY-MM..." → "YYYY-MM-01", else a bare year. Returns
+// { date, precision } or null.
 function scReleaseDate(track) {
   const raw =
     track.display_date || track.release_date || track.created_at || null;
