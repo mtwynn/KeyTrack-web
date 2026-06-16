@@ -58,6 +58,7 @@ import {
 import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
+import { MusicSpinner, FillBar } from "./LoaderArt";
 import CombinedPlaylist from "./CombinedPlaylist";
 import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 import { useEffect } from "react";
@@ -1508,11 +1509,11 @@ let PLLibrary = (props) => {
         PaperProps={{
           style: {
             position: "relative",
-            padding: "28px 44px",
+            padding: "26px 36px 30px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: 14,
+            gap: 18,
             borderRadius: 12,
           },
         }}
@@ -1527,17 +1528,44 @@ let PLLibrary = (props) => {
         >
           <Close fontSize="small" />
         </IconButton>
-        {/* Always indeterminate (perpetual spin): the counter only ticks once
-            per whole crate, so a determinate ring sat near 0% and read as
-            "stuck" even while lots of per-track/feature fetching was happening.
-            The x/y text below still conveys overall progress. */}
-        <CircularProgress
-          classes={{ colorPrimary: classes.colorPrimary }}
-          size={64}
-        />
-        <Typography variant="body1" style={{ fontWeight: 600 }}>
-          Loading all crates… {allProgress.done}/{allProgress.total}
+        <Typography variant="body1" style={{ fontWeight: 700 }}>
+          Loading all crates…
         </Typography>
+        {/* PREVIEW: three spinner styles to choose from — tell me A/B/C and
+            I'll keep just that one. */}
+        <div
+          style={{
+            display: "flex",
+            gap: 30,
+            alignItems: "flex-end",
+            justifyContent: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          {[
+            ["vinyl", "A · Vinyl"],
+            ["cd", "B · CD"],
+            ["cassette", "C · Cassette"],
+          ].map(([v, label]) => (
+            <div
+              key={v}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <div style={{ height: 80, display: "flex", alignItems: "center" }}>
+                <MusicSpinner variant={v} />
+              </div>
+              <Typography variant="caption" color="textSecondary">
+                {label}
+              </Typography>
+            </div>
+          ))}
+        </div>
+        <FillBar done={allProgress.done} total={allProgress.total} />
       </Dialog>
 
       <Box
