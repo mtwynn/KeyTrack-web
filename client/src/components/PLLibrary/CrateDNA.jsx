@@ -6,7 +6,14 @@ import { camelotColor } from "../../utils/harmonic";
 
 // A quick visual "DNA" of a crate: key distribution (Camelot bars) and a BPM
 // histogram, plus a one-line summary. Computed over the whole crate's tracks.
-const CrateDNA = ({ items, getKey }) => {
+//
+// Two ways to read each track's harmonic data:
+//   - getKey(id) -> { key, mode, bpm, energy, ... }   (Spotify Playlist usage)
+//   - getCamelot(item) -> Camelot code directly       (combined/unified tracks)
+// When `getCamelot` is supplied it takes precedence and we read Camelot/BPM/
+// major-minor straight off the item (the unified shape carries .camelot/.bpm/
+// .mode). When it's absent the component behaves exactly as before.
+const CrateDNA = ({ items, getKey, getCamelot }) => {
   const data = React.useMemo(() => {
     const keyCounts = {};
     const bpms = [];
@@ -17,6 +24,21 @@ const CrateDNA = ({ items, getKey }) => {
     let valence = 0;
     let vibeN = 0;
     (items || []).forEach((item) => {
+      if (getCamelot) {
+        // Unified-track path: Camelot comes straight from the item.
+        const code = getCamelot(item);
+        if (!code) return;
+        keyCounts[code] = (keyCounts[code] || 0) + 1;
+        if (item && item.bpm != null) bpms.push(Math.round(item.bpm));
+        // The trailing letter encodes mode: "B" = major, "A" = minor.
+        if (String(code).slice(-1) === "B") major += 1;
+        else minor += 1;
+        if (item && item.energy != null) {
+          energy += item.energy;
+          vibeN += 1;
+        }
+        return;
+      }
       const k = item && item.track && getKey(item.track.id);
       if (!k) return;
       const code = KeyMap[k.key].camelot[k.mode];
@@ -40,7 +62,7 @@ const CrateDNA = ({ items, getKey }) => {
       dance: vibeN ? dance / vibeN : null,
       valence: vibeN ? valence / vibeN : null,
     };
-  }, [items, getKey]);
+  }, [items, getKey, getCamelot]);
 
   const total = data.major + data.minor;
   if (total === 0) {
@@ -63,8 +85,12 @@ const CrateDNA = ({ items, getKey }) => {
     keyEntries[0]
   );
 
-  const bpmMin = Math.min(...data.bpms);
-  const bpmMax = Math.max(...data.bpms);
+  // BPMs can be empty in the unified path (a track with a Camelot but no BPM
+  // yet); guard so we never render Infinity/NaN. The Spotify path always has a
+  // BPM whenever it has a key, so it's unaffected.
+  const hasBpm = data.bpms.length > 0;
+  const bpmMin = hasBpm ? Math.min(...data.bpms) : null;
+  const bpmMax = hasBpm ? Math.max(...data.bpms) : null;
   const bins = {};
   data.bpms.forEach((b) => {
     const k = Math.floor(b / 10) * 10;
@@ -73,13 +99,13 @@ const CrateDNA = ({ items, getKey }) => {
   const binEntries = Object.entries(bins)
     .map(([k, v]) => [parseInt(k, 10), v])
     .sort((a, b) => a[0] - b[0]);
-  const maxBin = Math.max(...binEntries.map((e) => e[1]));
+  const maxBin = hasBpm ? Math.max(...binEntries.map((e) => e[1])) : 0;
 
   return (
     <Box style={{ padding: "8px 4px" }}>
       <Box style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
         <Chip size="small" label={`${total} tracks`} />
-        <Chip size="small" label={`${bpmMin}–${bpmMax} BPM`} />
+        {hasBpm && <Chip size="small" label={`${bpmMin}–${bpmMax} BPM`} />}
         <Chip
           size="small"
           label={`Dominant ${dominant[0]}`}
@@ -155,44 +181,48 @@ const CrateDNA = ({ items, getKey }) => {
         })}
       </Box>
 
-      <Typography variant="overline" color="textSecondary">
-        BPM distribution
-      </Typography>
-      <Box
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          gap: 3,
-          height: 80,
-          marginTop: 4,
-        }}
-      >
-        {binEntries.map(([bin, count]) => (
+      {hasBpm && (
+        <>
+          <Typography variant="overline" color="textSecondary">
+            BPM distribution
+          </Typography>
           <Box
-            key={bin}
             style={{
-              flex: 1,
               display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "flex-end",
+              alignItems: "flex-end",
+              gap: 3,
+              height: 80,
+              marginTop: 4,
             }}
-            title={`${bin}-${bin + 9} BPM: ${count}`}
           >
-            <Box
-              style={{
-                width: "100%",
-                background: "#1ED760",
-                height: Math.max(2, Math.round((count / maxBin) * 64)),
-                borderRadius: "3px 3px 0 0",
-              }}
-            />
-            <span style={{ fontSize: 9, color: "#888", marginTop: 2 }}>
-              {bin}
-            </span>
+            {binEntries.map(([bin, count]) => (
+              <Box
+                key={bin}
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                }}
+                title={`${bin}-${bin + 9} BPM: ${count}`}
+              >
+                <Box
+                  style={{
+                    width: "100%",
+                    background: "#1ED760",
+                    height: Math.max(2, Math.round((count / maxBin) * 64)),
+                    borderRadius: "3px 3px 0 0",
+                  }}
+                />
+                <span style={{ fontSize: 9, color: "#888", marginTop: 2 }}>
+                  {bin}
+                </span>
+              </Box>
+            ))}
           </Box>
-        ))}
-      </Box>
+        </>
+      )}
     </Box>
   );
 };

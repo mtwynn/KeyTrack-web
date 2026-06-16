@@ -1,5 +1,5 @@
 import KeyMap from "./KeyMap";
-import { formatReleaseDate } from "./release";
+import { formatReleaseDate, releaseYear } from "./release";
 
 // A track normalized to one source-agnostic shape so the combined browser can
 // render Spotify and SoundCloud tracks in a single table. Only the harmonic
@@ -35,6 +35,7 @@ export function spotifyToUnified(item, feat) {
     energy: feat && feat.energy != null ? feat.energy : null,
     genre: null,
     released: formatReleaseDate(t),
+    releaseYear: releaseYear(t),
     durationMs: t.duration_ms || null,
     externalUrl: t.external_urls ? t.external_urls.spotify : null,
     spotifyUri: t.uri,
@@ -44,8 +45,36 @@ export function spotifyToUnified(item, feat) {
 
 // SoundCloud track + our analysis ({ camelot, key, bpm } or null) -> unified.
 // Analysis is lazy, so callers re-derive (or overlay) as results arrive.
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// SoundCloud release/upload date — display_date is what SoundCloud itself shows
+// (the artist's release date if set, else the upload date), with created_at as
+// a fallback. Formats like "2024-03-15T..." or "2024/03/15 12:00:00 +0000".
+// Returns { released: "Mar 2024" | "2024" | null, releaseYear: number | null }.
+function scReleaseDate(track) {
+  const raw = track.display_date || track.release_date || track.created_at || null;
+  if (!raw) return { released: null, releaseYear: null };
+  const m = /(\d{4})[-/](\d{1,2})/.exec(String(raw));
+  if (m) {
+    const year = parseInt(m[1], 10);
+    const mon = parseInt(m[2], 10);
+    return {
+      released: mon >= 1 && mon <= 12 ? `${MONTHS[mon - 1]} ${year}` : String(year),
+      releaseYear: year,
+    };
+  }
+  const y = /(\d{4})/.exec(String(raw));
+  return y
+    ? { released: y[1], releaseYear: parseInt(y[1], 10) }
+    : { released: null, releaseYear: null };
+}
+
 export function soundcloudToUnified(track, analysis) {
   const a = analysis && analysis.camelot ? analysis : null;
+  const rel = scReleaseDate(track);
   return {
     uid: "sc:" + (track.urn || track.id),
     source: "soundcloud",
@@ -58,7 +87,8 @@ export function soundcloudToUnified(track, analysis) {
     bpm: a && a.bpm != null ? a.bpm : null,
     energy: null,
     genre: track.genre || null,
-    released: null,
+    released: rel.released,
+    releaseYear: rel.releaseYear,
     durationMs: track.duration || null,
     externalUrl: track.permalink_url || null,
     spotifyUri: null,
