@@ -242,23 +242,24 @@ let CombinedCrate = (props) => {
         return true;
       });
     }
-    // Year range is Spotify-only data: rows without a year (SoundCloud, null)
-    // pass through; rows that HAVE a year must fall within the bound.
+    // Year range: a row with no parseable year can't satisfy the bound, so it's
+    // EXCLUDED while a year filter is active (SoundCloud carries its own release
+    // year, so this normally only drops the rare dateless track).
     const yFrom = minYear === "" ? null : parseInt(minYear, 10);
     const yTo = maxYear === "" ? null : parseInt(maxYear, 10);
     if (yFrom != null || yTo != null) {
       list = list.filter((t) => {
-        if (t.releaseYear == null) return true;
+        if (t.releaseYear == null) return false;
         if (yFrom != null && t.releaseYear < yFrom) return false;
         if (yTo != null && t.releaseYear > yTo) return false;
         return true;
       });
     }
-    // Energy band is Spotify-only data (0..1): rows without energy (SoundCloud,
-    // null) pass through; rows that HAVE energy must fall in the band.
+    // Energy band is Spotify-only (SoundCloud has no energy reading). Picking a
+    // band EXCLUDES rows without energy — SoundCloud tracks only show on "Any".
     if (energyFilter !== "any") {
       list = list.filter((t) => {
-        if (t.energy == null) return true;
+        if (t.energy == null) return false;
         if (energyFilter === "low") return t.energy < 0.4;
         if (energyFilter === "med") return t.energy >= 0.4 && t.energy <= 0.7;
         return t.energy > 0.7;
