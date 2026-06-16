@@ -20,15 +20,27 @@ import {
 // entries also persist their source + a MINIMAL raw track (the fields the Widget
 // player + now-playing need), so a reloaded set can still play them and resolve
 // their key from the analysis cache.
+// Firestore rejects `undefined`. The set only uses key/mode/bpm, and a
+// SoundCloud key has no danceability/valence (Spotify-only features) — which
+// would be `undefined` and break the save — so store just the three fields.
+const cleanKey = (k) =>
+  k
+    ? {
+        key: k.key != null ? k.key : null,
+        mode: k.mode != null ? k.mode : null,
+        bpm: k.bpm != null ? k.bpm : null,
+      }
+    : null;
+
 const serializeEntry = (entry) => {
   const t = entry.item.track;
   const rec = {
     id: t.id || null,
     uri: t.uri || null,
     name: t.name || "",
-    artists: (t.artists || []).map((a) => ({ name: a.name })),
+    artists: (t.artists || []).map((a) => ({ name: a.name || "" })),
     image: (t.album && t.album.images && t.album.images[0] && t.album.images[0].url) || null,
-    key: entry.key || null,
+    key: cleanKey(entry.key),
   };
   if (entry.item.__source === "soundcloud") {
     rec.source = "soundcloud";
