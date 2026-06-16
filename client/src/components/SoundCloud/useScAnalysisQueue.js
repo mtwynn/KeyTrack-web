@@ -40,13 +40,17 @@ export function useScAnalysisQueue(scFetch) {
               saveScAnalysis(urn, result);
             }
           } catch (e) {
-            // Capture the backend's specific reason (no_stream / decode_failed /
-            // download_failed / …) instead of a bare flag, so a failed track can
-            // show WHY rather than an indistinguishable error.
+            // Capture the backend's specific reason instead of a bare flag, so a
+            // failed track can show WHY. `unavailable` (SoundCloud 403 "only on
+            // SoundCloud" / 404) marks tracks that can never be analyzed — a
+            // distinct, non-retryable state vs a transient failure.
             const data = e && e.response && e.response.data;
+            const status = data && data.scStatus;
             const reason =
-              (data && (data.reason || data.error)) || (e && e.message) || null;
-            result = { error: true, reason };
+              (data && (data.reason || data.scMessage || data.error)) ||
+              (e && e.message) ||
+              null;
+            result = { error: true, unavailable: status === 403 || status === 404, reason };
           }
         }
         setAnalysis((a) => ({ ...a, [urn]: result || { error: true } }));

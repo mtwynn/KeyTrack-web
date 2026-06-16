@@ -52,7 +52,11 @@ async function decode(input, durationMs, dir, headers) {
   await run(FFMPEG, ["-y", "-ss", String(start), "-t", "90", "-i", wav, "-ac", "1", seg]).catch(
     () => {}
   );
-  return { wav, seg: fs.existsSync(seg) ? seg : wav };
+  // If the mid-segment is empty (e.g. a ~30s preview shorter than the 25%-in
+  // start offset), fall back to the full decoded wav so BPM still runs. An
+  // empty WAV is just its ~44-byte header; a real segment is far larger.
+  const segOk = fs.existsSync(seg) && fs.statSync(seg).size > 4096;
+  return { wav, seg: segOk ? seg : wav };
 }
 
 async function detectKey(wav) {

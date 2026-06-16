@@ -497,7 +497,29 @@ app.get(
       },
       function (err, r, streams) {
         if (err || !streams) {
-          return res.status(502).send({ error: 'stream_lookup_failed' });
+          return res.status(502).send({
+            error: 'stream_lookup_failed',
+            reason: (err && err.message) || 'no_response',
+          });
+        }
+        // SoundCloud returns a JSON ERROR envelope (code/message/errors) on a
+        // non-2xx — e.g. 403 for tracks not streamable via the API, 404 for
+        // removed/region-locked tracks. Detect it instead of treating the
+        // envelope as a (streamless) streams object and mislabeling no_stream.
+        const scStatus = r && r.statusCode;
+        if (
+          (scStatus && scStatus >= 400) ||
+          streams.errors ||
+          streams.error ||
+          streams.code != null
+        ) {
+          const scMessage = streams.message || streams.error || null;
+          console.error('sc streams error', scStatus, scMessage, 'track', trackId);
+          return res.status(502).send({
+            error: 'stream_lookup_failed',
+            scStatus: scStatus || null,
+            scMessage,
+          });
         }
         // Prefer a progressive MP3 (a simple download); otherwise fall back to
         // ANY HLS variant the API exposes (mp3/aac/opus, or any other hls_*_url)
@@ -520,8 +542,14 @@ app.get(
             if (anyHls) hlsUrl = streams[anyHls];
           }
         }
-        const audioUrl = progressive || hlsUrl;
+        // Last resort: a 30s preview clip. Some tracks expose only
+        // preview_mp3_128_url to the API; analyze that and mark the result
+        // preview-based (approximate) rather than giving up.
+        const previewUrl =
+          !progressive && !hlsUrl ? streams.preview_mp3_128_url || null : null;
+        const audioUrl = progressive || hlsUrl || previewUrl;
         const isHls = !progressive && !!hlsUrl;
+        const isPreview = !progressive && !hlsUrl && !!previewUrl;
         if (!audioUrl) {
           // Surface what WAS available so genuinely streamless tracks are
           // distinguishable from a selection gap.
@@ -555,7 +583,12 @@ app.get(
               console.error('analysis service error', reason, r2 && r2.statusCode);
               return res.status(502).send({ error: 'analysis_failed', reason });
             }
-            res.send(result);
+            // Flag preview-derived results so the client can mark them approximate.
+            res.send(
+              isPreview && result && !result.error
+                ? { ...result, preview: true }
+                : result
+            );
           }
         );
       }

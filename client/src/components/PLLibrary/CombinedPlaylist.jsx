@@ -109,7 +109,9 @@ let CombinedPlaylist = (props) => {
       const a = analysis[t.urn || String(t.id)];
       if (a && (a.camelot || a.isLikelySet || a.error)) {
         done += 1;
-        if (a.error) failed.push(t);
+        // Only RETRYABLE failures go in the Retry batch; "unavailable" tracks
+        // (SoundCloud-only / removed) can never be analyzed, so retrying is moot.
+        if (a.error && !a.unavailable) failed.push(t);
       }
     });
     return { total: scList.length, done, failed };
@@ -155,9 +157,13 @@ let CombinedPlaylist = (props) => {
     (scTracks || []).forEach((t) => {
       const urn = t.urn || String(t.id);
       const a = analysis[urn];
-      if (a && a.camelot) return;
+      // Analyzed tracks keep their real key; preview-derived ones get a marker.
+      if (a && a.camelot) {
+        if (a.preview) m[urn] = "preview";
+        return;
+      }
       if (a && a.isLikelySet) m[urn] = "set";
-      else if (a && a.error) m[urn] = "failed";
+      else if (a && a.error) m[urn] = a.unavailable ? "unavailable" : "failed";
       else m[urn] = "loading";
     });
     return m;

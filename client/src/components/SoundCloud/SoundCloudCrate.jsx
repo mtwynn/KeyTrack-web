@@ -437,14 +437,31 @@ let SoundCloudCrate = (props) => {
                           fontSize: "0.8rem",
                           whiteSpace: "nowrap",
                         }}
-                        title="Detected by KeyTrack"
+                        title={a.preview ? "Approximate — from a 30s SoundCloud preview" : "Detected by KeyTrack"}
                       >
                         {a.camelot}
                         {a.key ? " · " + a.key : ""}
                       </span>
+                      {a.preview && (
+                        <span
+                          title="Approximate — from a 30s SoundCloud preview"
+                          style={{ color: SC_ORANGE, fontWeight: 700, marginLeft: 4 }}
+                        >
+                          ~
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>{a.bpm || "—"}</TableCell>
                   </>
+                ) : a && a.error && a.unavailable ? (
+                  <TableCell colSpan={2}>
+                    <Chip
+                      size="small"
+                      label="SoundCloud-only"
+                      title="Only available on SoundCloud — no stream we can analyze"
+                      style={{ backgroundColor: "rgba(0,0,0,0.08)", color: "#666", height: 20, fontWeight: 700 }}
+                    />
+                  </TableCell>
                 ) : (
                   <>
                     <TableCell>{t.key_signature || "—"}</TableCell>
