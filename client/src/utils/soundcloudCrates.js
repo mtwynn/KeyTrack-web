@@ -73,10 +73,10 @@ export async function fetchScTracks(scFetch, path) {
   return items.map((t) => (t && t.track ? t.track : t)).filter(Boolean);
 }
 
-// SoundCloud's sanctioned HTML5 Widget URL — ToS-compliant playback with no
-// OAuth. Public tracks resolve from the permalink; PRIVATE tracks need their
+// Resolve the playable SoundCloud URL for a track, handling private tracks'
 // secret (secret_uri, or the permalink + secret_token) or the widget 403s.
-export function scWidgetSrc(track) {
+// Used both for the Widget iframe `src` and for imperative widget.load() calls.
+export function scTrackUrl(track) {
   let url = track.permalink_url || track.uri;
   if (track.sharing === "private") {
     if (track.secret_uri) {
@@ -90,11 +90,40 @@ export function scWidgetSrc(track) {
         track.secret_token;
     }
   }
+  return url;
+}
+
+// SoundCloud's sanctioned HTML5 Widget URL — ToS-compliant playback with no
+// OAuth. `visual: true` renders the big waveform player (used in the bottom bar
+// for play/pause/scrub/seek); the small list player is the default.
+export function scWidgetSrc(track, { visual = false } = {}) {
   return (
     "https://w.soundcloud.com/player/?url=" +
-    encodeURIComponent(url) +
-    "&color=%23ff5500&auto_play=true&show_comments=false&visual=false"
+    encodeURIComponent(scTrackUrl(track)) +
+    "&color=%23ff5500&auto_play=true&show_comments=false&visual=" +
+    (visual ? "true" : "false")
   );
+}
+
+// Lazily load SoundCloud's Widget API (window.SC.Widget) once. Lets us drive a
+// persistent iframe with widget.load()/setVolume() instead of re-mounting it
+// per track. Resolves immediately if already present; memoized so concurrent
+// callers share one <script>.
+let scWidgetApiPromise = null;
+export function loadScWidgetApi() {
+  if (typeof window !== "undefined" && window.SC && window.SC.Widget) {
+    return Promise.resolve();
+  }
+  if (scWidgetApiPromise) return scWidgetApiPromise;
+  scWidgetApiPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://w.soundcloud.com/player/api.js";
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = reject;
+    document.body.appendChild(s);
+  });
+  return scWidgetApiPromise;
 }
 
 // Fetch the user's SoundCloud crates: Liked Tracks + Reposts as virtual crates
