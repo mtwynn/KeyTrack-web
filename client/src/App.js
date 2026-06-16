@@ -31,6 +31,7 @@ import {
   ListItemText,
   ListSubheader,
   Paper,
+  Popover,
   Slider,
   Switch,
   Toolbar,
@@ -56,6 +57,7 @@ import {
   Tune,
   VisibilityOff,
   VolumeDown,
+  VolumeOff,
   VolumeUp,
 } from '@material-ui/icons';
 import FadeIn from 'react-fade-in';
@@ -177,6 +179,9 @@ const ScBottomPlayer = ({ track, onClose }) => {
   });
   const volumeRef = React.useRef(volume);
   volumeRef.current = volume;
+  // Volume popover anchor (the speaker icon). Click → vertical slider above it.
+  const [volAnchor, setVolAnchor] = React.useState(null);
+  const VolIcon = volume === 0 ? VolumeOff : volume < 50 ? VolumeDown : VolumeUp;
 
   // Attach the Widget API to the iframe once. On READY, sync volume; if the
   // track changed before the widget was ready (rare race), load the latest.
@@ -249,32 +254,60 @@ const ScBottomPlayer = ({ track, onClose }) => {
           src={initialSrcRef.current}
           style={{ flex: 1, minWidth: 0, border: 0 }}
         />
+        {/* Just two small icons flush against the player's white right edge —
+            volume (click → vertical slider pops up ABOVE, clear of the
+            waveform) and close — so it reads as the end of the player bar
+            rather than a separate box. */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            padding: '0 14px',
+            padding: '0 4px',
             flexShrink: 0,
             backgroundColor: '#fff',
-            borderLeft: '1px solid rgba(0,0,0,0.08)',
           }}
         >
-          <VolumeDown style={{ color: 'rgba(0,0,0,0.38)', fontSize: 18 }} />
-          <Slider
-            value={volume}
-            onChange={(e, v) => setVolume(v)}
-            min={0}
-            max={100}
-            aria-label="SoundCloud volume"
-            style={{ width: 72, color: '#ff5500' }}
-          />
-          <VolumeUp style={{ color: 'rgba(0,0,0,0.55)', fontSize: 18 }} />
+          <IconButton
+            size="small"
+            onClick={(e) => setVolAnchor(e.currentTarget)}
+            title="Volume"
+            aria-label="volume"
+            style={{ color: 'rgba(0,0,0,0.5)', padding: 5 }}
+          >
+            <VolIcon fontSize="small" />
+          </IconButton>
+          <Popover
+            open={Boolean(volAnchor)}
+            anchorEl={volAnchor}
+            onClose={() => setVolAnchor(null)}
+            anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            disableScrollLock
+            PaperProps={{
+              style: {
+                height: 120,
+                padding: '12px 4px',
+                display: 'flex',
+                justifyContent: 'center',
+                overflow: 'visible',
+              },
+            }}
+          >
+            <Slider
+              orientation="vertical"
+              value={volume}
+              onChange={(e, v) => setVolume(v)}
+              min={0}
+              max={100}
+              aria-label="SoundCloud volume"
+              style={{ color: '#ff5500' }}
+            />
+          </Popover>
           <IconButton
             size="small"
             onClick={onClose}
             title="Close SoundCloud player"
-            style={{ color: 'rgba(0,0,0,0.5)', padding: 4, marginLeft: 2 }}
+            style={{ color: 'rgba(0,0,0,0.4)', padding: 5 }}
           >
             <Close fontSize="small" />
           </IconButton>
