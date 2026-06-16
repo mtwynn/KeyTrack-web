@@ -78,7 +78,7 @@ const ScSortLabel = withStyles({
 // Props: crate ({ id, kind, name, count }), token, backend, onRefreshToken,
 // onBack.
 let SoundCloudCrate = (props) => {
-  const { crate, onBack } = props;
+  const { crate, onBack, backend, token, onRefreshToken } = props;
   const [tracks, setTracks] = React.useState(null);
   // The track currently highlighted as playing (playback is in the bottom bar).
   const [playing, setPlaying] = React.useState(null);
@@ -94,15 +94,15 @@ let SoundCloudCrate = (props) => {
   const scFetch = React.useCallback(
     async (path, retried = false) => {
       try {
-        const res = await axios.get(props.backend + path, {
-          headers: { Authorization: "OAuth " + props.token },
+        const res = await axios.get(backend + path, {
+          headers: { Authorization: "OAuth " + token },
         });
         return res.data;
       } catch (e) {
-        if (e.response && e.response.status === 401 && !retried && props.onRefreshToken) {
-          const fresh = await props.onRefreshToken();
+        if (e.response && e.response.status === 401 && !retried && onRefreshToken) {
+          const fresh = await onRefreshToken();
           if (fresh) {
-            const res = await axios.get(props.backend + path, {
+            const res = await axios.get(backend + path, {
               headers: { Authorization: "OAuth " + fresh },
             });
             return res.data;
@@ -111,7 +111,12 @@ let SoundCloudCrate = (props) => {
         throw e;
       }
     },
-    [props]
+    // Depend on the specific (stable) values only — NOT the whole `props`
+    // object, which is a new reference every render. `[props]` made scFetch
+    // unstable, so the load effect (and the analysis queue) re-ran on every
+    // unrelated re-render — e.g. playing a track or an analysis completing —
+    // which reset the table to its loading spinner and re-fetched the crate.
+    [backend, token, onRefreshToken]
   );
 
   // Lazy key/BPM analysis (SoundCloud has none) via the shared single-worker
