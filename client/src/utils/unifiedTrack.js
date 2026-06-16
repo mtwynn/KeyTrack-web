@@ -1,5 +1,5 @@
 import KeyMap from "./KeyMap";
-import { formatReleaseDate } from "./release";
+import { formatReleaseDate, releaseYear } from "./release";
 
 // A track normalized to one source-agnostic shape so the combined browser can
 // render Spotify and SoundCloud tracks in a single table. Only the harmonic
@@ -35,6 +35,7 @@ export function spotifyToUnified(item, feat) {
     energy: feat && feat.energy != null ? feat.energy : null,
     genre: null,
     released: formatReleaseDate(t),
+    releaseYear: releaseYear(t),
     durationMs: t.duration_ms || null,
     externalUrl: t.external_urls ? t.external_urls.spotify : null,
     spotifyUri: t.uri,
@@ -59,6 +60,7 @@ export function soundcloudToUnified(track, analysis) {
     energy: null,
     genre: track.genre || null,
     released: null,
+    releaseYear: null,
     durationMs: track.duration || null,
     externalUrl: track.permalink_url || null,
     spotifyUri: null,
