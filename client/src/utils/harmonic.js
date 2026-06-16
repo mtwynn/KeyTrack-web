@@ -31,6 +31,22 @@ export function camelotInfo(code) {
   return CAMELOT_INFO[code] || null;
 }
 
+// Reverse lookup from a Camelot code to a Spotify-style { key, mode } pair:
+// key = pitch class 0-11, mode = 0 (minor) | 1 (major). Built once from KeyMap.
+const CAMELOT_TO_KEY_MODE = {};
+KeyMap.forEach((entry, pitchClass) => {
+  [0, 1].forEach((mode) => {
+    CAMELOT_TO_KEY_MODE[entry.camelot[mode]] = { key: pitchClass, mode };
+  });
+});
+
+// Convert a Camelot code (e.g. "8B") to { key: pitchClass 0-11, mode: 0|1 } so a
+// computed key can be fed to the same getKey/KeyMap pipeline Spotify tracks use.
+// Returns null for an unrecognized code.
+export function camelotToKeyMode(code) {
+  return CAMELOT_TO_KEY_MODE[code] || null;
+}
+
 // Compact musical label for a code, e.g. "C♯ Maj" (drops the enharmonic
 // alternative so it fits on a wheel wedge or piano key).
 export function musicalLabel(code) {

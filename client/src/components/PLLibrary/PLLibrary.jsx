@@ -59,9 +59,8 @@ import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
 import SoundCloudCrate from "../SoundCloud/SoundCloudCrate";
-import CombinedCrate from "./CombinedCrate";
+import CombinedPlaylist from "./CombinedPlaylist";
 import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
-import { spotifyToUnified, soundcloudToUnified } from "../../utils/unifiedTrack";
 import { useEffect } from "react";
 import { fetchCrateMeta, setCrateMeta } from "../../utils/crateMeta";
 import {
@@ -359,8 +358,9 @@ let PLLibrary = (props) => {
   // The SoundCloud crate opened in the full-screen modal (null = closed).
   const [scOpened, setScOpened] = React.useState(null);
   // Combined multi-source browser, opened from a SoundCloud-inclusive Open(N).
-  const [combinedTracks, setCombinedTracks] = React.useState(null);
-  const [combinedTitle, setCombinedTitle] = React.useState("");
+  // Holds the raw per-source material ({ spotifyItems, spotifyFeatures,
+  // scTracks, title }) that CombinedPlaylist adapts into the real Playlist view.
+  const [combinedData, setCombinedData] = React.useState(null);
 
   // Library source toggles (Spotify / SoundCloud). At least one must stay on;
   // both default on; persisted. The SoundCloud toggle only matters once a
@@ -849,27 +849,27 @@ let PLLibrary = (props) => {
         return;
       }
 
-      // SoundCloud-inclusive selection → the combined browser (unified tracks).
-      const unified = [];
+      // SoundCloud-inclusive selection → the combined view, which renders through
+      // the real Playlist (via CombinedPlaylist). Gather the RAW per-source
+      // material; CombinedPlaylist shapes SoundCloud tracks into Spotify-item
+      // form and synthesizes their keys.
+      const spotifyItems = [];
       const seenSp = new Set();
+      const featById = new Map();
       await mapWithLimit(spotifyCrates, 4, async (c) => {
         if (cancelAllRef.current) return;
         const items = await fetchAllTracks(c.uid);
         const feats = await fetchFeatures(items.map((it) => it.track.id));
-        const fById = new Map();
-        feats.forEach((f) => f && fById.set(f.id, f));
+        feats.forEach((f) => f && featById.set(f.id, f));
         items.forEach((item) => {
           if (seenSp.has(item.track.id)) return;
           seenSp.add(item.track.id);
-          const raw = fById.get(item.track.id);
-          const feat = raw
-            ? { key: raw.key, mode: raw.mode, bpm: raw.tempo, energy: raw.energy }
-            : null;
-          unified.push(spotifyToUnified(item, feat));
+          spotifyItems.push(item);
         });
         setAllProgress((p) => ({ ...p, done: p.done + 1 }));
       });
 
+      const scTracksAll = [];
       const seenSc = new Set();
       await mapWithLimit(scCratesSel, 4, async (c) => {
         if (cancelAllRef.current) return;
@@ -885,16 +885,21 @@ let PLLibrary = (props) => {
           const urn = tr.urn || String(tr.id);
           if (seenSc.has(urn)) return;
           seenSc.add(urn);
-          unified.push(soundcloudToUnified(tr, null));
+          scTracksAll.push(tr);
         });
         setAllProgress((p) => ({ ...p, done: p.done + 1 }));
       });
 
       if (cancelAllRef.current) return;
-      setCombinedTitle(
-        `${chosen.length} crate${chosen.length === 1 ? "" : "s"} · ${unified.length} tracks`
-      );
-      setCombinedTracks(unified);
+      const spotifyFeatures = Array.from(featById.values());
+      setCombinedData({
+        spotifyItems,
+        spotifyFeatures,
+        scTracks: scTracksAll,
+        title: `${chosen.length} crate${chosen.length === 1 ? "" : "s"} · ${
+          spotifyItems.length + scTracksAll.length
+        } tracks`,
+      });
     } catch (error) {
       console.error("Failed to load selected crates", error);
     } finally {
@@ -1883,15 +1888,23 @@ let PLLibrary = (props) => {
         )}
       </Dialog>
 
-      {/* Combined multi-source browser (a SoundCloud-inclusive Open(N)). */}
-      <CombinedCrate
-        open={Boolean(combinedTracks)}
-        onClose={() => setCombinedTracks(null)}
-        title={combinedTitle}
-        tracks={combinedTracks || []}
+      {/* Combined multi-source view — rendered through the real Playlist so it's
+          pixel-identical to the Spotify view (a SoundCloud-inclusive Open(N)). */}
+      <CombinedPlaylist
+        open={Boolean(combinedData)}
+        onClose={() => setCombinedData(null)}
+        title={combinedData ? combinedData.title : ""}
+        spotifyItems={combinedData ? combinedData.spotifyItems : []}
+        spotifyFeatures={combinedData ? combinedData.spotifyFeatures : []}
+        scTracks={combinedData ? combinedData.scTracks : []}
         scFetch={scFetch}
+        token={props.token}
+        userId={props.userId}
         updatePlayer={props.updatePlayer}
         onPlaySoundcloud={props.onPlaySoundcloud}
+        onAddToSet={props.onAddToSet}
+        onOpenSet={props.onOpenSet}
+        setCount={props.setCount}
       />
     </>
   );

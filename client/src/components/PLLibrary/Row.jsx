@@ -5,6 +5,7 @@ import PlaylistAddIcon from "@material-ui/icons/PlaylistAdd";
 import KeyMap from "../../utils/KeyMap";
 import { camelotColor, harmonicRelation } from "../../utils/harmonic";
 import { formatReleaseDate } from "../../utils/release";
+import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 
 let Row = (props) => {
   const { item } = props;
@@ -74,7 +75,10 @@ let Row = (props) => {
     </span>
   );
 
-  const addButton = (
+  // Combined-view only: SoundCloud rows can't be added to the Spotify set, so
+  // the add button is suppressed; for no-__source (Spotify) rows it's unchanged.
+  const isSoundcloud = item.__source === "soundcloud";
+  const addButton = isSoundcloud ? null : (
     <IconButton
       aria-label="add to set"
       size="small"
@@ -88,6 +92,66 @@ let Row = (props) => {
     </IconButton>
   );
 
+  // A tiny brand badge pinned to a cover's bottom-right corner. Only rendered in
+  // the combined view (item.__source set) — Spotify-only rows get nothing, so
+  // their cover Avatars are byte-for-byte unchanged.
+  const sourceBadge = !item.__source ? null : isSoundcloud ? (
+    <a
+      href={item.__scRaw ? item.__scRaw.permalink_url : undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title="Open on SoundCloud"
+      style={{
+        position: "absolute",
+        right: -3,
+        bottom: -3,
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        backgroundColor: "#ff5500",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 0 0 1.5px #fff",
+      }}
+    >
+      <SoundcloudIcon size={10} color="#fff" />
+    </a>
+  ) : (
+    <span
+      title="Spotify"
+      style={{
+        position: "absolute",
+        right: -3,
+        bottom: -3,
+        width: 16,
+        height: 16,
+        borderRadius: "50%",
+        backgroundColor: "#1ED760",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        boxShadow: "0 0 0 1.5px #fff",
+        pointerEvents: "none",
+      }}
+    >
+      <SpotifyIcon size={10} color="#fff" />
+    </span>
+  );
+
+  // Wrap an Avatar so the source badge can sit in its corner. Without a badge
+  // (Spotify-only rows) the Avatar is returned as-is — no wrapper, no change.
+  const withBadge = (avatar, wrapperStyle) =>
+    sourceBadge ? (
+      <div style={{ position: "relative", display: "inline-flex", ...wrapperStyle }}>
+        {avatar}
+        {sourceBadge}
+      </div>
+    ) : (
+      avatar
+    );
+
   return (
     <TableRow
       key={item.track.id}
@@ -98,14 +162,16 @@ let Row = (props) => {
       {!props.isMobile && <TableCell>{addButton}</TableCell>}
       {!props.isMobile && (
         <TableCell>
-          <Avatar
-            variant="square"
-            src={
-              item.track.album.images[0]
-                ? item.track.album.images[0].url
-                : null
-            }
-          ></Avatar>
+          {withBadge(
+            <Avatar
+              variant="square"
+              src={
+                item.track.album.images[0]
+                  ? item.track.album.images[0].url
+                  : null
+              }
+            ></Avatar>
+          )}
         </TableCell>
       )}
       <TableCell>
@@ -118,15 +184,17 @@ let Row = (props) => {
               marginBottom: "4px",
             }}
           >
-            <Avatar
-              variant="square"
-              src={
-                item.track.album.images[0]
-                  ? item.track.album.images[0].url
-                  : null
-              }
-              style={{ width: 40, height: 40 }}
-            ></Avatar>
+            {withBadge(
+              <Avatar
+                variant="square"
+                src={
+                  item.track.album.images[0]
+                    ? item.track.album.images[0].url
+                    : null
+                }
+                style={{ width: 40, height: 40 }}
+              ></Avatar>
+            )}
             {addButton}
           </div>
         )}
