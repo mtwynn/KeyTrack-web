@@ -43,7 +43,6 @@ import {
   Brightness4,
   Brightness7,
   Build,
-  Close,
   Cloud,
   ExitToApp,
   GraphicEq,
@@ -157,12 +156,13 @@ const BottomPlayer = React.memo(({ token, uris, play }) => (
 // sanctioned Widget API: ONE persistent iframe (the CLASSIC compact player,
 // whose full-width waveform is the play/pause/scrub/seek surface) driven
 // imperatively by widget.load() when the track changes — no per-track iframe
-// re-mount/reload. Our volume slider + close sit in a side column so they never
-// overlap the waveform (the big `visual=true` player squished into a bottom bar
-// scrubbed unreliably). Shown instead of the Spotify player while a SC track is
-// active (one source plays at a time).
+// re-mount/reload. The only thing we add is a volume control (the widget has
+// none): a speaker icon OVERLAID on the player's top-right cluster (we can't
+// inject into the cross-origin iframe, but we can position over it), clear of
+// the waveform + logo. Shown instead of the Spotify player while a SC track is
+// active (one source plays at a time); no explicit close (see render).
 const SC_VOLUME_KEY = 'keytrack_sc_volume';
-const ScBottomPlayer = ({ track, onClose }) => {
+const ScBottomPlayer = ({ track }) => {
   const iframeRef = React.useRef(null);
   const widgetRef = React.useRef(null);
   // The currently-loaded track URL, seeded to the mount track (which the iframe
@@ -240,78 +240,65 @@ const ScBottomPlayer = ({ track, onClose }) => {
 
   return (
     <div style={SC_PLAYER_WRAP_STYLE}>
-      <div style={{ display: 'flex', alignItems: 'stretch', backgroundColor: '#fff', lineHeight: 0 }}>
-        {/* The waveform iframe takes all remaining width; the controls sit in a
-            fixed side column so they NEVER overlap the scrub strip. The column
-            is styled white to blend with SoundCloud's classic player bar. */}
+      <div style={{ position: 'relative', backgroundColor: '#fff', lineHeight: 0 }}>
         <iframe
           ref={iframeRef}
           title="SoundCloud player"
+          width="100%"
           height="120"
           scrolling="no"
           frameBorder="no"
           allow="autoplay"
           src={initialSrcRef.current}
-          style={{ flex: 1, minWidth: 0, border: 0 }}
+          style={{ border: 0, display: 'block' }}
         />
-        {/* Just two small icons flush against the player's white right edge —
-            volume (click → vertical slider pops up ABOVE, clear of the
-            waveform) and close — so it reads as the end of the player bar
-            rather than a separate box. */}
-        <div
+        {/* We can't inject into the cross-origin player iframe, but we CAN
+            overlay our own element on top of it. Sit the volume icon in the
+            player's own top-right control cluster (by the like/download
+            buttons) — clear of both the waveform scrub strip below and the
+            SoundCloud logo above. Click pops a vertical slider above it. */}
+        <IconButton
+          size="small"
+          onClick={(e) => setVolAnchor(e.currentTarget)}
+          title="Volume"
+          aria-label="volume"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            padding: '0 4px',
-            flexShrink: 0,
-            backgroundColor: '#fff',
+            position: 'absolute',
+            top: 34,
+            right: 10,
+            color: 'rgba(0,0,0,0.55)',
+            padding: 4,
           }}
         >
-          <IconButton
-            size="small"
-            onClick={(e) => setVolAnchor(e.currentTarget)}
-            title="Volume"
-            aria-label="volume"
-            style={{ color: 'rgba(0,0,0,0.5)', padding: 5 }}
-          >
-            <VolIcon fontSize="small" />
-          </IconButton>
-          <Popover
-            open={Boolean(volAnchor)}
-            anchorEl={volAnchor}
-            onClose={() => setVolAnchor(null)}
-            anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-            transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            disableScrollLock
-            PaperProps={{
-              style: {
-                height: 120,
-                padding: '12px 4px',
-                display: 'flex',
-                justifyContent: 'center',
-                overflow: 'visible',
-              },
-            }}
-          >
-            <Slider
-              orientation="vertical"
-              value={volume}
-              onChange={(e, v) => setVolume(v)}
-              min={0}
-              max={100}
-              aria-label="SoundCloud volume"
-              style={{ color: '#ff5500' }}
-            />
-          </Popover>
-          <IconButton
-            size="small"
-            onClick={onClose}
-            title="Close SoundCloud player"
-            style={{ color: 'rgba(0,0,0,0.4)', padding: 5 }}
-          >
-            <Close fontSize="small" />
-          </IconButton>
-        </div>
+          <VolIcon fontSize="small" />
+        </IconButton>
+        <Popover
+          open={Boolean(volAnchor)}
+          anchorEl={volAnchor}
+          onClose={() => setVolAnchor(null)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          disableScrollLock
+          PaperProps={{
+            style: {
+              height: 120,
+              padding: '12px 4px',
+              display: 'flex',
+              justifyContent: 'center',
+              overflow: 'visible',
+            },
+          }}
+        >
+          <Slider
+            orientation="vertical"
+            value={volume}
+            onChange={(e, v) => setVolume(v)}
+            min={0}
+            max={100}
+            aria-label="SoundCloud volume"
+            style={{ color: '#ff5500' }}
+          />
+        </Popover>
       </div>
     </div>
   );
@@ -1511,10 +1498,9 @@ class App extends React.Component {
             </div>
           )}
           {this.state.scNowPlaying && (
-            <ScBottomPlayer
-              track={this.state.scNowPlaying}
-              onClose={() => this.setState({ scNowPlaying: null })}
-            />
+            // No explicit close: playing a Spotify track clears scNowPlaying
+            // (updatePlayer), and playing another SC track just swaps.
+            <ScBottomPlayer track={this.state.scNowPlaying} />
           )}
         </div>
       </ThemeProvider>
