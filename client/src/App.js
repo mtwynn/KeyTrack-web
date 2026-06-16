@@ -1488,6 +1488,8 @@ class App extends React.Component {
             onClear={this.clearSet}
             userId={this.state.user_id}
             onLoadSet={this.loadSet}
+            updatePlayer={this.updatePlayer}
+            onPlaySoundcloud={this.playSoundcloudTrack}
           />
 
           {/* The Spotify player stays mounted at all times — unmounting it

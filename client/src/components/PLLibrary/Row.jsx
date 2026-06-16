@@ -84,10 +84,11 @@ let Row = (props) => {
     </span>
   );
 
-  // Combined-view only: SoundCloud rows can't be added to the Spotify set, so
-  // the add button is suppressed; for no-__source (Spotify) rows it's unchanged.
+  // SoundCloud tracks can be added to sets too now (key + BPM only, no energy),
+  // so the add button shows for every source. `isSoundcloud` still drives the
+  // cover source badge below.
   const isSoundcloud = item.__source === "soundcloud";
-  const addButton = isSoundcloud ? null : (
+  const addButton = (
     <IconButton
       aria-label="add to set"
       size="small"
