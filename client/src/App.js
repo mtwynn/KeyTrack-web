@@ -148,7 +148,7 @@ const blurActive = () => {
 // reconnects) when its own props change — not on every unrelated App re-render
 // like opening a drawer or dialog.
 const BottomPlayer = React.memo(({ token, uris, play }) => (
-  <div style={PLAYER_WRAP_STYLE}>
+  <div id="kt-sp-player" style={PLAYER_WRAP_STYLE}>
     <SpotifyPlayer
       token={token}
       uris={uris}
@@ -247,7 +247,7 @@ const ScBottomPlayer = ({ track }) => {
   }, [volume]);
 
   return (
-    <div style={SC_PLAYER_WRAP_STYLE}>
+    <div id="kt-sc-player" style={SC_PLAYER_WRAP_STYLE}>
       <div style={{ position: 'relative', backgroundColor: '#fff', lineHeight: 0 }}>
         <iframe
           ref={iframeRef}
@@ -328,6 +328,10 @@ class App extends React.Component {
     const soundcloudParams = getSoundcloudParams(isProduction);
 
     this.state = {
+      // Measured height of whichever bottom player is visible (0 = none), so
+      // overlays that sit above it (key-filter sheet, Key Calculator, analysis
+      // indicator) clear it exactly — no magic numbers, no gap, no overlap.
+      playerHeight: 0,
       openChangelog: false,
       showKeyCalculator: false,
       drawerOpen: false,
@@ -436,11 +440,51 @@ class App extends React.Component {
     if (this.state.soundcloud.connected) {
       this.scheduleSoundcloudRefresh();
     }
+    this.observePlayers();
   }
 
   componentWillUnmount() {
     clearTimeout(this.refreshTimer);
     clearTimeout(this.scRefreshTimer);
+    if (this.playerRO) this.playerRO.disconnect();
+  }
+
+  componentDidUpdate(prevProps, prevState) {
+    // Re-measure whenever the visible player changes (SC ↔ Spotify ↔ none).
+    if (
+      prevState.scNowPlaying !== this.state.scNowPlaying ||
+      prevState.spotify.loggedIn !== this.state.spotify.loggedIn
+    ) {
+      this.observePlayers();
+    }
+  }
+
+  // The bottom player bars are NOT a fixed height (Spotify is library-driven;
+  // the SoundCloud iframe is 120px), so MEASURE whichever is visible and feed
+  // its height to anything that must sit just above it. The ResizeObserver also
+  // catches the Spotify bar growing as it finishes connecting.
+  observePlayers() {
+    if (typeof ResizeObserver !== 'undefined' && !this.playerRO) {
+      this.playerRO = new ResizeObserver(() => this.measurePlayer());
+    }
+    if (this.playerRO) {
+      this.playerRO.disconnect();
+      ['kt-sc-player', 'kt-sp-player'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) this.playerRO.observe(el);
+      });
+    }
+    this.measurePlayer();
+  }
+
+  measurePlayer() {
+    const el = this.state.scNowPlaying
+      ? document.getElementById('kt-sc-player')
+      : this.state.spotify.loggedIn
+      ? document.getElementById('kt-sp-player')
+      : null;
+    const h = el ? el.offsetHeight : 0;
+    if (h !== this.state.playerHeight) this.setState({ playerHeight: h });
   }
 
   // Schedule a background token refresh shortly before the current token
@@ -1204,9 +1248,7 @@ class App extends React.Component {
                   onRefreshSoundcloud={this.refreshSoundcloudToken}
                   hideSets={this.state.disableScSets}
                   onPlaySoundcloud={this.playSoundcloudTrack}
-                  bottomInset={
-                    this.state.scNowPlaying ? 130 : this.state.spotify.loggedIn ? 96 : 0
-                  }
+                  bottomInset={this.state.playerHeight}
                 />
               </FadeIn>
             ) : (
@@ -1439,7 +1481,7 @@ class App extends React.Component {
             connected={this.state.soundcloud.connected}
             backend={soundcloudBackend}
             onRefreshToken={this.refreshSoundcloudToken}
-            playerInset={this.state.scNowPlaying ? 130 : loggedIn ? 96 : 0}
+            playerInset={this.state.playerHeight}
           >
           {loggedIn ? (
             <>
@@ -1454,9 +1496,7 @@ class App extends React.Component {
             <KeyCalculator
               open={this.state.showKeyCalculator}
               onClose={this.openKeyCalculator}
-              bottomInset={
-                this.state.scNowPlaying ? 130 : loggedIn ? 96 : 0
-              }
+              bottomInset={this.state.playerHeight}
             />
           )}
 
