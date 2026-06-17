@@ -30,8 +30,10 @@ import {
   ListItemIcon,
   ListItemText,
   ListSubheader,
+  MenuItem,
   Paper,
   Popover,
+  Select,
   Slider,
   Switch,
   Toolbar,
@@ -40,6 +42,7 @@ import {
 import { ThemeProvider } from '@material-ui/core/styles';
 
 import {
+  Album,
   Brightness4,
   Brightness7,
   Build,
@@ -70,6 +73,7 @@ import SpotifyPlayer from 'react-spotify-web-playback';
 import SpotifyIcon from './components/SpotifyIcon';
 import { scWidgetSrc, scTrackUrl, loadScWidgetApi } from './utils/soundcloudCrates';
 import { ScAnalysisProvider } from './components/SoundCloud/ScAnalysis';
+import { LOADER_STYLES } from './components/PLLibrary/LoaderArt';
 import { makeAppTheme, THEME_STORAGE_KEY } from './theme';
 
 // Utils
@@ -102,6 +106,9 @@ let soundcloudLoginEndpoint = soundcloudBackend + '/soundcloud/login';
 // Refresh the access token this many ms before it actually expires, so API
 // calls never hit a window where the token is dead.
 const REFRESH_LEAD_MS = 5 * 60 * 1000;
+
+// Persisted choice of crate-loading spinner ("crate loaders").
+const LOADER_KEY = 'keytrack_loader_style';
 
 // Brand wordmark with the "Key" in Spotify green.
 const Wordmark = ({ variant, style }) => (
@@ -333,6 +340,8 @@ class App extends React.Component {
       // crate views. Persisted; default off.
       disableScSets:
         window.localStorage.getItem('keytrack_disable_sc_sets') === 'true',
+      // Crate-loading spinner style (defaults to the CDJ).
+      loaderStyle: window.localStorage.getItem(LOADER_KEY) || 'cdj',
       // App-level set so it spans playlists. Entries are { item, key }.
       set: [],
       setOpen: false,
@@ -374,6 +383,7 @@ class App extends React.Component {
     this.refreshSoundcloudToken = this.refreshSoundcloudToken.bind(this);
     this.scheduleSoundcloudRefresh = this.scheduleSoundcloudRefresh.bind(this);
     this.toggleDisableScSets = this.toggleDisableScSets.bind(this);
+    this.setLoaderStyle = this.setLoaderStyle.bind(this);
     this.getUserPlaylists = this.getUserPlaylists.bind(this);
     this.openKeyCalculator = this.openKeyCalculator.bind(this);
     this.toggleTheme = this.toggleTheme.bind(this);
@@ -706,6 +716,12 @@ class App extends React.Component {
       );
       return { disableScSets: next };
     });
+  }
+
+  // Persist + apply the crate-loading spinner style.
+  setLoaderStyle(key) {
+    window.localStorage.setItem(LOADER_KEY, key);
+    this.setState({ loaderStyle: key });
   }
 
   // Sidebar "Library": always lands on the full crate list (loading on first
@@ -1179,6 +1195,7 @@ class App extends React.Component {
                   onAddToSet={this.addToSet}
                   onOpenSet={this.openSet}
                   setCount={this.state.set.length}
+                  loaderStyle={this.state.loaderStyle}
                   showHidden={this.state.showHiddenCrates}
                   onExitHidden={this.exitHidden}
                   favoritesOnly={this.state.favoritesOnly}
@@ -1323,6 +1340,28 @@ class App extends React.Component {
                 </ListItem>
               </>
             )}
+            <ListItem>
+              <ListItemIcon>
+                <Album />
+              </ListItemIcon>
+              <ListItemText
+                primary="Crate loaders"
+                secondary="Loading spinner style"
+              />
+              <Select
+                value={this.state.loaderStyle}
+                onChange={(e) => this.setLoaderStyle(e.target.value)}
+                disableUnderline
+                MenuProps={{ getContentAnchorEl: null }}
+                style={{ minWidth: 110 }}
+              >
+                {LOADER_STYLES.map((s) => (
+                  <MenuItem key={s.key} value={s.key}>
+                    {s.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </ListItem>
             <ListItem>
               <ListItemIcon>
                 {isDark ? <Brightness7 /> : <Brightness4 />}

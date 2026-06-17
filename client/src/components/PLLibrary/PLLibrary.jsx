@@ -58,7 +58,7 @@ import {
 import Spotify from "spotify-web-api-js";
 
 import Playlist from "./Playlist";
-import { MusicSpinner, FillBar, LOADER_STYLES } from "./LoaderArt";
+import { MusicSpinner, FillBar } from "./LoaderArt";
 import CombinedPlaylist from "./CombinedPlaylist";
 import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 import { useEffect } from "react";
@@ -82,8 +82,6 @@ const SC_ORANGE = "#ff5500";
 const SPOTIFY_GREEN = "#1ED760";
 // Persisted Library source toggles (Spotify / SoundCloud).
 const SOURCES_KEY = "keytrack_lib_sources";
-// The loading-dialog spinner style is a fun, persisted preference.
-const LOADER_KEY = "keytrack_loader_style";
 
 const useStyles = makeStyles((theme) => ({
   // Staggered entrance for crate tiles when the grid mounts (library open,
@@ -472,14 +470,6 @@ let PLLibrary = (props) => {
   const [loadingId, setLoadingId] = React.useState(null);
   const [loadingAll, setLoadingAll] = React.useState(false);
   const [allProgress, setAllProgress] = React.useState({ done: 0, total: 0 });
-  // Persisted "fun" choice of loading-spinner style (vinyl/cd/cassette/cdj).
-  const [loaderStyle, setLoaderStyle] = React.useState(
-    () => window.localStorage.getItem(LOADER_KEY) || "vinyl"
-  );
-  const selectLoader = (key) => {
-    window.localStorage.setItem(LOADER_KEY, key);
-    setLoaderStyle(key);
-  };
   // Set when the user dismisses the "Search all crates" loader; in-flight and
   // queued fetches check this and bail so a big library doesn't trap them.
   const cancelAllRef = React.useRef(false);
@@ -1538,63 +1528,14 @@ let PLLibrary = (props) => {
         >
           <Close fontSize="small" />
         </IconButton>
+        {/* The crate-loader style is chosen in Settings → Crate loaders. */}
+        <div style={{ display: "flex", alignItems: "center", minHeight: 84 }}>
+          <MusicSpinner variant={props.loaderStyle || "cdj"} />
+        </div>
         <Typography variant="body1" style={{ fontWeight: 700 }}>
           Loading all crates…
         </Typography>
-        {/* Fun easter egg: tap any loader to set your style — it sticks until
-            you change it. The selected one is the active spinner. */}
-        <div
-          style={{
-            display: "flex",
-            gap: 4,
-            flexWrap: "wrap",
-            justifyContent: "center",
-          }}
-        >
-          {LOADER_STYLES.map(({ key, label }) => {
-            const selected = loaderStyle === key;
-            return (
-              <div
-                key={key}
-                onClick={() => selectLoader(key)}
-                title={`Use the ${label} loader`}
-                style={{
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 6,
-                  width: 74,
-                  padding: "8px 0",
-                  borderRadius: 10,
-                  border: selected
-                    ? "2px solid #1ED760"
-                    : "2px solid transparent",
-                  background: selected ? "rgba(30,215,96,0.08)" : "transparent",
-                  opacity: selected ? 1 : 0.5,
-                  transition: "opacity 0.15s, border-color 0.15s, background 0.15s",
-                }}
-              >
-                <div style={{ height: 50, display: "flex", alignItems: "center" }}>
-                  <MusicSpinner variant={key} size={46} />
-                </div>
-                <Typography
-                  variant="caption"
-                  style={{
-                    fontWeight: selected ? 700 : 400,
-                    color: selected ? "#1a7f43" : undefined,
-                  }}
-                >
-                  {label}
-                </Typography>
-              </div>
-            );
-          })}
-        </div>
         <FillBar done={allProgress.done} total={allProgress.total} />
-        <Typography variant="caption" color="textSecondary">
-          tap a loader to set your style ✨
-        </Typography>
       </Dialog>
 
       <Box
