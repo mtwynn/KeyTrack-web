@@ -1,5 +1,5 @@
 import React, { Fragment } from "react";
-import _ from "underscore";
+import { debounce } from "../../utils/debounce";
 
 import {
   Button,
@@ -685,7 +685,7 @@ let PLLibrary = (props) => {
     );
   }, [search, library]);
 
-  let handleChange = _.debounce((event) => {
+  let handleChange = debounce((event) => {
     event.persist();
     setSearch(String(event.target.value).toLowerCase());
   }, 500);

@@ -67,8 +67,6 @@ import FadeIn from 'react-fade-in';
 import changelog from './changelog.js';
 import CurrentSong from './components/CurrentSong/CurrentSong';
 import PLLibrary from './components/PLLibrary/PLLibrary';
-import SetBuilder from './components/PLLibrary/SetBuilder';
-import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
 import SpotifyIcon from './components/SpotifyIcon';
 import { scWidgetSrc, scTrackUrl, loadScWidgetApi } from './utils/soundcloudCrates';
@@ -84,6 +82,12 @@ import {
   saveSoundcloudParams,
   clearSoundcloudParams,
 } from './utils/utils';
+
+// Code-split the two heavy, behind-a-click panels so they (and their unique
+// deps — e.g. the Camelot wheel) stay out of the initial bundle and only load
+// when the user actually opens the Set builder or Key calculator.
+const SetBuilder = React.lazy(() => import('./components/PLLibrary/SetBuilder'));
+const KeyCalculator = React.lazy(() => import('./utils/KeyCalculator'));
 
 const spotifyWebApi = new Spotify();
 
@@ -345,6 +349,10 @@ class App extends React.Component {
       // App-level set so it spans playlists. Entries are { item, key }.
       set: [],
       setOpen: false,
+      // Stays false until the set builder is first opened, so its lazy chunk
+      // isn't fetched until then. Once true it keeps SetBuilder mounted, so the
+      // dialog's open/close transitions still play.
+      setEverOpened: false,
       themeMode:
         window.localStorage.getItem(THEME_STORAGE_KEY) === 'dark'
           ? 'dark'
@@ -594,13 +602,13 @@ class App extends React.Component {
 
   openSet() {
     blurActive();
-    this.setState({ setOpen: true });
+    this.setState({ setOpen: true, setEverOpened: true });
   }
 
   // Replace the current set with a loaded saved set.
   loadSet(entries) {
     blurActive();
-    this.setState({ set: entries, setOpen: true });
+    this.setState({ set: entries, setOpen: true, setEverOpened: true });
   }
 
   // Open the library showing only hidden crates (reached from the menu).
@@ -1448,13 +1456,15 @@ class App extends React.Component {
           )}
 
           {this.state.showKeyCalculator && (
-            <KeyCalculator
-              open={this.state.showKeyCalculator}
-              onClose={this.openKeyCalculator}
-              bottomInset={
-                this.state.scNowPlaying ? 130 : loggedIn ? 96 : 0
-              }
-            />
+            <React.Suspense fallback={null}>
+              <KeyCalculator
+                open={this.state.showKeyCalculator}
+                onClose={this.openKeyCalculator}
+                bottomInset={
+                  this.state.scNowPlaying ? 130 : loggedIn ? 96 : 0
+                }
+              />
+            </React.Suspense>
           )}
 
           <Dialog
@@ -1527,19 +1537,25 @@ class App extends React.Component {
             </DialogActions>
           </Dialog>
 
-          {/* App-level set builder, reachable from any crate or the drawer */}
-          <SetBuilder
-            open={this.state.setOpen}
-            onClose={() => this.setState({ setOpen: false })}
-            set={this.state.set}
-            onReorder={this.reorderSet}
-            onRemove={this.removeFromSet}
-            onClear={this.clearSet}
-            userId={this.state.user_id}
-            onLoadSet={this.loadSet}
-            updatePlayer={this.updatePlayer}
-            onPlaySoundcloud={this.playSoundcloudTrack}
-          />
+          {/* App-level set builder, reachable from any crate or the drawer.
+              Not mounted until first opened (lazy chunk); stays mounted after
+              so its open/close animation still plays. */}
+          {this.state.setEverOpened && (
+            <React.Suspense fallback={null}>
+              <SetBuilder
+                open={this.state.setOpen}
+                onClose={() => this.setState({ setOpen: false })}
+                set={this.state.set}
+                onReorder={this.reorderSet}
+                onRemove={this.removeFromSet}
+                onClear={this.clearSet}
+                userId={this.state.user_id}
+                onLoadSet={this.loadSet}
+                updatePlayer={this.updatePlayer}
+                onPlaySoundcloud={this.playSoundcloudTrack}
+              />
+            </React.Suspense>
+          )}
 
           {/* The Spotify player stays mounted at all times — unmounting it
               tears down its Web Playback device ("Device not found"). While a

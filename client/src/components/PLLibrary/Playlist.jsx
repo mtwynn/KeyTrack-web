@@ -1,5 +1,5 @@
 import React from "react";
-import _ from "underscore";
+import { debounce } from "../../utils/debounce";
 
 import {
   makeStyles,
@@ -42,11 +42,14 @@ import { releaseSortKey, releaseYear } from "../../utils/release";
 import { useEffect } from "react";
 
 import Row from "./Row";
-import Recommendations from "./Recommendations";
 import KeyFilterPicker from "./KeyFilterPicker";
 import CrateDNA from "./CrateDNA";
 
 initializeApp(firebaseConfig);
+
+// Code-split: the owner-only Recommendations panel (and its deps) only loads
+// when an owned playlist is opened, keeping it out of the initial bundle.
+const Recommendations = React.lazy(() => import("./Recommendations"));
 
 const musicalKeys = [
   "C",
@@ -310,7 +313,7 @@ let Playlist = (props) => {
 
   let topRef = React.createRef();
 
-  let handleChange = _.debounce((event) => {
+  let handleChange = debounce((event) => {
     event.persist();
     setSearch(String(event.target.value).toLowerCase());
   }, 500);
@@ -501,9 +504,9 @@ let Playlist = (props) => {
       maxYear === "" &&
       energyFilter === "any"
     ) {
-      _.debounce(setSearchItems(allItems), 500);
+      debounce(setSearchItems(allItems), 500);
     } else {
-      _.debounce(
+      debounce(
         setSearchItems((searchItems) => {
           let filteredItems = allItems;
 
@@ -589,10 +592,10 @@ let Playlist = (props) => {
 
     let funcMap = {
       wheel: setWheel,
-      minBpm: _.debounce(setMinBpm, 500),
-      maxBpm: _.debounce(setMaxBpm, 500),
-      minYear: _.debounce(setMinYear, 500),
-      maxYear: _.debounce(setMaxYear, 500),
+      minBpm: debounce(setMinBpm, 500),
+      maxBpm: debounce(setMaxBpm, 500),
+      minYear: debounce(setMinYear, 500),
+      maxYear: debounce(setMaxYear, 500),
     };
 
     funcMap[type](setValue);
@@ -1126,16 +1129,18 @@ let Playlist = (props) => {
           )}
 
           {props.userId === props.playlistOwnerId && (
-            <Recommendations
-              token={props.token}
-              playlistId={props.playlistId}
-              playlistTracks={allItems}
-              playlistKeys={props.playlistKeys}
-              updatePlayer={props.updatePlayer}
-              addTracksToPlaylistState={props.addTracksToPlaylistState}
-              seedCamelot={harmonicAnchorCamelot}
-              seedBpm={anchorKey ? Math.round(anchorKey.bpm) : null}
-            />
+            <React.Suspense fallback={null}>
+              <Recommendations
+                token={props.token}
+                playlistId={props.playlistId}
+                playlistTracks={allItems}
+                playlistKeys={props.playlistKeys}
+                updatePlayer={props.updatePlayer}
+                addTracksToPlaylistState={props.addTracksToPlaylistState}
+                seedCamelot={harmonicAnchorCamelot}
+                seedBpm={anchorKey ? Math.round(anchorKey.bpm) : null}
+              />
+            </React.Suspense>
           )}
 
           <Fab
