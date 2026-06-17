@@ -1,9 +1,10 @@
 import React from "react";
 import { makeStyles } from "@material-ui/core/styles";
 
-// Music-player themed loaders for the "Loading all crates…" dialog: a Pioneer-
-// style CDJ (spinning jog wheel + a waveform that scrolls right→left), a vinyl,
-// a CD, or a cassette — plus a sleek progress bar that fills.
+// Music-player themed loaders for the "Loading all crates…" dialog: a Pioneer
+// CDJ-3000-style deck (a screen with a mirrored waveform scrolling right→left
+// above a spinning jog wheel with an offset colorful album disc), a vinyl, a
+// CD, or a cassette — plus a sleek progress bar that fills.
 const useStyles = makeStyles({
   "@keyframes ktspin": {
     "0%": { transform: "rotate(0deg)" },
@@ -84,17 +85,17 @@ const useStyles = makeStyles({
     zIndex: 1,
   },
 
-  // CDJ — screen with a scrolling waveform over a spinning jog wheel
-  cdjUnit: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8 },
+  // CDJ
+  cdjUnit: { display: "flex", flexDirection: "column", alignItems: "center", gap: 16 },
   cdjScreen: {
     position: "relative",
-    width: 116,
-    height: 40,
-    borderRadius: 4,
-    background: "#070b10",
-    border: "2px solid #2a2f36",
+    width: 140,
+    height: 46,
+    borderRadius: 10,
+    background: "#0b0d11",
+    border: "2px solid #20242a",
+    boxShadow: "0 3px 10px rgba(0,0,0,0.35), inset 0 0 10px rgba(0,0,0,0.65)",
     overflow: "hidden",
-    boxShadow: "inset 0 0 8px rgba(0,0,0,0.6)",
   },
   cdjWave: {
     position: "absolute",
@@ -103,47 +104,58 @@ const useStyles = makeStyles({
     left: 0,
     display: "flex",
     alignItems: "center",
+    padding: "0 2px",
     animation: "$ktwave 2.6s linear infinite",
   },
   cdjBar: {
     flex: "0 0 auto",
-    width: 2,
-    margin: "0 0.6px",
+    width: 2.5,
+    margin: "0 0.7px",
     borderRadius: 1,
-    background: "linear-gradient(to top, #ff8a2a 0 45%, #38b6ff 55% 100%)",
+    alignSelf: "center",
+    // Mirrored stereo waveform: blue on top, orange on the bottom.
+    background: "linear-gradient(to bottom, #4cc2ff 0 50%, #ff8a2a 50% 100%)",
   },
-  cdjJog: { position: "relative", width: 74, height: 74 },
-  cdjRim: {
+  cdjJogWrap: { position: "relative", width: 120, height: 120 },
+  cdjJog: {
     position: "absolute",
     inset: 0,
     borderRadius: "50%",
-    background: "radial-gradient(circle, #1e1e1e 0 58%, #2d2d2d 58% 84%, #161616 84% 100%)",
-    border: "2px solid #0d0d0d",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.4), inset 0 0 0 6px #242424",
+    background:
+      "radial-gradient(circle at 50% 40%, #3d3d3d 0%, #2a2a2a 44%, #1b1b1b 74%, #121212 100%)",
+    boxShadow:
+      "0 6px 18px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 0 22px rgba(0,0,0,0.55)",
   },
-  cdjDisplay: {
+  cdjSheen: {
+    position: "absolute",
+    inset: 0,
+    borderRadius: "50%",
+    background:
+      "conic-gradient(from 0deg, rgba(255,255,255,0.09) 0 24deg, transparent 24deg 360deg)",
+    animation: "$ktspin 2.4s linear infinite",
+  },
+  cdjSpindle: {
     position: "absolute",
     top: "50%",
     left: "50%",
-    width: "50%",
-    height: "50%",
+    width: "15%",
+    height: "15%",
     transform: "translate(-50%, -50%)",
     borderRadius: "50%",
-    background: "conic-gradient(#00d4ff, #ff7a00, #ff2d6f, #b14bff, #00d4ff)",
-    boxShadow: "0 0 6px rgba(0,0,0,0.5)",
-    animation: "$ktspin 2s linear infinite",
+    background: "radial-gradient(circle, #0c0c0c, #1d1d1d)",
+    boxShadow: "inset 0 0 5px rgba(0,0,0,0.85)",
   },
-  cdjLabel: {
+  cdjArt: {
     position: "absolute",
-    top: "50%",
-    left: "50%",
-    width: "26%",
-    height: "26%",
-    transform: "translate(-50%, -50%)",
+    right: "5%",
+    bottom: "5%",
+    width: "40%",
+    height: "40%",
     borderRadius: "50%",
-    background: "radial-gradient(circle, #111, #222)",
-    border: "1px solid #444",
-    zIndex: 2,
+    background:
+      "conic-gradient(#ff2d6f, #ff7a00, #ffd000, #1ED760, #00d4ff, #4b7bff, #b14bff, #ff2d6f)",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.45), inset 0 0 0 3px rgba(255,255,255,0.18)",
+    animation: "$ktspin 1.8s linear infinite",
   },
 
   // Fill bar
@@ -182,9 +194,9 @@ const useStyles = makeStyles({
 
 // A pseudo-random waveform (peaks/troughs), doubled below for a seamless scroll.
 const WAVE = [
-  0.3, 0.55, 0.42, 0.8, 0.5, 0.92, 0.38, 0.7, 0.58, 1, 0.6, 0.34, 0.76, 0.48,
-  0.86, 0.44, 0.66, 0.4, 0.9, 0.54, 0.72, 0.5, 0.82, 0.36, 0.62, 0.95, 0.46,
-  0.7, 0.52, 0.86, 0.4, 0.6, 0.78, 0.5, 0.9, 0.56,
+  0.32, 0.58, 0.44, 0.82, 0.5, 0.95, 0.4, 0.72, 0.6, 1, 0.62, 0.36, 0.78, 0.5,
+  0.88, 0.46, 0.68, 0.42, 0.92, 0.56, 0.74, 0.5, 0.84, 0.38, 0.64, 0.97, 0.48,
+  0.72, 0.54, 0.88, 0.42, 0.62, 0.8, 0.5, 0.92, 0.58,
 ];
 
 export const LOADER_STYLES = [
@@ -207,15 +219,16 @@ export const MusicSpinner = ({ variant = "cdj", size = 72 }) => {
               <div
                 key={i}
                 className={c.cdjBar}
-                style={{ height: `${Math.round(h * 100)}%` }}
+                style={{ height: `${Math.round(h * 90)}%` }}
               />
             ))}
           </div>
         </div>
-        <div className={c.cdjJog}>
-          <div className={c.cdjRim} />
-          <div className={c.cdjDisplay} />
-          <div className={c.cdjLabel} />
+        <div className={c.cdjJogWrap}>
+          <div className={c.cdjJog} />
+          <div className={c.cdjSheen} />
+          <div className={c.cdjSpindle} />
+          <div className={c.cdjArt} />
         </div>
       </div>
     );
