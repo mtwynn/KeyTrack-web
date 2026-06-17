@@ -84,3 +84,18 @@ export async function saveScAnalysis(urn, data) {
     console.error("saveScAnalysis failed", e);
   }
 }
+
+// Persist a user's manual BPM correction onto the cached analysis doc (pass
+// null to clear it). Merges so it never clobbers the rest of the analysis, and
+// because it's on the shared doc the correction sticks for every view + session.
+export async function saveScBpmOverride(urn, bpm) {
+  try {
+    await setDoc(
+      doc(getFirestore(), "scAnalysis", keyId(urn)),
+      { bpmOverride: bpm == null ? null : Math.round(bpm), urn },
+      { merge: true }
+    );
+  } catch (e) {
+    console.error("saveScBpmOverride failed", e);
+  }
+}

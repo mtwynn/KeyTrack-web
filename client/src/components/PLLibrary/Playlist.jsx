@@ -1081,6 +1081,7 @@ let Playlist = (props) => {
                     harmonicAnchorCamelot={harmonicAnchorCamelot}
                     onToggleAnchor={toggleHarmonicAnchor}
                     onAddToSet={handleAddToSet}
+                    onOverrideBpm={props.onOverrideBpm}
                     scStatus={
                       props.scStatusById
                         ? props.scStatusById[item.track.id]
