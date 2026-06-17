@@ -77,6 +77,7 @@ import {
   isLikelySet,
 } from "../../utils/soundcloudCrates";
 import { idbGet, idbSet } from "../../utils/crateStore";
+import { breakerWaitMs, note429, noteSuccess } from "../../utils/spotifyLimiter";
 
 // SoundCloud brand orange (source badge + toggle), distinct from Spotify green.
 const SC_ORANGE = "#ff5500";
@@ -471,6 +472,9 @@ let PLLibrary = (props) => {
   const [loadingId, setLoadingId] = React.useState(null);
   const [loadingAll, setLoadingAll] = React.useState(false);
   const [allProgress, setAllProgress] = React.useState({ done: 0, total: 0 });
+  // True while the Spotify circuit breaker is paused on a rate limit — shows a
+  // "pausing to recover" note in the loader instead of silently stalling.
+  const [rateLimited, setRateLimited] = React.useState(false);
   // Set when the user dismisses the "Search all crates" loader; in-flight and
   // queued fetches check this and bail so a big library doesn't trap them.
   const cancelAllRef = React.useRef(false);
@@ -739,24 +743,35 @@ let PLLibrary = (props) => {
     }
   };
 
-  // Retry a Spotify API call on 429 (rate limit), honoring the Retry-After
-  // header. Opening many crates at once bursts past Spotify's limit; without
-  // this a single 429 would fail the whole Open(N) batch.
-  const spotifyRetry = async (fn, attempts = 8) => {
+  // Retry a Spotify call on 429, backed by a CIRCUIT BREAKER. Spotify
+  // rate-limits per app and often omits Retry-After, so blind retries just keep
+  // the limit alive. After a few consecutive 429s the breaker opens; from then
+  // on each call WAITS OUT a cooldown (once, up front) instead of hammering,
+  // which lets the rate-limit window actually recover. A success closes it.
+  // Within a call we still do a few short, jittered backoff retries.
+  const spotifyRetry = async (fn, attempts = 3) => {
+    const cd = breakerWaitMs();
+    if (cd > 0) {
+      setRateLimited(true);
+      await new Promise((r) => setTimeout(r, cd));
+    }
     for (let i = 0; ; i++) {
       try {
-        return await fn();
+        const res = await fn();
+        noteSuccess();
+        setRateLimited(false);
+        return res;
       } catch (e) {
         const status = (e && e.status) || (e && e.response && e.response.status);
-        if (status === 429 && i < attempts) {
-          // Spotify doesn't expose Retry-After to browser JS (CORS) — reading it
-          // logs "Refused to get unsafe header" — so back off exponentially with
-          // jitter instead. Jitter de-syncs the parallel workers so they don't
-          // all re-burst at the same instant. 1.5s → 3 → 6 → 12 → 20s (capped).
-          const base = Math.min(20000, 1500 * Math.pow(2, i));
-          const waitMs = Math.round(base * (0.7 + Math.random() * 0.6));
-          await new Promise((r) => setTimeout(r, waitMs));
-          continue;
+        if (status === 429) {
+          note429(); // may open the breaker for subsequent calls
+          if (i < attempts) {
+            const base = Math.min(20000, 1500 * Math.pow(2, i));
+            await new Promise((r) =>
+              setTimeout(r, Math.round(base * (0.7 + Math.random() * 0.6)))
+            );
+            continue;
+          }
         }
         throw e;
       }
@@ -879,6 +894,7 @@ let PLLibrary = (props) => {
     const scCratesSel = chosen.filter((c) => c.source === "soundcloud");
 
     cancelAllRef.current = false;
+    setRateLimited(false);
     setAllProgress({ done: 0, total: chosen.length });
     setLoadingAll(true);
     try {
@@ -1562,6 +1578,14 @@ let PLLibrary = (props) => {
           Loading all crates…
         </Typography>
         <FillBar done={allProgress.done} total={allProgress.total} />
+        {rateLimited && (
+          <Typography
+            variant="caption"
+            style={{ color: "#e08a1e", fontWeight: 600, textAlign: "center" }}
+          >
+            Spotify is rate-limiting — pausing to let it recover…
+          </Typography>
+        )}
       </Dialog>
 
       <Box
