@@ -57,11 +57,19 @@ async function decode(input, durationMs, dir, headers) {
   await run(FFMPEG, ["-y", "-ss", String(start), "-t", "90", "-i", wav, "-ac", "1", seg]).catch(
     () => {}
   );
-  // If the mid-segment is empty (e.g. a ~30s preview shorter than the 25%-in
+  // A SHORTER segment for the heavy chord CNN — fewer seconds of audio = faster
+  // inference, so the time-boxed chord pass finishes on the small Eco dyno (a
+  // ~30s window still spans several repetitions of the loop).
+  const cseg = path.join(dir, "cseg.wav");
+  await run(FFMPEG, ["-y", "-ss", String(start), "-t", "30", "-i", wav, "-ac", "1", cseg]).catch(
+    () => {}
+  );
+  // If a mid-segment is empty (e.g. a ~30s preview shorter than the 25%-in
   // start offset), fall back to the full decoded wav so BPM still runs. An
   // empty WAV is just its ~44-byte header; a real segment is far larger.
   const segOk = fs.existsSync(seg) && fs.statSync(seg).size > 4096;
-  return { wav, seg: segOk ? seg : wav };
+  const csegOk = fs.existsSync(cseg) && fs.statSync(cseg).size > 4096;
+  return { wav, seg: segOk ? seg : wav, cseg: csegOk ? cseg : segOk ? seg : wav };
 }
 
 async function detectKey(wav) {
@@ -85,10 +93,18 @@ function detectBpm(seg, genre) {
 // order (rotated to the camelot tonic + spelled to its key), or `null` when
 // there's no clear loop. `camelot` is our own keyfinder result.
 function detectChords(seg, camelot) {
-  return run(MADMOM_PY, [MADMOM_CHORDS, seg, camelot || ""])
-    .then((out) => {
+  // Time-boxed + KILLED at 14s: the chord CNN is heavy, and a slow one must
+  // never push the request past Heroku's 30s router timeout (nor linger and
+  // OOM the next analysis). On timeout/kill or any error we return null — key
+  // and BPM are unaffected.
+  return execFileP(MADMOM_PY, [MADMOM_CHORDS, seg, camelot || ""], {
+    maxBuffer: 1 << 26,
+    timeout: 14000,
+    killSignal: "SIGKILL",
+  })
+    .then((r) => {
       try {
-        const arr = JSON.parse(out);
+        const arr = JSON.parse(r.stdout.trim());
         return Array.isArray(arr) && arr.length ? arr : null;
       } catch (e) {
         return null;
@@ -103,14 +119,14 @@ async function analyzeFile(input, { durationMs, genre, headers } = {}) {
   if (durationMs && durationMs > LIKELY_SET_MS) return { isLikelySet: true };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kt-an-"));
   try {
-    const { wav, seg } = await decode(input, durationMs, dir, headers);
-    // key + BPM run in parallel; chords need the detected key for their
-    // starting rotation, so they kick off once key resolves and then run
-    // alongside BPM.
-    const keyP = detectKey(wav);
-    const bpmP = detectBpm(seg, genre);
-    const key = await keyP;
-    const [bpm, chords] = await Promise.all([bpmP, detectChords(seg, key.camelot)]);
+    const { wav, seg, cseg } = await decode(input, durationMs, dir, headers);
+    // Key (keyfinder, light) + BPM (madmom) run in parallel — the critical data.
+    const [key, bpm] = await Promise.all([detectKey(wav), detectBpm(seg, genre)]);
+    // Chords run AFTER (never a second madmom CNN concurrently → stays under the
+    // dyno's memory) on a shorter segment, and detectChords self-bounds at 14s,
+    // so a slow chord pass returns null rather than blowing the request past
+    // Heroku's 30s limit — key/BPM always return even when chords don't make it.
+    const chords = await detectChords(cseg, key.camelot);
     return { isLikelySet: false, camelot: key.camelot, key: key.key, bpm, chords };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
