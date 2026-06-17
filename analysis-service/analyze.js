@@ -1,8 +1,10 @@
-// The analysis pipeline: audio → key (keyfinder-cli) + BPM (bpm-tools).
+// The analysis pipeline: audio → key (keyfinder-cli) + BPM (madmom).
 //
-// We shell out to two GPL command-line tools as separate processes (no linking
-// into our code), so this service — and KeyTrack — stay MIT.
-const { execFile, spawn } = require("child_process");
+// Key detection shells out to keyfinder-cli (GPL) as a separate process (no
+// linking), so this service — and KeyTrack — stay MIT. BPM is computed by
+// madmom (band-constrained, genre-aware) via a separate Python venv; see
+// bpm_madmom.py.
+const { execFile } = require("child_process");
 const { promisify } = require("util");
 const fs = require("fs");
 const os = require("os");
@@ -10,7 +12,6 @@ const path = require("path");
 const execFileP = promisify(execFile);
 
 const { CAMELOT_TO_KEY } = require("./camelot");
-const { octaveFold } = require("./bpm");
 
 // Tracks longer than this are almost certainly DJ sets/mixes — their key/BPM
 // wander, so analysis is meaningless. Mirror the frontend constant.
@@ -18,8 +19,10 @@ const LIKELY_SET_MS = 6 * 60 * 1000;
 // Allow overriding the binary paths for local dev (where keyfinder-cli may be
 // a freshly-built binary rather than on PATH).
 const KEYFINDER = process.env.KEYFINDER_CLI || "keyfinder-cli";
-const BPM_BIN = process.env.BPM_BIN || "bpm";
 const FFMPEG = process.env.FFMPEG || "ffmpeg";
+// BPM is computed by madmom in its own Python venv (overridable for local dev).
+const MADMOM_PY = process.env.MADMOM_PY || "/opt/madmom-venv/bin/python";
+const MADMOM_BPM = path.join(__dirname, "bpm_madmom.py");
 
 const run = (cmd, args) =>
   execFileP(cmd, args, { maxBuffer: 1 << 26 }).then((r) => r.stdout.trim());
@@ -64,21 +67,16 @@ async function detectKey(wav) {
   return { camelot: camelot || null, key: (camelot && CAMELOT_TO_KEY[camelot]) || null };
 }
 
-// bpm-tools reads raw float samples from stdin — pipe ffmpeg's PCM into it.
+// BPM via madmom: shell out to the Python script (like keyfinder-cli) with the
+// decoded segment + SoundCloud genre tag. It prints a single integer BPM
+// already folded into the genre's tempo band, or nothing on failure → null.
 function detectBpm(seg, genre) {
-  return new Promise((resolve) => {
-    const ff = spawn(FFMPEG, ["-v", "quiet", "-i", seg, "-f", "f32le", "-ar", "44100", "-ac", "1", "-"]);
-    const bpm = spawn(BPM_BIN, ["-m", "70", "-x", "180"]);
-    let out = "";
-    ff.stdout.pipe(bpm.stdin);
-    bpm.stdout.on("data", (d) => (out += d));
-    ff.on("error", () => {});
-    bpm.on("error", () => resolve(null));
-    bpm.on("close", () => {
-      const raw = parseFloat(out);
-      resolve(raw ? octaveFold(raw, genre) : null);
-    });
-  });
+  return run(MADMOM_PY, [MADMOM_BPM, seg, genre || ""])
+    .then((out) => {
+      const v = parseInt(out, 10);
+      return Number.isFinite(v) && v > 0 ? v : null;
+    })
+    .catch(() => null);
 }
 
 // Analyze a local file path OR a remote URL. `headers` is passed to ffmpeg for
