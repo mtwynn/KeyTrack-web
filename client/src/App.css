@@ -1,3 +1,10 @@
+html,
+body {
+  /* Disable the elastic "rubber-band" overscroll at the page edges — that
+     pull-away past the top/bottom/sides reads as unintentional. */
+  overscroll-behavior: none;
+}
+
 .App {
   text-align: center;
   padding-bottom: 120px; /* Space for fixed player at bottom */
