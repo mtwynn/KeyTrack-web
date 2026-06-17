@@ -21,7 +21,10 @@ import {
 //   v2: BPM detection moved from bpm-tools to madmom (band-constrained,
 //       genre-aware) — far better tempo octave resolution, so re-analyze.
 //   v3: added chord-loop detection (madmom) — recompute to backfill `chords`.
-const ENGINE_VERSION = 3;
+//   v4: some v3 docs were written (in a pre-deploy test window) before the
+//       chord analysis-service was live, so they're "v3 but chord-less" and
+//       cache-stuck — re-analyze through the now-live chord service.
+const ENGINE_VERSION = 4;
 
 // Firestore doc ids can't contain "/" — urns look like "soundcloud:tracks:123".
 const keyId = (urn) => String(urn).replace(/[:/]/g, "_");
