@@ -1973,6 +1973,7 @@ let PLLibrary = (props) => {
           onAddToSet={props.onAddToSet}
           onOpenSet={props.onOpenSet}
           setCount={props.setCount}
+          bottomInset={props.bottomInset}
         />
       ) : null}
 
@@ -1994,6 +1995,7 @@ let PLLibrary = (props) => {
         onAddToSet={props.onAddToSet}
         onOpenSet={props.onOpenSet}
         setCount={props.setCount}
+        bottomInset={props.bottomInset}
       />
     </>
   );

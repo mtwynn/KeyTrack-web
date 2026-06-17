@@ -1164,6 +1164,7 @@ let Playlist = (props) => {
           onClear={() => setKeyFilter([])}
           filterMode={filterMode}
           onChangeFilterMode={changeFilterMode}
+          bottomInset={props.bottomInset}
         />
 
       </Dialog>

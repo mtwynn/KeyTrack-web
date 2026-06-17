@@ -42,6 +42,7 @@ let CombinedPlaylist = (props) => {
     onAddToSet,
     onOpenSet,
     setCount,
+    bottomInset,
   } = props;
 
   // The app-level shared queue (so analysis continues after close + a global
@@ -191,6 +192,7 @@ let CombinedPlaylist = (props) => {
       setCount={setCount}
       combinedStatus={combinedStatus}
       scStatusById={scStatusById}
+      bottomInset={bottomInset}
     />
   );
 };

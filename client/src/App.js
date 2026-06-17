@@ -1204,6 +1204,9 @@ class App extends React.Component {
                   onRefreshSoundcloud={this.refreshSoundcloudToken}
                   hideSets={this.state.disableScSets}
                   onPlaySoundcloud={this.playSoundcloudTrack}
+                  bottomInset={
+                    this.state.scNowPlaying ? 130 : this.state.spotify.loggedIn ? 96 : 0
+                  }
                 />
               </FadeIn>
             ) : (
