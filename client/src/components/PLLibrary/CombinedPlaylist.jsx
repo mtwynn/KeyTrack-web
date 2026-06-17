@@ -177,6 +177,17 @@ let CombinedPlaylist = (props) => {
     return m;
   }, [scTracks, analysis]);
 
+  // Per-row chord loop (urn -> ["Db","Ab","Eb","Bbm"]) for the Key-cell reveal.
+  const chordsById = React.useMemo(() => {
+    const m = {};
+    (scTracks || []).forEach((t) => {
+      const urn = t.urn || String(t.id);
+      const a = analysis[urn];
+      if (a && a.chords && a.chords.length) m[urn] = a.chords;
+    });
+    return m;
+  }, [scTracks, analysis]);
+
   // Mount the Playlist only while open, so it initializes its internal
   // searchItems from the FULL track list (the data is ready by the time `open`
   // flips true). Keeping it mounted-but-closed left searchItems stuck on the
@@ -201,6 +212,7 @@ let CombinedPlaylist = (props) => {
       setCount={setCount}
       combinedStatus={combinedStatus}
       scStatusById={scStatusById}
+      chordsById={chordsById}
       bottomInset={bottomInset}
       onOverrideBpm={onOverrideBpm}
     />

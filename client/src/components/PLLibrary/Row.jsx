@@ -5,8 +5,10 @@ import {
   TableRow,
   IconButton,
   CircularProgress,
+  Tooltip,
 } from "@material-ui/core";
 import PlaylistAddIcon from "@material-ui/icons/PlaylistAdd";
+import MusicNoteIcon from "@material-ui/icons/MusicNote";
 
 import KeyMap from "../../utils/KeyMap";
 import { camelotColor, harmonicRelation } from "../../utils/harmonic";
@@ -225,19 +227,28 @@ let Row = (props) => {
       )}
       <TableCell>
         {keyInfo ? (
-          props.scStatus === "preview" ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              {keyChip(keyLabel)}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            {keyChip(keyLabel)}
+            {props.scStatus === "preview" && (
               <span
                 title="Approximate — analyzed from a 30s SoundCloud preview"
                 style={{ color: "#ff5500", fontWeight: 700 }}
               >
                 ~
               </span>
-            </span>
-          ) : (
-            keyChip(keyLabel)
-          )
+            )}
+            {props.chords && props.chords.length > 0 && (
+              <Tooltip
+                arrow
+                enterTouchDelay={0}
+                title={`Chords (est.): ${props.chords.join(" → ")}`}
+              >
+                <MusicNoteIcon
+                  style={{ fontSize: 15, color: "#9aa0a6", cursor: "help" }}
+                />
+              </Tooltip>
+            )}
+          </span>
         ) : props.scStatus === "loading" ? (
           <span
             style={{
