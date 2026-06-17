@@ -1,5 +1,5 @@
 import React from "react";
-import { getScAnalysis, saveScAnalysis } from "../../utils/scAnalysis";
+import { getScAnalysis, getScAnalysisBulk, saveScAnalysis } from "../../utils/scAnalysis";
 import { isLikelySet } from "../../utils/soundcloudCrates";
 
 // A single-worker FIFO queue that lazily computes our key/BPM for SoundCloud
@@ -106,9 +106,52 @@ export function useScAnalysisQueue(scFetch) {
     [processQueue]
   );
 
+  // Enqueue many tracks fast: bulk-read the shared cache in PARALLEL up front,
+  // paint cache hits instantly, and only feed the cache MISSES into the
+  // single-worker server queue. (Going through enqueue() one-by-one would do N
+  // serial cache reads — slow for an already-analyzed crate.)
   const enqueueAll = React.useCallback(
-    (tracks) => (tracks || []).forEach(enqueue),
-    [enqueue]
+    async (tracks) => {
+      const fresh = [];
+      (tracks || []).forEach((t) => {
+        const urn = trackUrn(t);
+        if (seenRef.current.has(urn)) return;
+        seenRef.current.add(urn);
+        if (isLikelySet(t.duration)) {
+          setAnalysis((a) => ({ ...a, [urn]: { isLikelySet: true } }));
+        } else {
+          fresh.push(t);
+        }
+      });
+      if (!fresh.length) return;
+
+      const cached = await getScAnalysisBulk(fresh.map(trackUrn));
+      const misses = [];
+      const hitUpdates = {};
+      fresh.forEach((t) => {
+        const urn = trackUrn(t);
+        if (cached[urn]) {
+          hitUpdates[urn] = cached[urn];
+        } else {
+          misses.push(t);
+          hitUpdates[urn] = { status: "loading" };
+          metaRef.current[urn] = {
+            urn,
+            title: t.title || "",
+            artist: (t.user && t.user.username) || "",
+          };
+        }
+      });
+      setAnalysis((a) => ({ ...a, ...hitUpdates }));
+
+      if (misses.length) {
+        misses.forEach((t) => queueRef.current.push(t));
+        totalRef.current += misses.length;
+        setProgress({ done: doneRef.current, total: totalRef.current });
+        processQueue();
+      }
+    },
+    [processQueue]
   );
 
   return { analysis, enqueue, enqueueAll, meta: metaRef.current, progress };

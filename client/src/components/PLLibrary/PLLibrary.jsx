@@ -76,6 +76,7 @@ import {
   fetchScTracks,
   isLikelySet,
 } from "../../utils/soundcloudCrates";
+import { idbGet, idbSet } from "../../utils/crateStore";
 
 // SoundCloud brand orange (source badge + toggle), distinct from Spotify green.
 const SC_ORANGE = "#ff5500";
@@ -690,7 +691,10 @@ let PLLibrary = (props) => {
 
     try {
       // Cached by uid — instant on a re-open this session.
-      const { items, features } = await getSpotifyCrate(crate.uid);
+      const { items, features } = await getSpotifyCrate(
+        crate.uid,
+        crate.raw && crate.raw.snapshot_id
+      );
       setCurrPlaylist(items);
       setPlaylistKeys(features);
       setShowPlaylist(true);
@@ -788,25 +792,41 @@ let PLLibrary = (props) => {
     return out;
   };
 
-  // Run `fetcher` once per cache key, reusing the result for the rest of the
-  // session. Failures aren't cached (the throw happens before the set).
-  const cachedCrate = async (key, fetcher) => {
-    const hit = crateCacheRef.current.get(key);
-    if (hit) return hit;
-    const val = await fetcher();
-    crateCacheRef.current.set(key, val);
-    return val;
+  // Run `fetcher` once per cache key, reusing the result across the session AND
+  // (when a `version` token is given) across browser restarts via IndexedDB.
+  // `version` is a freshness token (Spotify snapshot_id / SoundCloud track-count)
+  // — a stored entry is only reused when its version still matches, so an edited
+  // crate auto-refetches. A falsy version means in-memory only (don't persist).
+  // Failures aren't cached (the throw happens before the set).
+  const cachedCrate = async (key, version, fetcher) => {
+    const mem = crateCacheRef.current.get(key);
+    if (mem && mem.__v === version) return mem.data;
+    if (version) {
+      const persisted = await idbGet(key);
+      if (persisted && persisted.__v === version) {
+        crateCacheRef.current.set(key, persisted);
+        return persisted.data;
+      }
+    }
+    const data = await fetcher();
+    const rec = { __v: version, data };
+    crateCacheRef.current.set(key, rec);
+    if (version) idbSet(key, rec);
+    return data;
   };
 
-  // A Spotify crate's tracks + audio features, cached by uid.
-  const getSpotifyCrate = (uid) =>
-    cachedCrate(`sp:${uid}`, async () => {
+  // A Spotify crate's tracks + audio features, cached by uid + snapshot_id (so
+  // an edited playlist auto-refetches).
+  const getSpotifyCrate = (uid, snapshot) =>
+    cachedCrate(`sp:${uid}`, snapshot || null, async () => {
       const items = await fetchAllTracks(uid);
       const features = await fetchFeatures(items.map((t) => t.track.id));
       return { items, features };
     });
 
-  // A SoundCloud crate's full track list, cached by uid.
+  // A SoundCloud crate's full track list, cached by uid. Playlists persist
+  // (keyed by track-count); likes/reposts stay in-memory only (their counts grow
+  // and the count we have is only the first page — persisting would go stale).
   const getScCrate = async (c) => {
     const k = c.raw.kind;
     const path =
@@ -815,7 +835,8 @@ let PLLibrary = (props) => {
         : k === "reposts"
         ? "/soundcloud/me/reposts"
         : "/soundcloud/playlists/" + encodeURIComponent(c.raw.id) + "/tracks";
-    const { tracks } = await cachedCrate(`sc:${c.uid}`, async () => ({
+    const version = k === "playlist" && c.count != null ? `n${c.count}` : null;
+    const { tracks } = await cachedCrate(`sc:${c.uid}`, version, async () => ({
       tracks: await fetchScTracks(scFetch, path),
     }));
     return tracks;
@@ -866,7 +887,10 @@ let PLLibrary = (props) => {
       if (scCratesSel.length === 0) {
         const perPlaylist = await mapWithLimit(spotifyCrates, 3, async (c) => {
           if (cancelAllRef.current) return { tracks: [], features: [] };
-          const { items, features } = await getSpotifyCrate(c.uid);
+          const { items, features } = await getSpotifyCrate(
+            c.uid,
+            c.raw && c.raw.snapshot_id
+          );
           setAllProgress((p) => ({ ...p, done: p.done + 1 }));
           return { tracks: items, features };
         });
@@ -905,7 +929,10 @@ let PLLibrary = (props) => {
       const featById = new Map();
       await mapWithLimit(spotifyCrates, 3, async (c) => {
         if (cancelAllRef.current) return;
-        const { items, features: feats } = await getSpotifyCrate(c.uid);
+        const { items, features: feats } = await getSpotifyCrate(
+          c.uid,
+          c.raw && c.raw.snapshot_id
+        );
         feats.forEach((f) => f && featById.set(f.id, f));
         items.forEach((item) => {
           if (seenSp.has(item.track.id)) return;
@@ -955,6 +982,7 @@ let PLLibrary = (props) => {
       // of re-paging the whole saved-tracks library.
       const { items: tracks, features } = await cachedCrate(
         "sp:__liked__",
+        null,
         async () => {
           let items = [];
           let offset = 0;
