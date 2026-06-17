@@ -1,5 +1,5 @@
 import React from "react";
-import { getScAnalysis, getScAnalysisBulk, saveScAnalysis } from "../../utils/scAnalysis";
+import { getScAnalysis, getScAnalysisBulk, saveScAnalysis, saveScBpmOverride } from "../../utils/scAnalysis";
 import { isLikelySet } from "../../utils/soundcloudCrates";
 
 // A single-worker FIFO queue that lazily computes our key/BPM for SoundCloud
@@ -154,5 +154,19 @@ export function useScAnalysisQueue(scFetch) {
     [processQueue]
   );
 
-  return { analysis, enqueue, enqueueAll, meta: metaRef.current, progress };
+  // Apply a user's manual BPM correction: update the live map (so the row
+  // re-renders immediately) and persist it to the shared cache. null clears it.
+  const setBpmOverride = React.useCallback((urn, bpm) => {
+    setAnalysis((a) => {
+      const cur = a[urn];
+      if (!cur) return a;
+      return {
+        ...a,
+        [urn]: { ...cur, bpmOverride: bpm == null ? null : Math.round(bpm) },
+      };
+    });
+    saveScBpmOverride(urn, bpm);
+  }, []);
+
+  return { analysis, enqueue, enqueueAll, setBpmOverride, meta: metaRef.current, progress };
 }

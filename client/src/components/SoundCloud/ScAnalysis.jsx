@@ -40,14 +40,14 @@ export function ScAnalysisProvider({
     [connected, token, backend, onRefreshToken]
   );
 
-  const { analysis, enqueue, enqueueAll, meta, progress } =
+  const { analysis, enqueue, enqueueAll, setBpmOverride, meta, progress } =
     useScAnalysisQueue(scFetch);
 
   // Only the enqueue API + analysis map go through context; identities are
   // stable, so consumers only re-render when `analysis` actually changes.
   const value = React.useMemo(
-    () => ({ analysis, enqueue, enqueueAll }),
-    [analysis, enqueue, enqueueAll]
+    () => ({ analysis, enqueue, enqueueAll, setBpmOverride }),
+    [analysis, enqueue, enqueueAll, setBpmOverride]
   );
 
   return (

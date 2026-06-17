@@ -47,7 +47,14 @@ let CombinedPlaylist = (props) => {
 
   // The app-level shared queue (so analysis continues after close + a global
   // indicator shows progress).
-  const { analysis, enqueueAll } = useScAnalysis();
+  const { analysis, enqueueAll, setBpmOverride } = useScAnalysis();
+
+  // Manual BPM correction for a SoundCloud row (track.id === urn here). Stable
+  // identity so memoized Rows don't churn.
+  const onOverrideBpm = React.useCallback(
+    (urn, bpm) => setBpmOverride(urn, bpm),
+    [setBpmOverride]
+  );
 
   // Auto-analyze the SoundCloud tracks on open so their key/BPM fill in live.
   React.useEffect(() => {
@@ -94,7 +101,9 @@ let CombinedPlaylist = (props) => {
         if (!a || !a.camelot) return null;
         const km = camelotToKeyMode(a.camelot);
         if (!km) return null;
-        return { id: urn, key: km.key, mode: km.mode, tempo: a.bpm, energy: null };
+        // A manual BPM correction (bpmOverride) wins over our detected bpm.
+        const tempo = a.bpmOverride != null ? a.bpmOverride : a.bpm;
+        return { id: urn, key: km.key, mode: km.mode, tempo, energy: null };
       })
       .filter(Boolean);
     return [...(spotifyFeatures || []), ...scKeys];
@@ -193,6 +202,7 @@ let CombinedPlaylist = (props) => {
       combinedStatus={combinedStatus}
       scStatusById={scStatusById}
       bottomInset={bottomInset}
+      onOverrideBpm={onOverrideBpm}
     />
   );
 };

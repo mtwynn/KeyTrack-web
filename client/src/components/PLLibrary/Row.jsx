@@ -12,6 +12,7 @@ import KeyMap from "../../utils/KeyMap";
 import { camelotColor, harmonicRelation } from "../../utils/harmonic";
 import { formatReleaseDate } from "../../utils/release";
 import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
+import BpmOverride from "./BpmOverride";
 
 let Row = (props) => {
   const { item } = props;
@@ -303,7 +304,20 @@ let Row = (props) => {
           {trackKey ? (trackKey.mode === 1 ? "Major" : "Minor") : "N/A"}
         </TableCell>
       )}
-      <TableCell>{trackKey ? Math.round(trackKey.bpm) : "N/A"}</TableCell>
+      <TableCell>
+        {trackKey ? (
+          isSoundcloud && props.onOverrideBpm && Number.isFinite(trackKey.bpm) ? (
+            <BpmOverride
+              bpm={trackKey.bpm}
+              onSet={(v) => props.onOverrideBpm(item.track.id, v)}
+            />
+          ) : (
+            Math.round(trackKey.bpm)
+          )
+        ) : (
+          "N/A"
+        )}
+      </TableCell>
       {!props.isTablet && (
         <TableCell style={{ whiteSpace: "nowrap" }}>
           {formatReleaseDate(item.track)}
