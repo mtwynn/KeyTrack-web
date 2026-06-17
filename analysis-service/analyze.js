@@ -59,9 +59,9 @@ async function decode(input, durationMs, dir, headers) {
   );
   // A SHORTER segment for the heavy chord CNN — fewer seconds of audio = faster
   // inference, so the time-boxed chord pass finishes on the small Eco dyno (a
-  // ~30s window still spans several repetitions of the loop).
+  // ~20s window still spans several repetitions of the loop).
   const cseg = path.join(dir, "cseg.wav");
-  await run(FFMPEG, ["-y", "-ss", String(start), "-t", "30", "-i", wav, "-ac", "1", cseg]).catch(
+  await run(FFMPEG, ["-y", "-ss", String(start), "-t", "20", "-i", wav, "-ac", "1", cseg]).catch(
     () => {}
   );
   // If a mid-segment is empty (e.g. a ~30s preview shorter than the 25%-in
@@ -92,14 +92,14 @@ function detectBpm(seg, genre) {
 // Chord loop via madmom: prints a JSON array of the repeating chords in cyclic
 // order (rotated to the camelot tonic + spelled to its key), or `null` when
 // there's no clear loop. `camelot` is our own keyfinder result.
-function detectChords(seg, camelot) {
-  // Time-boxed + KILLED at 14s: the chord CNN is heavy, and a slow one must
-  // never push the request past Heroku's 30s router timeout (nor linger and
-  // OOM the next analysis). On timeout/kill or any error we return null — key
-  // and BPM are unaffected.
+function detectChords(seg, camelot, timeoutMs) {
+  // Time-boxed + KILLED: the chord CNN is heavy, and a slow one must never push
+  // the request past Heroku's 30s router timeout (nor linger and OOM the next
+  // analysis). The caller passes whatever time is left in the analysis budget;
+  // on timeout/kill or any error we return null — key and BPM are unaffected.
   return execFileP(MADMOM_PY, [MADMOM_CHORDS, seg, camelot || ""], {
     maxBuffer: 1 << 26,
-    timeout: 14000,
+    timeout: Math.max(2000, timeoutMs || 12000),
     killSignal: "SIGKILL",
   })
     .then((r) => {
@@ -117,16 +117,21 @@ function detectChords(seg, camelot) {
 // remote (HLS) inputs so it can fetch the playlist + segments with auth.
 async function analyzeFile(input, { durationMs, genre, headers } = {}) {
   if (durationMs && durationMs > LIKELY_SET_MS) return { isLikelySet: true };
+  const t0 = Date.now();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kt-an-"));
   try {
     const { wav, seg, cseg } = await decode(input, durationMs, dir, headers);
     // Key (keyfinder, light) + BPM (madmom) run in parallel — the critical data.
     const [key, bpm] = await Promise.all([detectKey(wav), detectBpm(seg, genre)]);
     // Chords run AFTER (never a second madmom CNN concurrently → stays under the
-    // dyno's memory) on a shorter segment, and detectChords self-bounds at 14s,
-    // so a slow chord pass returns null rather than blowing the request past
-    // Heroku's 30s limit — key/BPM always return even when chords don't make it.
-    const chords = await detectChords(cseg, key.camelot);
+    // dyno's memory), and only with whatever time is LEFT in our ~18s budget:
+    // download + decode + key/BPM eat a variable chunk, so chords take the
+    // remainder (and are skipped if little is left). This keeps the whole
+    // request comfortably under the backend's + Heroku's 30s caps on the Eco
+    // dyno — key/BPM always return; chords are best-effort.
+    const ANALYSIS_BUDGET_MS = 18000;
+    const left = ANALYSIS_BUDGET_MS - (Date.now() - t0);
+    const chords = left >= 5000 ? await detectChords(cseg, key.camelot, left) : null;
     return { isLikelySet: false, camelot: key.camelot, key: key.key, bpm, chords };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
