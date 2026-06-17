@@ -39,6 +39,7 @@ const KeyFilterPicker = ({
   onClear,
   filterMode,
   onChangeFilterMode,
+  bottomInset = 0,
 }) => {
   let surface;
   if (filterMode === "combined") {
@@ -68,7 +69,11 @@ const KeyFilterPicker = ({
         style: {
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
-          maxHeight: "88vh",
+          // Float the sheet above the fixed bottom player (Spotify ~96px /
+          // SoundCloud ~130px). The player has a higher z-index, so without
+          // this the wheel/piano gets painted over at the bottom.
+          bottom: bottomInset,
+          maxHeight: `calc(88vh - ${bottomInset}px)`,
         },
       }}
     >
