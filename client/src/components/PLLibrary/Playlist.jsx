@@ -943,7 +943,10 @@ let Playlist = (props) => {
         </AppBar>
 
         <div style={{
-          paddingBottom: isMobile ? "180px" : "63px",
+          // Clear the fixed bottom player (its MEASURED height) so the
+          // full-width "Back To Top" bar at the end of the list is never hidden
+          // behind it — for either player, any height.
+          paddingBottom: `${(props.bottomInset || 0) + (isMobile ? 40 : 24)}px`,
           overflowX: isMobile ? "auto" : "visible",
           overflowY: "visible"
         }}>
