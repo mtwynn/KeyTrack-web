@@ -113,7 +113,7 @@ const OV = Array.from({ length: 60 }, (_, j) => 0.3 + Math.abs(Math.sin(j * 0.5)
 
 // All CDJ rules are scoped under `.ktcdj`.
 const CDJ_CSS = `
-.ktcdj { position:relative; width:340px; height:432px; border-radius:16px; box-sizing:border-box; padding:8px;
+.ktcdj { position:relative; width:340px; height:470px; border-radius:16px; box-sizing:border-box; padding:8px;
   font-family:Arial,Helvetica,sans-serif;
   background:linear-gradient(180deg,#2b2b2e 0%,#1b1b1d 8%,#161618 50%,#0e0e10 100%);
   box-shadow:0 18px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.10), inset 0 -2px 6px rgba(0,0,0,.7); }
@@ -170,7 +170,7 @@ const CDJ_CSS = `
   box-shadow:0 0 7px rgba(255,170,40,.7),inset 0 1px 1px rgba(255,255,255,.5); }
 .ktcdj .vinylbtn { width:22px; height:12px; border-radius:3px; font-size:4.5px; color:#fff;
   background:linear-gradient(#1f5fbf,#17458c); display:flex; align-items:center; justify-content:center; box-shadow:0 0 6px rgba(40,110,255,.6); }
-.ktcdj .deck { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:6px; }
+.ktcdj .deck { display:flex; align-items:center; justify-content:center; gap:6px; margin:6px 0 20px; }
 .ktcdj .leftcol { display:flex; flex-direction:column; align-items:center; gap:8px; width:46px; }
 .ktcdj .bigbtn { width:30px; height:30px; border-radius:50%; position:relative;
   background:radial-gradient(circle at 50% 35%,#303034,#141417); box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 2px 3px rgba(0,0,0,.5); }
@@ -200,16 +200,13 @@ const CDJ_CSS = `
 .ktcdj .fader::before { content:""; position:absolute; left:50%; top:6px; bottom:6px; width:2px; transform:translateX(-50%); background:#000; border-radius:2px; }
 .ktcdj .fader-knob { position:absolute; left:50%; top:30px; transform:translateX(-50%); width:24px; height:12px; border-radius:3px;
   background:linear-gradient(#3a3a3e,#1c1c20); box-shadow:0 2px 3px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.1); }
-.ktcdj .brand { position:absolute; left:0; right:0; bottom:5px; text-align:center; }
-.ktcdj .brand .pioneer { color:#d7d7d7; font-size:11px; font-weight:800; font-style:italic; letter-spacing:.5px; }
-.ktcdj .brand .model { color:#9a9a9e; font-size:5px; margin-top:1px; }
 @keyframes ktcdjspin { from { transform:rotate(0); } to { transform:rotate(360deg); } }
 @keyframes ktcdjwave { from { transform:translateX(0); } to { transform:translateX(-50%); } }
 `;
 
 function CdjDeck({ scale = 0.56 }) {
   return (
-    <div style={{ width: Math.round(340 * scale), height: Math.round(432 * scale) }}>
+    <div style={{ width: Math.round(340 * scale), height: Math.round(470 * scale) }}>
       <style>{CDJ_CSS}</style>
       <div className="ktcdj" style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
         <div className="header">
@@ -342,11 +339,6 @@ function CdjDeck({ scale = 0.56 }) {
               <div className="fader-knob" />
             </div>
           </div>
-        </div>
-
-        <div className="brand">
-          <div className="pioneer">Pioneer Dj</div>
-          <div className="model">MULTI PLAYER&nbsp;&nbsp;CDJ-3000</div>
         </div>
       </div>
     </div>
