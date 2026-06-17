@@ -76,6 +76,8 @@ import {
   fetchScTracks,
   isLikelySet,
 } from "../../utils/soundcloudCrates";
+import { idbGet, idbSet } from "../../utils/crateStore";
+import { breakerWaitMs, note429, noteSuccess } from "../../utils/spotifyLimiter";
 
 // SoundCloud brand orange (source badge + toggle), distinct from Spotify green.
 const SC_ORANGE = "#ff5500";
@@ -470,6 +472,9 @@ let PLLibrary = (props) => {
   const [loadingId, setLoadingId] = React.useState(null);
   const [loadingAll, setLoadingAll] = React.useState(false);
   const [allProgress, setAllProgress] = React.useState({ done: 0, total: 0 });
+  // True while the Spotify circuit breaker is paused on a rate limit — shows a
+  // "pausing to recover" note in the loader instead of silently stalling.
+  const [rateLimited, setRateLimited] = React.useState(false);
   // Set when the user dismisses the "Search all crates" loader; in-flight and
   // queued fetches check this and bail so a big library doesn't trap them.
   const cancelAllRef = React.useRef(false);
@@ -690,7 +695,10 @@ let PLLibrary = (props) => {
 
     try {
       // Cached by uid — instant on a re-open this session.
-      const { items, features } = await getSpotifyCrate(crate.uid);
+      const { items, features } = await getSpotifyCrate(
+        crate.uid,
+        crate.raw && crate.raw.snapshot_id
+      );
       setCurrPlaylist(items);
       setPlaylistKeys(features);
       setShowPlaylist(true);
@@ -735,24 +743,35 @@ let PLLibrary = (props) => {
     }
   };
 
-  // Retry a Spotify API call on 429 (rate limit), honoring the Retry-After
-  // header. Opening many crates at once bursts past Spotify's limit; without
-  // this a single 429 would fail the whole Open(N) batch.
-  const spotifyRetry = async (fn, attempts = 8) => {
+  // Retry a Spotify call on 429, backed by a CIRCUIT BREAKER. Spotify
+  // rate-limits per app and often omits Retry-After, so blind retries just keep
+  // the limit alive. After a few consecutive 429s the breaker opens; from then
+  // on each call WAITS OUT a cooldown (once, up front) instead of hammering,
+  // which lets the rate-limit window actually recover. A success closes it.
+  // Within a call we still do a few short, jittered backoff retries.
+  const spotifyRetry = async (fn, attempts = 3) => {
+    const cd = breakerWaitMs();
+    if (cd > 0) {
+      setRateLimited(true);
+      await new Promise((r) => setTimeout(r, cd));
+    }
     for (let i = 0; ; i++) {
       try {
-        return await fn();
+        const res = await fn();
+        noteSuccess();
+        setRateLimited(false);
+        return res;
       } catch (e) {
         const status = (e && e.status) || (e && e.response && e.response.status);
-        if (status === 429 && i < attempts) {
-          // Spotify doesn't expose Retry-After to browser JS (CORS) — reading it
-          // logs "Refused to get unsafe header" — so back off exponentially with
-          // jitter instead. Jitter de-syncs the parallel workers so they don't
-          // all re-burst at the same instant. 1.5s → 3 → 6 → 12 → 20s (capped).
-          const base = Math.min(20000, 1500 * Math.pow(2, i));
-          const waitMs = Math.round(base * (0.7 + Math.random() * 0.6));
-          await new Promise((r) => setTimeout(r, waitMs));
-          continue;
+        if (status === 429) {
+          note429(); // may open the breaker for subsequent calls
+          if (i < attempts) {
+            const base = Math.min(20000, 1500 * Math.pow(2, i));
+            await new Promise((r) =>
+              setTimeout(r, Math.round(base * (0.7 + Math.random() * 0.6)))
+            );
+            continue;
+          }
         }
         throw e;
       }
@@ -788,25 +807,41 @@ let PLLibrary = (props) => {
     return out;
   };
 
-  // Run `fetcher` once per cache key, reusing the result for the rest of the
-  // session. Failures aren't cached (the throw happens before the set).
-  const cachedCrate = async (key, fetcher) => {
-    const hit = crateCacheRef.current.get(key);
-    if (hit) return hit;
-    const val = await fetcher();
-    crateCacheRef.current.set(key, val);
-    return val;
+  // Run `fetcher` once per cache key, reusing the result across the session AND
+  // (when a `version` token is given) across browser restarts via IndexedDB.
+  // `version` is a freshness token (Spotify snapshot_id / SoundCloud track-count)
+  // — a stored entry is only reused when its version still matches, so an edited
+  // crate auto-refetches. A falsy version means in-memory only (don't persist).
+  // Failures aren't cached (the throw happens before the set).
+  const cachedCrate = async (key, version, fetcher) => {
+    const mem = crateCacheRef.current.get(key);
+    if (mem && mem.__v === version) return mem.data;
+    if (version) {
+      const persisted = await idbGet(key);
+      if (persisted && persisted.__v === version) {
+        crateCacheRef.current.set(key, persisted);
+        return persisted.data;
+      }
+    }
+    const data = await fetcher();
+    const rec = { __v: version, data };
+    crateCacheRef.current.set(key, rec);
+    if (version) idbSet(key, rec);
+    return data;
   };
 
-  // A Spotify crate's tracks + audio features, cached by uid.
-  const getSpotifyCrate = (uid) =>
-    cachedCrate(`sp:${uid}`, async () => {
+  // A Spotify crate's tracks + audio features, cached by uid + snapshot_id (so
+  // an edited playlist auto-refetches).
+  const getSpotifyCrate = (uid, snapshot) =>
+    cachedCrate(`sp:${uid}`, snapshot || null, async () => {
       const items = await fetchAllTracks(uid);
       const features = await fetchFeatures(items.map((t) => t.track.id));
       return { items, features };
     });
 
-  // A SoundCloud crate's full track list, cached by uid.
+  // A SoundCloud crate's full track list, cached by uid. Playlists persist
+  // (keyed by track-count); likes/reposts stay in-memory only (their counts grow
+  // and the count we have is only the first page — persisting would go stale).
   const getScCrate = async (c) => {
     const k = c.raw.kind;
     const path =
@@ -815,7 +850,8 @@ let PLLibrary = (props) => {
         : k === "reposts"
         ? "/soundcloud/me/reposts"
         : "/soundcloud/playlists/" + encodeURIComponent(c.raw.id) + "/tracks";
-    const { tracks } = await cachedCrate(`sc:${c.uid}`, async () => ({
+    const version = k === "playlist" && c.count != null ? `n${c.count}` : null;
+    const { tracks } = await cachedCrate(`sc:${c.uid}`, version, async () => ({
       tracks: await fetchScTracks(scFetch, path),
     }));
     return tracks;
@@ -858,6 +894,7 @@ let PLLibrary = (props) => {
     const scCratesSel = chosen.filter((c) => c.source === "soundcloud");
 
     cancelAllRef.current = false;
+    setRateLimited(false);
     setAllProgress({ done: 0, total: chosen.length });
     setLoadingAll(true);
     try {
@@ -866,7 +903,10 @@ let PLLibrary = (props) => {
       if (scCratesSel.length === 0) {
         const perPlaylist = await mapWithLimit(spotifyCrates, 3, async (c) => {
           if (cancelAllRef.current) return { tracks: [], features: [] };
-          const { items, features } = await getSpotifyCrate(c.uid);
+          const { items, features } = await getSpotifyCrate(
+            c.uid,
+            c.raw && c.raw.snapshot_id
+          );
           setAllProgress((p) => ({ ...p, done: p.done + 1 }));
           return { tracks: items, features };
         });
@@ -905,7 +945,10 @@ let PLLibrary = (props) => {
       const featById = new Map();
       await mapWithLimit(spotifyCrates, 3, async (c) => {
         if (cancelAllRef.current) return;
-        const { items, features: feats } = await getSpotifyCrate(c.uid);
+        const { items, features: feats } = await getSpotifyCrate(
+          c.uid,
+          c.raw && c.raw.snapshot_id
+        );
         feats.forEach((f) => f && featById.set(f.id, f));
         items.forEach((item) => {
           if (seenSp.has(item.track.id)) return;
@@ -955,6 +998,7 @@ let PLLibrary = (props) => {
       // of re-paging the whole saved-tracks library.
       const { items: tracks, features } = await cachedCrate(
         "sp:__liked__",
+        null,
         async () => {
           let items = [];
           let offset = 0;
@@ -1534,6 +1578,14 @@ let PLLibrary = (props) => {
           Loading all crates…
         </Typography>
         <FillBar done={allProgress.done} total={allProgress.total} />
+        {rateLimited && (
+          <Typography
+            variant="caption"
+            style={{ color: "#e08a1e", fontWeight: 600, textAlign: "center" }}
+          >
+            Spotify is rate-limiting — pausing to let it recover…
+          </Typography>
+        )}
       </Dialog>
 
       <Box
