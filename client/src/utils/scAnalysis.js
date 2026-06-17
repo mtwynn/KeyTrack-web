@@ -18,7 +18,9 @@ import {
 //
 // Bump ENGINE_VERSION to invalidate every cached analysis if the engine
 // changes (so old/worse results get recomputed).
-const ENGINE_VERSION = 1;
+//   v2: BPM detection moved from bpm-tools to madmom (band-constrained,
+//       genre-aware) — far better tempo octave resolution, so re-analyze.
+const ENGINE_VERSION = 2;
 
 // Firestore doc ids can't contain "/" — urns look like "soundcloud:tracks:123".
 const keyId = (urn) => String(urn).replace(/[:/]/g, "_");
