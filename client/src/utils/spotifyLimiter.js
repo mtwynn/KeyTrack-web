@@ -32,3 +32,20 @@ export function noteSuccess() {
   consecutive429 = 0;
   openUntil = 0;
 }
+
+// --- Proactive pacing ----------------------------------------------------
+// A global "next slot" scheduler that spaces consecutive Spotify requests at
+// least MIN_GAP_MS apart, so we mostly stay UNDER the rate limit instead of
+// tripping it and relying on the breaker to recover. This caps the global rate
+// regardless of how many crate workers run concurrently. await it before each
+// request.
+const MIN_GAP_MS = 150; // ~6-7 requests/sec
+
+let nextSlot = 0;
+export function throttleSlot() {
+  const now = Date.now();
+  const slot = Math.max(now, nextSlot);
+  nextSlot = slot + MIN_GAP_MS;
+  const wait = slot - now;
+  return wait > 0 ? new Promise((r) => setTimeout(r, wait)) : Promise.resolve();
+}

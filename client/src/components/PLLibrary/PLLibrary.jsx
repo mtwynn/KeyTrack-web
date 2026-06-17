@@ -77,7 +77,12 @@ import {
   isLikelySet,
 } from "../../utils/soundcloudCrates";
 import { idbGet, idbSet } from "../../utils/crateStore";
-import { breakerWaitMs, note429, noteSuccess } from "../../utils/spotifyLimiter";
+import {
+  breakerWaitMs,
+  note429,
+  noteSuccess,
+  throttleSlot,
+} from "../../utils/spotifyLimiter";
 
 // SoundCloud brand orange (source badge + toggle), distinct from Spotify green.
 const SC_ORANGE = "#ff5500";
@@ -757,6 +762,9 @@ let PLLibrary = (props) => {
     }
     for (let i = 0; ; i++) {
       try {
+        // Proactive pacing: space requests globally so we mostly stay UNDER the
+        // limit (the breaker above is the reactive backstop).
+        await throttleSlot();
         const res = await fn();
         noteSuccess();
         setRateLimited(false);
