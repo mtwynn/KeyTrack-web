@@ -34,7 +34,7 @@ Side note: Everything below here is written by Claude, with my guidance of cours
 
 ## 🎚️ What KeyTrack can do
 
-At its core, KeyTrack answers the question every DJ asks while digging: *"what mixes with this?"* It pulls Spotify's audio analysis for your tracks, translates it into the language DJs actually use — Camelot keys, BPM, energy — and gives you the tools to find, organize, and sequence music harmonically. Here's the full picture.
+At its core, KeyTrack answers the question every DJ asks while digging: *"what mixes with this?"* It reads Spotify's audio analysis — and **computes its own for SoundCloud** — translating both into the language DJs actually use: Camelot keys, BPM, energy, even **chord loops**. Then it gives you the tools to find, organize, and sequence music harmonically, across **both libraries at once**. Here's the full picture.
 
 ---
 
@@ -48,9 +48,23 @@ The standalone **Key Calculator** is an interactive Camelot wheel: tap a key and
 
 ---
 
+### ☁️ Not just Spotify — SoundCloud, self-analyzed
+
+Connect **SoundCloud** alongside Spotify and dig both libraries in one place. SoundCloud has no public audio-analysis API, so KeyTrack **computes the key and BPM itself** — a dedicated analysis service decodes each track, runs proper key + tempo detection, and caches the result so it's only ever analyzed once. Open a SoundCloud crate on its own, or **combine Spotify + SoundCloud into one crate** (a green→orange header marks the mix) and sequence across both as if they were a single library. Tempo read a little off on a tooly track? **Correct any BPM in a tap.**
+
+---
+
+### 🎼 Know the chords, not just the key
+
+For SoundCloud tracks, KeyTrack goes a step past the key and detects the **repeating chord loop** — *the few chords of the song, in order* — so you've got the actual harmony for mashups, edits, and key changes. It shows in the Now Playing and behind a **♪ on each row**; busy, chord-less tracks simply don't show one.
+
+![Chord-loop detection](docs/screenshots/chords.png)
+
+---
+
 ### 🔥 Mix in key, at a glance
 
-Every key in your library is **color-coded by its Camelot position**, so compatible tracks visually rhyme. **Anchor a track** and KeyTrack lights up every harmonic match — same key, ±1 on the wheel, and the relative major/minor — while dimming the clashes. Pair that with the per-track **energy meter** and you can build a flow that's both in key and on vibe.
+Every key in your library is **color-coded by its Camelot position**, so compatible tracks visually rhyme. **Anchor a track** and KeyTrack lights up every harmonic match — same key, ±1 on the wheel, and the relative major/minor — while dimming the clashes. **Filter a crate down to just the keys you want** with a tap-friendly Camelot wheel or piano picker, and pair it all with the per-track **energy meter** to build a flow that's both in key and on vibe.
 
 ![Harmonic highlighting in a crate](docs/screenshots/harmonic-mixing.png)
 
@@ -88,11 +102,11 @@ The **Set Builder** lets you assemble an ordered set pulling from *any* of your 
 
 ---
 
-### 🎵 Listen and work without leaving the page
+### 🎵 Play it all, without leaving the page
 
-Play tracks **in the browser** via Spotify's Web Playback SDK, with a **slim Now Playing** control always in reach. The app ships with a **light/dark theme**, a desktop sidebar that becomes a mobile hamburger drawer, sleek micro-animations, and an in-app changelog.
+Listen to **both sources in the browser** from the same bottom bar: Spotify tracks through the **Web Playback SDK**, and SoundCloud through its native **waveform player** (with its own volume control). A **slim Now Playing** is always in reach, showing the current track's key, BPM, and — for SoundCloud — its chord loop, **orange-badged** so you always know the source. The app also ships with a **light/dark theme**, a desktop sidebar that becomes a mobile hamburger drawer, animated crate loaders, and an in-app changelog.
 
-![Playback and Now Playing](docs/screenshots/playback.png)
+![Players and Now Playing](docs/screenshots/playback.png)
 
 ---
 
