@@ -1090,6 +1090,11 @@ let Playlist = (props) => {
                         ? props.scStatusById[item.track.id]
                         : undefined
                     }
+                    chords={
+                      props.chordsById
+                        ? props.chordsById[item.track.id]
+                        : undefined
+                    }
                   />
                 ))}
             </TableBody>

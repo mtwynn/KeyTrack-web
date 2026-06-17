@@ -20,9 +20,11 @@ const LIKELY_SET_MS = 6 * 60 * 1000;
 // a freshly-built binary rather than on PATH).
 const KEYFINDER = process.env.KEYFINDER_CLI || "keyfinder-cli";
 const FFMPEG = process.env.FFMPEG || "ffmpeg";
-// BPM is computed by madmom in its own Python venv (overridable for local dev).
+// BPM + chords are computed by madmom in its own Python venv (overridable for
+// local dev).
 const MADMOM_PY = process.env.MADMOM_PY || "/opt/madmom-venv/bin/python";
 const MADMOM_BPM = path.join(__dirname, "bpm_madmom.py");
+const MADMOM_CHORDS = path.join(__dirname, "chords_madmom.py");
 
 const run = (cmd, args) =>
   execFileP(cmd, args, { maxBuffer: 1 << 26 }).then((r) => r.stdout.trim());
@@ -79,6 +81,22 @@ function detectBpm(seg, genre) {
     .catch(() => null);
 }
 
+// Chord loop via madmom: prints a JSON array of the repeating chords in cyclic
+// order (rotated to the camelot tonic + spelled to its key), or `null` when
+// there's no clear loop. `camelot` is our own keyfinder result.
+function detectChords(seg, camelot) {
+  return run(MADMOM_PY, [MADMOM_CHORDS, seg, camelot || ""])
+    .then((out) => {
+      try {
+        const arr = JSON.parse(out);
+        return Array.isArray(arr) && arr.length ? arr : null;
+      } catch (e) {
+        return null;
+      }
+    })
+    .catch(() => null);
+}
+
 // Analyze a local file path OR a remote URL. `headers` is passed to ffmpeg for
 // remote (HLS) inputs so it can fetch the playlist + segments with auth.
 async function analyzeFile(input, { durationMs, genre, headers } = {}) {
@@ -86,8 +104,14 @@ async function analyzeFile(input, { durationMs, genre, headers } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kt-an-"));
   try {
     const { wav, seg } = await decode(input, durationMs, dir, headers);
-    const [key, bpm] = await Promise.all([detectKey(wav), detectBpm(seg, genre)]);
-    return { isLikelySet: false, camelot: key.camelot, key: key.key, bpm };
+    // key + BPM run in parallel; chords need the detected key for their
+    // starting rotation, so they kick off once key resolves and then run
+    // alongside BPM.
+    const keyP = detectKey(wav);
+    const bpmP = detectBpm(seg, genre);
+    const key = await keyP;
+    const [bpm, chords] = await Promise.all([bpmP, detectChords(seg, key.camelot)]);
+    return { isLikelySet: false, camelot: key.camelot, key: key.key, bpm, chords };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

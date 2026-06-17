@@ -43,7 +43,11 @@ let CurrentSong = (props) => {
     const urn = props.scTrack.urn || String(props.scTrack.id);
     getScAnalysis(urn).then((a) => {
       if (cancelled) return;
-      setSc(a && a.camelot ? { camelot: a.camelot, bpm: a.bpm } : { camelot: null });
+      setSc(
+        a && a.camelot
+          ? { camelot: a.camelot, bpm: a.bpm, chords: a.chords }
+          : { camelot: null }
+      );
     });
     return () => {
       cancelled = true;
@@ -232,20 +236,34 @@ let CurrentSong = (props) => {
         </Box>
 
         {cam ? (
-          <Box style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-            {info && (
+          <>
+            <Box style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+              {info && (
+                <Chip
+                  size="small"
+                  label={`${info.musical} ${info.quality === "Major" ? "Maj" : "Min"}`}
+                />
+              )}
               <Chip
                 size="small"
-                label={`${info.musical} ${info.quality === "Major" ? "Maj" : "Min"}`}
+                label={cam}
+                style={scColor ? { backgroundColor: scColor.bg, color: scColor.text } : {}}
               />
+              {sc.bpm && <Chip size="small" label={`${Math.round(sc.bpm)} BPM`} />}
+            </Box>
+            {sc.chords && sc.chords.length > 0 && (
+              <Typography
+                variant="caption"
+                color="textSecondary"
+                style={{ display: "block", marginTop: 6 }}
+              >
+                Chords (est.):{" "}
+                <span style={{ fontWeight: 600, color: "rgba(0,0,0,0.72)" }}>
+                  {sc.chords.join(" → ")}
+                </span>
+              </Typography>
             )}
-            <Chip
-              size="small"
-              label={cam}
-              style={scColor ? { backgroundColor: scColor.bg, color: scColor.text } : {}}
-            />
-            {sc.bpm && <Chip size="small" label={`${Math.round(sc.bpm)} BPM`} />}
-          </Box>
+          </>
         ) : (
           <Typography
             variant="caption"
