@@ -738,22 +738,20 @@ let PLLibrary = (props) => {
   // Retry a Spotify API call on 429 (rate limit), honoring the Retry-After
   // header. Opening many crates at once bursts past Spotify's limit; without
   // this a single 429 would fail the whole Open(N) batch.
-  const spotifyRetry = async (fn, attempts = 6) => {
+  const spotifyRetry = async (fn, attempts = 8) => {
     for (let i = 0; ; i++) {
       try {
         return await fn();
       } catch (e) {
         const status = (e && e.status) || (e && e.response && e.response.status);
         if (status === 429 && i < attempts) {
-          let waitS = 1;
-          try {
-            const ra =
-              (e && e.getResponseHeader && e.getResponseHeader("Retry-After")) ||
-              (e && e.response && e.response.headers &&
-                e.response.headers["retry-after"]);
-            if (ra) waitS = parseInt(ra, 10) || 1;
-          } catch (_) {}
-          await new Promise((r) => setTimeout(r, (waitS + 0.5) * 1000));
+          // Spotify doesn't expose Retry-After to browser JS (CORS) — reading it
+          // logs "Refused to get unsafe header" — so back off exponentially with
+          // jitter instead. Jitter de-syncs the parallel workers so they don't
+          // all re-burst at the same instant. 1.5s → 3 → 6 → 12 → 20s (capped).
+          const base = Math.min(20000, 1500 * Math.pow(2, i));
+          const waitMs = Math.round(base * (0.7 + Math.random() * 0.6));
+          await new Promise((r) => setTimeout(r, waitMs));
           continue;
         }
         throw e;
@@ -866,7 +864,7 @@ let PLLibrary = (props) => {
       // Pure-Spotify selection → the rich Playlist view (audio features +
       // recommendations + set builder). Unchanged behavior.
       if (scCratesSel.length === 0) {
-        const perPlaylist = await mapWithLimit(spotifyCrates, 4, async (c) => {
+        const perPlaylist = await mapWithLimit(spotifyCrates, 3, async (c) => {
           if (cancelAllRef.current) return { tracks: [], features: [] };
           const { items, features } = await getSpotifyCrate(c.uid);
           setAllProgress((p) => ({ ...p, done: p.done + 1 }));
@@ -905,7 +903,7 @@ let PLLibrary = (props) => {
       const spotifyItems = [];
       const seenSp = new Set();
       const featById = new Map();
-      await mapWithLimit(spotifyCrates, 4, async (c) => {
+      await mapWithLimit(spotifyCrates, 3, async (c) => {
         if (cancelAllRef.current) return;
         const { items, features: feats } = await getSpotifyCrate(c.uid);
         feats.forEach((f) => f && featById.set(f.id, f));
