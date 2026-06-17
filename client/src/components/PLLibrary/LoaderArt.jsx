@@ -145,19 +145,6 @@ const useStyles = makeStyles({
     background: "radial-gradient(circle, #0c0c0c, #1d1d1d)",
     boxShadow: "inset 0 0 5px rgba(0,0,0,0.85)",
   },
-  cdjArt: {
-    position: "absolute",
-    right: "5%",
-    bottom: "5%",
-    width: "40%",
-    height: "40%",
-    borderRadius: "50%",
-    background:
-      "conic-gradient(#ff2d6f, #ff7a00, #ffd000, #1ED760, #00d4ff, #4b7bff, #b14bff, #ff2d6f)",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.45), inset 0 0 0 3px rgba(255,255,255,0.18)",
-    animation: "$ktspin 1.8s linear infinite",
-  },
-
   // Fill bar
   barTrack: {
     position: "relative",
@@ -228,7 +215,6 @@ export const MusicSpinner = ({ variant = "cdj", size = 72 }) => {
           <div className={c.cdjJog} />
           <div className={c.cdjSheen} />
           <div className={c.cdjSpindle} />
-          <div className={c.cdjArt} />
         </div>
       </div>
     );
