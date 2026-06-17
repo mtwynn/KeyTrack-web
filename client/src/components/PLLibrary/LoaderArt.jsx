@@ -97,10 +97,12 @@ const useStyles = makeStyles({
   },
 });
 
-// Waveform (dense, envelope-like), doubled below for a seamless scroll.
+// Waveform (dense, envelope-like). One copy is wider than the screen and the
+// array is doubled, so translating the (content-sized) track by exactly 50%
+// lands on an identical copy boundary → a seamless, jitter-free loop.
 const WF = (() => {
   const h = [];
-  for (let i = 0; i < 96; i++) {
+  for (let i = 0; i < 120; i++) {
     const env =
       Math.pow(Math.abs(Math.sin(i * 0.13)), 0.55) * 0.55 +
       Math.abs(Math.sin(i * 0.47 + 1)) * 0.26;
@@ -137,7 +139,7 @@ const CDJ_CSS = `
 .ktcdj .lanes div { height:1.5px; margin:1.5px 0; border-radius:1px;
   background:repeating-linear-gradient(90deg,#2a4d6e 0 5px,#1a3550 5px 7px); }
 .ktcdj .wf { position:relative; height:50px; margin:1px 4px 0; background:#04060a; border-radius:2px; overflow:hidden; }
-.ktcdj .wf-track { position:absolute; inset:0; display:flex; align-items:center; animation:ktcdjwave 2.6s linear infinite; }
+.ktcdj .wf-track { position:absolute; left:0; top:0; bottom:0; width:max-content; display:flex; align-items:center; animation:ktcdjwave 2.6s linear infinite; }
 .ktcdj .wf-bar { flex:0 0 auto; width:1.5px; margin:0 .35px; border-radius:1px; align-self:center;
   background:linear-gradient(to bottom,#5cc8ff 0 50%,#ff9233 50% 100%); }
 .ktcdj .wf::after { content:""; position:absolute; left:30%; top:0; bottom:0; width:1px; background:rgba(255,255,255,.65); z-index:2; }
