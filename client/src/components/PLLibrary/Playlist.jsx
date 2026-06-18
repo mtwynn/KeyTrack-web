@@ -38,6 +38,7 @@ import { initializeApp } from "firebase/app";
 import { firebaseConfig } from "../../../src/config/firebaseConfig";
 
 import KeyMap from "../../utils/KeyMap";
+import { camelotToKeyMode } from "../../utils/harmonic";
 import { releaseSortKey, releaseYear } from "../../utils/release";
 import { useEffect } from "react";
 
@@ -46,6 +47,7 @@ import Recommendations from "./Recommendations";
 import KeyFilterPicker from "./KeyFilterPicker";
 import CrateDNA from "./CrateDNA";
 import { useSpotifyChords } from "../../utils/useSpotifyChords";
+import { useOverrides } from "../../utils/useOverrides";
 
 initializeApp(firebaseConfig);
 
@@ -276,6 +278,13 @@ let Playlist = (props) => {
   // SoundCloud chords come from props.chordsById; Spotify ones from here.
   const spotifyChordsById = useSpotifyChords(allItems, props.token);
 
+  // Per-track manual key/chord overrides (cross-device, survive re-analysis).
+  const allItemIds = React.useMemo(
+    () => (allItems || []).map((it) => it.track && it.track.id).filter(Boolean),
+    [allItems]
+  );
+  const { overridesById, setOverride } = useOverrides(allItemIds);
+
   const [search, setSearch] = React.useState("");
   const [wheel, setWheel] = React.useState("Musical");
   const [keyFilter, setKeyFilter] = React.useState([]);
@@ -357,7 +366,7 @@ let Playlist = (props) => {
     (id) => {
       if (!id) return undefined;
       const result = keysById.get(id);
-      return result
+      let base = result
         ? {
             key: result.key,
             mode: result.mode,
@@ -367,8 +376,19 @@ let Playlist = (props) => {
             valence: result.valence,
           }
         : null;
+      // A manual key override (a Camelot code) replaces the detected key/mode
+      // everywhere getKey feeds — the pill, color, harmonic matching, filtering.
+      const ov = overridesById[id];
+      if (ov && ov.keyOverride) {
+        const km = camelotToKeyMode(ov.keyOverride);
+        if (km) {
+          base = base || { bpm: null, energy: null, danceability: null, valence: null };
+          base = { ...base, key: km.key, mode: km.mode };
+        }
+      }
+      return base;
     },
-    [keysById]
+    [keysById, overridesById]
   );
 
   // Camelot code of the anchored track, derived from its key.
@@ -1090,12 +1110,16 @@ let Playlist = (props) => {
                     onToggleAnchor={toggleHarmonicAnchor}
                     onAddToSet={handleAddToSet}
                     onOverrideBpm={props.onOverrideBpm}
+                    setOverride={setOverride}
+                    override={overridesById[item.track.id]}
                     scStatus={
                       props.scStatusById
                         ? props.scStatusById[item.track.id]
                         : undefined
                     }
                     chords={
+                      (overridesById[item.track.id] &&
+                        overridesById[item.track.id].chordsOverride) ||
                       (props.chordsById && props.chordsById[item.track.id]) ||
                       spotifyChordsById[item.track.id]
                     }

@@ -15,6 +15,7 @@ import { camelotColor, harmonicRelation } from "../../utils/harmonic";
 import { formatReleaseDate } from "../../utils/release";
 import { SpotifyIcon, SoundcloudIcon } from "../BrandIcons";
 import BpmOverride from "./BpmOverride";
+import TrackEditor from "./TrackEditor";
 
 let Row = (props) => {
   const { item } = props;
@@ -228,7 +229,30 @@ let Row = (props) => {
       <TableCell>
         {keyInfo ? (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            {keyChip(keyLabel)}
+            {props.setOverride ? (
+              <TrackEditor
+                camelot={camelot}
+                keyLabel={keyLabel}
+                keyColor={keyColor}
+                chords={props.chords}
+                isAnchor={isAnchor}
+                onToggleAnchor={() =>
+                  props.onToggleAnchor && props.onToggleAnchor(item)
+                }
+                onSetKey={(c) =>
+                  props.setOverride(item.track.id, { keyOverride: c })
+                }
+                onSetChords={(arr) =>
+                  props.setOverride(item.track.id, { chordsOverride: arr })
+                }
+                hasKeyOverride={!!(props.override && props.override.keyOverride)}
+                hasChordsOverride={
+                  !!(props.override && props.override.chordsOverride)
+                }
+              />
+            ) : (
+              keyChip(keyLabel)
+            )}
             {props.scStatus === "preview" && (
               <span
                 title="Approximate — analyzed from a 30s SoundCloud preview"
