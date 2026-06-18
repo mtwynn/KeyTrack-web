@@ -209,9 +209,18 @@ app.get('/refresh_token', function (req, res) {
       // Previously this branch was missing, so a failed refresh (e.g. revoked
       // token) would hang the request forever. Respond so the client can fall
       // back to a re-login prompt.
+      //
+      // Forward Spotify's own error code. Per Spotify's 2026 policy, user
+      // refresh tokens expire after six months; spending an expired one returns
+      // `invalid_grant`. Passing that through (instead of masking it as a
+      // generic error) lets the client distinguish a permanently dead token —
+      // which it must DISCARD and re-auth — from a transient 5xx/network blip.
       res
         .status(response && response.statusCode ? response.statusCode : 500)
-        .send({ error: 'could_not_refresh_token' });
+        .send({
+          error: (body && body.error) || 'could_not_refresh_token',
+          error_description: body && body.error_description,
+        });
     }
   });
 });
