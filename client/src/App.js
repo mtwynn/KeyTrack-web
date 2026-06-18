@@ -531,6 +531,7 @@ class App extends React.Component {
         expires_at: Date.now() + expires_in * 1000,
       };
       saveSpotifyHashParams(updated);
+      this._refreshRetried = false;
 
       spotifyWebApi.setAccessToken(access_token);
       this.setState({ access_token, showSessionExpiryDialog: false });
@@ -549,10 +550,36 @@ class App extends React.Component {
 
       this.scheduleTokenRefresh();
     } catch (error) {
-      // The refresh token itself was rejected (e.g. revoked). This is the only
-      // case where the user genuinely needs to log in again.
+      const status = error && error.response && error.response.status;
+      const reason =
+        error && error.response && error.response.data && error.response.data.error;
+
+      // A *rejected* refresh token comes back as invalid_grant / 400 / 401.
+      // Starting July 20, 2026 Spotify expires user refresh tokens after six
+      // months, so this is the normal end-of-life path (also covers a revoked
+      // token). Per Spotify's guidance we must DISCARD the dead token — clear it
+      // so no reload reuses it — and send the user back through sign-in.
+      const tokenRejected =
+        reason === 'invalid_grant' || status === 400 || status === 401;
+      if (tokenRejected) {
+        saveSpotifyHashParams({ access_token: '', refresh_token: '' });
+        this._refreshRetried = false;
+        this.setState({ showSessionExpiryDialog: true });
+        return;
+      }
+
+      // Otherwise it's transient (network blip, backend 5xx) and the token is
+      // probably still valid. Don't force a re-login on a hiccup: retry once
+      // shortly, and only fall back to the dialog if that retry also fails.
       console.error('Spotify token refresh failed', error);
-      this.setState({ showSessionExpiryDialog: true });
+      if (!this._refreshRetried) {
+        this._refreshRetried = true;
+        clearTimeout(this.refreshTimer);
+        this.refreshTimer = setTimeout(this.refreshAccessToken, 30 * 1000);
+      } else {
+        this._refreshRetried = false;
+        this.setState({ showSessionExpiryDialog: true });
+      }
     }
   }
 
