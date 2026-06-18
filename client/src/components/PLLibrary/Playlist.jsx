@@ -45,6 +45,7 @@ import Row from "./Row";
 import Recommendations from "./Recommendations";
 import KeyFilterPicker from "./KeyFilterPicker";
 import CrateDNA from "./CrateDNA";
+import { useSpotifyChords } from "../../utils/useSpotifyChords";
 
 initializeApp(firebaseConfig);
 
@@ -270,6 +271,10 @@ let Playlist = (props) => {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isTablet = useMediaQuery(theme.breakpoints.down("md"));
   const allItems = props.playlist;
+
+  // Spotify chord loops (computed client-side from /audio-analysis, cached).
+  // SoundCloud chords come from props.chordsById; Spotify ones from here.
+  const spotifyChordsById = useSpotifyChords(allItems, props.token);
 
   const [search, setSearch] = React.useState("");
   const [wheel, setWheel] = React.useState("Musical");
@@ -1091,9 +1096,8 @@ let Playlist = (props) => {
                         : undefined
                     }
                     chords={
-                      props.chordsById
-                        ? props.chordsById[item.track.id]
-                        : undefined
+                      (props.chordsById && props.chordsById[item.track.id]) ||
+                      spotifyChordsById[item.track.id]
                     }
                   />
                 ))}
