@@ -118,11 +118,50 @@ Any work that I did with Claude will have a `🤖 Generated with Claude Code` fo
 
 ## 🚀 Local development
 
+There are two ways to run locally. **Option A** needs no Spotify credentials of
+your own and is the quickest way to get a working login; **Option B** runs the
+whole stack on your machine.
+
 ### Prerequisites
 - **Node.js** v16+
-- A **Spotify Developer** account, and **Spotify Premium** (required by the Web Playback SDK)
+- **Spotify Premium** (required by the Web Playback SDK)
+- For Option B only: a **Spotify Developer** account
 
-### 1. Register a Spotify app
+---
+
+### Option A — frontend only, auth via the deployed backend (recommended)
+
+The OAuth round-trip runs against the deployed Heroku backend using **its**
+registered redirect URI, so you need **no `SPOTIFY_ID`/`SPOTIFY_SECRET` locally
+and no extra redirect URI in the Spotify dashboard**. Only the final hop comes
+back to your dev server.
+
+```bash
+cd client
+cp .env.example .env.local  # then uncomment REACT_APP_BACKEND
+npm install                 # first time only
+npm start                   # serves on http://localhost:3000
+```
+
+`.env.local`:
+```
+REACT_APP_BACKEND=https://key-track2.herokuapp.com
+```
+
+The frontend asks the backend to return the tokens to its own origin
+(`?return_to=http://localhost:3000`). The backend honours this only for origins
+in the `RETURN_TARGETS` allowlist in [`local-server/index.js`](local-server/index.js)
+— tokens ride on that redirect, so an arbitrary origin would be an open redirect
+that leaks them. To use a different port or host, add it to that allowlist and
+redeploy the backend.
+
+> ℹ️ CRA only reads `.env.local` at startup — restart `npm start` after editing it.
+
+---
+
+### Option B — full stack locally
+
+#### 1. Register a Spotify app
 At the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard), create an app and add this **Redirect URI**:
 
 ```
@@ -133,7 +172,7 @@ http://127.0.0.1:8888/callback
 
 Note your **Client ID** and **Client Secret**.
 
-### 2. Configure the backend
+#### 2. Configure the backend
 ```bash
 cd local-server
 cp .env.example .env        # then fill in SPOTIFY_ID and SPOTIFY_SECRET
@@ -141,15 +180,21 @@ npm install                 # first time only
 npm start                   # serves on http://127.0.0.1:8888
 ```
 
-### 3. Start the frontend
-In a **new** terminal:
+The server warns on startup and returns an explicit `spotify_not_configured`
+error (instead of an opaque 401 later) if those two values are missing.
+
+#### 3. Start the frontend
+In a **new** terminal, with no `REACT_APP_BACKEND` set (the default targets
+`http://127.0.0.1:8888`):
 ```bash
 cd client
 npm install                 # first time only
 npm start                   # serves on http://localhost:3000
 ```
 
-### 4. Use it
+---
+
+### Use it
 1. Open `http://localhost:3000`
 2. Click **Log in with Spotify** (the **Key Calculator** works without logging in)
 3. Open your **Library**, dig through crates by key / BPM / energy, build sets, and play tracks in-browser

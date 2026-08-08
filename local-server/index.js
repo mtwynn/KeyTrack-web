@@ -44,6 +44,47 @@ const frontend_return = isProduction
   ? 'https://key-track.netlify.app/?'
   : 'http://localhost:3000/#';
 
+// A frontend may ask (via ?return_to=<origin> on /spotify/login) to have the
+// tokens handed back to itself instead of the default above. That is what lets
+// a client running on localhost:3000 authenticate through the DEPLOYED backend:
+// the OAuth round-trip still uses this server's own registered redirect URI, so
+// nothing changes in the Spotify dashboard — only the final hop comes back to
+// the dev machine. Credentials ride on that final redirect, so honouring an
+// arbitrary origin would be an open redirect that leaks access tokens; the
+// origin must match this allowlist exactly.
+//
+// The value is the separator each frontend expects its params on: the deployed
+// Netlify build reads them from the query string, a CRA dev server from the
+// hash. (The client tolerates either, but we still send the idiomatic one.)
+const RETURN_TARGETS = {
+  'https://key-track.netlify.app': '/?',
+  'http://localhost:3000': '/#',
+  'http://127.0.0.1:3000': '/#',
+};
+
+const SPOTIFY_RETURN_KEY = 'spotify_return_to';
+const SOUNDCLOUD_RETURN_KEY = 'soundcloud_return_to';
+
+// Normalise an untrusted ?return_to into a bare allowlisted origin, or null.
+const validReturnOrigin = (raw) => {
+  if (!raw) return null;
+  try {
+    const origin = new URL(raw).origin;
+    return Object.prototype.hasOwnProperty.call(RETURN_TARGETS, origin)
+      ? origin
+      : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+// Re-validated on the way out too, so a tampered cookie can't redirect anywhere
+// outside the allowlist.
+const buildReturnTarget = (origin) => {
+  const valid = validReturnOrigin(origin);
+  return valid ? valid + RETURN_TARGETS[valid] : null;
+};
+
 /**
  * Generates a random string containing numbers and letters,
  * acting as a random nonce for CSRF protection
@@ -63,6 +104,28 @@ const generateRandomString = function (length) {
 
 const SPOTIFY_STATE_KEY = 'spotify_auth_state';
 
+// Unset credentials are not a silent condition: an empty client_id makes
+// Spotify's /authorize reject the request, and an empty Basic header makes the
+// token exchange fail with `invalid_client`. Both surface to the frontend as an
+// opaque 401, so detect the misconfiguration up front and say so explicitly.
+// The `.env.example` placeholders count as missing — copying the file without
+// editing it is the common half-finished setup.
+const isPlaceholder = (value) => !value || /^your_/.test(value);
+const spotifyCredentialsMissing = () =>
+  isPlaceholder(spotify_client_id) || isPlaceholder(spotify_client_secret);
+
+const SPOTIFY_SETUP_HELP =
+  'Spotify credentials are not configured. Copy local-server/.env.example to ' +
+  'local-server/.env and set SPOTIFY_ID and SPOTIFY_SECRET from ' +
+  'https://developer.spotify.com/dashboard, then restart this server. Also ' +
+  'make sure ' +
+  redirect_uri +
+  ' is registered as a Redirect URI on that Spotify app.';
+
+if (spotifyCredentialsMissing()) {
+  console.warn('[keytrack] WARNING: ' + SPOTIFY_SETUP_HELP);
+}
+
 const app = express();
 
 app
@@ -71,14 +134,26 @@ app
   .use(cookieParser());
 
 app.get('/spotify/login', function (req, res) {
+  if (spotifyCredentialsMissing()) {
+    return res.status(500).send({ error: 'spotify_not_configured', error_description: SPOTIFY_SETUP_HELP });
+  }
+
   const state = generateRandomString(16);
   res.cookie(SPOTIFY_STATE_KEY, state);
+
+  // Remember where to hand the tokens back, so the callback can return them to
+  // the origin that actually started the sign-in.
+  const returnOrigin = validReturnOrigin(req.query.return_to);
+  if (returnOrigin) {
+    res.cookie(SPOTIFY_RETURN_KEY, returnOrigin);
+  } else {
+    res.clearCookie(SPOTIFY_RETURN_KEY);
+  }
 
   // your application requests authorization
   const scope =
     'user-read-private user-read-email user-library-read user-read-playback-state playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private streaming';
 
-  console.log(spotify_client_id)
   res.redirect(
     'https://accounts.spotify.com/authorize?' +
       querystring.stringify({
@@ -102,9 +177,17 @@ app.get('/callback', function (req, res) {
     ? req.cookies[SPOTIFY_STATE_KEY]
     : null;
 
+  // Resolved up front so the failure branches can report back to the frontend
+  // that started the sign-in, instead of dead-ending on the backend's own
+  // origin where nothing is listening.
+  const spotifyReturn =
+    buildReturnTarget(req.cookies && req.cookies[SPOTIFY_RETURN_KEY]) ||
+    frontend_return;
+
   if (state === null || state !== spotifyStoredState) {
+    res.clearCookie(SPOTIFY_RETURN_KEY);
     res.redirect(
-      '/#' +
+      spotifyReturn +
         querystring.stringify({
           error: 'state_mismatch',
         })
@@ -113,6 +196,7 @@ app.get('/callback', function (req, res) {
     // Spotify Flow
     console.log('SPOTIFY FLOW');
     res.clearCookie(SPOTIFY_STATE_KEY);
+    res.clearCookie(SPOTIFY_RETURN_KEY);
     const authOptions = {
       url: 'https://accounts.spotify.com/api/token',
       form: {
@@ -156,9 +240,7 @@ app.get('/callback', function (req, res) {
 
         res.redirect(
           302,
-          (isProduction
-            ? 'https://key-track.netlify.app/?'
-            : 'http://localhost:3000/#') +
+          spotifyReturn +
             querystring.stringify({
               access_token: access_token,
               refresh_token: refresh_token,
@@ -167,7 +249,7 @@ app.get('/callback', function (req, res) {
         );
       } else {
         res.redirect(
-          '/#' +
+          spotifyReturn +
             querystring.stringify({
               error: 'invalid_token',
             })
@@ -178,6 +260,10 @@ app.get('/callback', function (req, res) {
 });
 
 app.get('/refresh_token', function (req, res) {
+  if (spotifyCredentialsMissing()) {
+    return res.status(500).send({ error: 'spotify_not_configured', error_description: SPOTIFY_SETUP_HELP });
+  }
+
   // requesting access token from refresh token
   const refresh_token = req.query.refresh_token;
   const authOptions = {
@@ -260,6 +346,15 @@ app.get('/soundcloud/login', function (req, res) {
   res.cookie(SOUNDCLOUD_STATE_KEY, state);
   res.cookie(SOUNDCLOUD_VERIFIER_KEY, codeVerifier);
 
+  // Same allowlisted hand-back as the Spotify flow, so a locally-run client can
+  // connect SoundCloud through the deployed backend too.
+  const returnOrigin = validReturnOrigin(req.query.return_to);
+  if (returnOrigin) {
+    res.cookie(SOUNDCLOUD_RETURN_KEY, returnOrigin);
+  } else {
+    res.clearCookie(SOUNDCLOUD_RETURN_KEY);
+  }
+
   res.redirect(
     'https://secure.soundcloud.com/authorize?' +
       querystring.stringify({
@@ -281,13 +376,19 @@ app.get('/soundcloud/callback', function (req, res) {
     ? req.cookies[SOUNDCLOUD_VERIFIER_KEY]
     : null;
 
+  const scReturn =
+    buildReturnTarget(req.cookies && req.cookies[SOUNDCLOUD_RETURN_KEY]) ||
+    frontend_return;
+
   if (state === null || state !== storedState) {
+    res.clearCookie(SOUNDCLOUD_RETURN_KEY);
     return res.redirect(
-      frontend_return + querystring.stringify({ error: 'sc_state_mismatch' })
+      scReturn + querystring.stringify({ error: 'sc_state_mismatch' })
     );
   }
   res.clearCookie(SOUNDCLOUD_STATE_KEY);
   res.clearCookie(SOUNDCLOUD_VERIFIER_KEY);
+  res.clearCookie(SOUNDCLOUD_RETURN_KEY);
 
   const authOptions = {
     url: SOUNDCLOUD_TOKEN_URL,
@@ -307,7 +408,7 @@ app.get('/soundcloud/callback', function (req, res) {
     if (!error && response.statusCode === 200) {
       res.redirect(
         302,
-        frontend_return +
+        scReturn +
           querystring.stringify({
             sc_access_token: body.access_token,
             sc_refresh_token: body.refresh_token,
@@ -317,8 +418,7 @@ app.get('/soundcloud/callback', function (req, res) {
     } else {
       console.error('SoundCloud token exchange failed', body);
       res.redirect(
-        frontend_return +
-          querystring.stringify({ error: 'sc_invalid_token' })
+        scReturn + querystring.stringify({ error: 'sc_invalid_token' })
       );
     }
   });
