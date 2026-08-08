@@ -778,11 +778,12 @@ function geminiSlot() {
 }
 
 // Heroku kills a request at 30s, so the batch must fit inside that INCLUDING
-// the pacing gaps. At 15 RPM each image costs ~4.2s of waiting plus ~2s of
-// work, so a fixed batch of 8 would time out; derive it instead.
+// the pacing gaps. With calls overlapping, the pacer's spacing is the dominant
+// cost, so size the batch against it and keep a hard cap: smaller requests mean
+// less work lost if one fails, and progress persists more often.
 const MAX_BATCH = Math.max(
   1,
-  Math.min(8, Math.floor(24000 / (GEMINI_MIN_GAP_MS + 2000)))
+  Math.min(8, Math.floor(24000 / GEMINI_MIN_GAP_MS))
 );
 
 const VISION_PROMPT = [
@@ -939,36 +940,45 @@ app.post('/artwork/analyze', async (req, res) => {
     return res.status(400).send({ error: 'batch_too_large', max: MAX_BATCH });
   }
 
-  // Sequential, NOT Promise.all: the pacer is what keeps us under the RPM
-  // quota, and firing a batch in parallel just queues them all behind it while
-  // risking a burst. Per-image failures are reported inline so one bad cover
-  // never wastes the whole request.
-  const results = [];
+  // The pacer enforces the RPM quota, so overlapping calls only fills the gap
+  // left by Gemini's own ~1-2s latency — without it a batch runs at the speed
+  // of one request at a time (~50/min) no matter how high the quota is.
+  // Bounded so a burst can't outrun the pacer's queue.
+  const CONCURRENCY = Math.min(4, images.length);
+  const results = new Array(images.length);
   let retryAfterSec = 0;
-  for (const img of images) {
-    if (!img || !img.albumId || !img.url) {
-      results.push({ albumId: img && img.albumId, ok: false, error: 'bad_request' });
-      continue;
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < images.length) {
+      const idx = cursor++;
+      const img = images[idx];
+      if (!img || !img.albumId || !img.url) {
+        results[idx] = { albumId: img && img.albumId, ok: false, error: 'bad_request' };
+        continue;
+      }
+      // Once quota is hit, stop immediately — every further call is a
+      // guaranteed 429 that only pushes the reset further out.
+      if (retryAfterSec) {
+        results[idx] = { albumId: img.albumId, ok: false, error: 'rate_limited', status: 429 };
+        continue;
+      }
+      try {
+        const data = await analyzeOneImage(img.url);
+        results[idx] = { albumId: img.albumId, ok: true, ...data };
+      } catch (e) {
+        if (e.status === 429) retryAfterSec = Math.max(retryAfterSec, e.retryAfterSec || 30);
+        results[idx] = {
+          albumId: img.albumId,
+          ok: false,
+          error: e.message || 'analyze_failed',
+          status: e.status,
+        };
+      }
     }
-    // Once quota is hit, stop immediately — every further call is a guaranteed
-    // 429 that only pushes the reset further out.
-    if (retryAfterSec) {
-      results.push({ albumId: img.albumId, ok: false, error: 'rate_limited', status: 429 });
-      continue;
-    }
-    try {
-      const data = await analyzeOneImage(img.url);
-      results.push({ albumId: img.albumId, ok: true, ...data });
-    } catch (e) {
-      if (e.status === 429) retryAfterSec = e.retryAfterSec || 30;
-      results.push({
-        albumId: img.albumId,
-        ok: false,
-        error: e.message || 'analyze_failed',
-        status: e.status,
-      });
-    }
-  }
+  };
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
   res.send({
     results,
