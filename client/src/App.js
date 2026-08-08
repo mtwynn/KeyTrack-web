@@ -89,19 +89,28 @@ const spotifyWebApi = new Spotify();
 
 let isProduction = process.env.NODE_ENV === 'production';
 
-let spotifyLoginEndpoint = isProduction
-  ? 'https://key-track2.herokuapp.com/spotify/login'
-  : 'http://127.0.0.1:8888/spotify/login';
+// Backend base. Defaults to Heroku for a production build and the local Express
+// server for `npm start`, but REACT_APP_BACKEND overrides it. Pointing a local
+// dev server at the deployed backend lets you sign in with Spotify without
+// holding your own SPOTIFY_ID/SPOTIFY_SECRET locally, and without registering a
+// localhost redirect URI on the Spotify app — the OAuth round-trip still uses
+// the backend's own registered callback; only the final hop comes back here.
+const backendBase =
+  process.env.REACT_APP_BACKEND ||
+  (isProduction ? 'https://key-track2.herokuapp.com' : 'http://127.0.0.1:8888');
 
-let refreshTokenEndpoint = isProduction
-  ? 'https://key-track2.herokuapp.com/refresh_token'
-  : 'http://127.0.0.1:8888/refresh_token';
+// Ask the backend to hand the tokens back to whichever origin actually started
+// the sign-in, so a local dev server gets them at localhost:3000 instead of the
+// deployed Netlify app. The backend only honours allowlisted origins.
+const returnTo = encodeURIComponent(window.location.origin);
+
+let spotifyLoginEndpoint = `${backendBase}/spotify/login?return_to=${returnTo}`;
+
+let refreshTokenEndpoint = `${backendBase}/refresh_token`;
 
 // Backend base for the SoundCloud OAuth + proxy routes.
-let soundcloudBackend = isProduction
-  ? 'https://key-track2.herokuapp.com'
-  : 'http://127.0.0.1:8888';
-let soundcloudLoginEndpoint = soundcloudBackend + '/soundcloud/login';
+let soundcloudBackend = backendBase;
+let soundcloudLoginEndpoint = `${backendBase}/soundcloud/login?return_to=${returnTo}`;
 
 // Refresh the access token this many ms before it actually expires, so API
 // calls never hit a window where the token is dead.
@@ -328,6 +337,11 @@ class App extends React.Component {
     const soundcloudParams = getSoundcloudParams(isProduction);
 
     this.state = {
+      // The live Spotify access token. Everything downstream reads this — the
+      // Web Playback SDK, playlist/library fetches — so it is seeded straight
+      // from the stored/returned credentials rather than being set only after
+      // the /v1/me bootstrap below resolves.
+      access_token: spotifyParams.access_token || '',
       // Measured height of whichever bottom player is visible (0 = none), so
       // overlays that sit above it (key-filter sheet, Key Calculator, analysis
       // indicator) clear it exactly — no magic numbers, no gap, no overlap.
@@ -409,13 +423,17 @@ class App extends React.Component {
     if (spotifyParams.access_token) {
       spotifyWebApi.setAccessToken(spotifyParams.access_token);
 
-      Axios.get(
-        `https://api.spotify.com/v1/me?access_token=${spotifyParams.access_token}`
-      )
+      // Bootstrap the user profile. The token is sent as an Authorization
+      // header: Spotify no longer accepts `?access_token=`, so the old
+      // query-string form always came back 401 and — because the failure was
+      // swallowed below — left this.state.access_token unset, which handed the
+      // Web Playback SDK and every playlist fetch an undefined token.
+      Axios.get('https://api.spotify.com/v1/me', {
+        headers: { Authorization: `Bearer ${spotifyParams.access_token}` },
+      })
         .then((user) => {
           this.setState({
             user_id: user.data.id,
-            access_token: spotifyParams.access_token,
             user_name: user.data.display_name,
           });
         })

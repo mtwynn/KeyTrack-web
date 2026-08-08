@@ -6,28 +6,78 @@ type HashParams = {
   expires_at?: number
 }
 
-export function getHashParams(provider: string = 'spotify', isProduction: boolean) {
-  const hashParams = JSON.parse(window.localStorage.getItem(`${provider}_hash_params`) ?? '{}');
-  if (Object.entries(hashParams).length !== 0 && hashParams.access_token && hashParams.refresh_token) {
-    return hashParams;
-  } else {
-    if (provider == 'spotify') {
-      let hashParams: HashParams = {
-        access_token: '',
-        refresh_token: ''
-      }
-      if (isProduction) {
-        hashParams = getAndSetSpotifyHashParamsFromUrlProd();
-      } else {
-        hashParams = getAndSetSpotifyHashParamsFromUrlLocal();
-      }
+// Spotify hands the tokens back on the OAuth return URL. Strip them once
+// they've been consumed so (a) a later reload falls through to the refreshed
+// token in storage instead of replaying the original sign-in token, and
+// (b) credentials don't linger in the address bar / browser history. Only the
+// Spotify keys are removed — the SoundCloud `sc_*` params travel on the same
+// URL and are read straight after this by getSoundcloudParams().
+const SPOTIFY_URL_KEYS = ['access_token', 'refresh_token', 'expires_in'];
 
-      window.localStorage.setItem('spotify_hash_params', JSON.stringify(hashParams));
-      return hashParams;
-    } else {
-      return {};
-    }
+// The deployed frontend receives the params on the query string and a local dev
+// server receives them on the hash, but a locally-run client pointed at the
+// deployed backend is a mix of the two. Reading (and clearing) BOTH removes the
+// coupling to NODE_ENV entirely, so the tokens are always picked up wherever
+// the backend happens to put them.
+function readUrlParam(url: URL, key: string): string {
+  return (
+    url.searchParams.get(key) ??
+    new URLSearchParams(url.hash.replace(/^#/, '')).get(key) ??
+    ''
+  );
+}
+
+function clearSpotifyTokensFromUrl() {
+  const url = new URL(window.location.href);
+  SPOTIFY_URL_KEYS.forEach((key) => url.searchParams.delete(key));
+
+  const hash = new URLSearchParams(url.hash.replace(/^#/, ''));
+  SPOTIFY_URL_KEYS.forEach((key) => hash.delete(key));
+  const remaining = hash.toString();
+  url.hash = remaining ? `#${remaining}` : '';
+
+  window.history.replaceState({}, document.title, url.toString());
+}
+
+function getSpotifyParamsFromUrl(): HashParams {
+  const url = new URL(window.location.href);
+  const expires_in = readUrlParam(url, 'expires_in');
+  return {
+    access_token: readUrlParam(url, 'access_token'),
+    refresh_token: readUrlParam(url, 'refresh_token'),
+    expires_at: expires_in
+      ? Date.now() + Number(expires_in) * 1000
+      : undefined,
+  };
+}
+
+export function getHashParams(provider: string = 'spotify', isProduction?: boolean) {
+  if (provider !== 'spotify') {
+    return {};
   }
+
+  // Credentials on the return URL mean the user JUST completed sign-in, so they
+  // must win over anything already in localStorage. Reading storage first (the
+  // previous behaviour) let an expired stored token shadow the fresh one, so
+  // every Spotify call 401'd — including the Web Playback SDK's check_scope —
+  // even though the sign-in itself had succeeded, and signing in again could
+  // never recover because the stale token kept winning.
+  const fromUrl = getSpotifyParamsFromUrl();
+
+  if (fromUrl.access_token && fromUrl.refresh_token) {
+    window.localStorage.setItem('spotify_hash_params', JSON.stringify(fromUrl));
+    clearSpotifyTokensFromUrl();
+    return fromUrl;
+  }
+
+  const stored = JSON.parse(
+    window.localStorage.getItem('spotify_hash_params') ?? '{}'
+  );
+  if (stored.access_token && stored.refresh_token) {
+    return stored;
+  }
+
+  return { access_token: '', refresh_token: '' };
 }
 
 // Persist refreshed Spotify credentials so they survive reloads and feed the
@@ -40,19 +90,17 @@ export function saveSpotifyHashParams(hashParams: HashParams) {
 // The backend hands SoundCloud tokens back as sc_* params (prefixed so they
 // never collide with Spotify's). Mirror the Spotify plumbing: prefer stored
 // creds, otherwise pick them up off the return URL and persist them.
-export function getSoundcloudParams(isProduction: boolean): HashParams {
+export function getSoundcloudParams(isProduction?: boolean): HashParams {
   const stored = JSON.parse(
     window.localStorage.getItem('soundcloud_hash_params') ?? '{}'
   );
   if (stored.access_token && stored.refresh_token) {
     return stored;
   }
-  const source = isProduction
-    ? new URLSearchParams(new URL(window.location.href).search)
-    : new URLSearchParams(window.location.hash.substring(1));
-  const access_token = source.get('sc_access_token') ?? '';
-  const refresh_token = source.get('sc_refresh_token') ?? '';
-  const expires_in = source.get('sc_expires_in');
+  const url = new URL(window.location.href);
+  const access_token = readUrlParam(url, 'sc_access_token');
+  const refresh_token = readUrlParam(url, 'sc_refresh_token');
+  const expires_in = readUrlParam(url, 'sc_expires_in');
   const params: HashParams = {
     access_token,
     refresh_token,
@@ -77,42 +125,4 @@ export function saveSoundcloudParams(params: HashParams) {
 
 export function clearSoundcloudParams() {
   window.localStorage.removeItem('soundcloud_hash_params');
-}
-
-function getAndSetSpotifyHashParamsFromUrlLocal() {
-  let hashParams: any = {
-    access_token: '',
-    refresh_token: ''
-  };
-  // For use in local server
-  let e: RegExpExecArray | null,
-    r = /([^&;=]+)=?([^&;]*)/g,
-    q = window.location.hash.substring(1);
-  while ((e = r.exec(q))) {
-    hashParams[e[1]] = decodeURIComponent(e[2]);
-  }
-
-  if (hashParams.expires_in) {
-    hashParams.expires_at = Date.now() + Number(hashParams.expires_in) * 1000;
-  }
-
-  document.cookie = `access_token=${hashParams.access_token}`;
-  document.cookie = `refresh_token=${hashParams.refresh_token}`;
-  return hashParams;
-}
-
-function getAndSetSpotifyHashParamsFromUrlProd(): HashParams {
-  var urlString = window.location.href;
-  var url = new URL(urlString);
-  var a_token = new URLSearchParams(url.search).get('access_token') ?? '';
-  var r_token = new URLSearchParams(url.search).get('refresh_token') ?? '';
-  var expires_in = new URLSearchParams(url.search).get('expires_in');
-
-  document.cookie = `a_token=${a_token}`;
-  document.cookie = `r_token=${r_token}`;
-  return {
-    access_token: a_token,
-    refresh_token: r_token,
-    expires_at: expires_in ? Date.now() + Number(expires_in) * 1000 : undefined,
-  };
 }
