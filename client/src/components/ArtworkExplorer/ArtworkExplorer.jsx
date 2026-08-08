@@ -90,6 +90,7 @@ export default function ArtworkExplorer({
   const [semantic, setSemantic] = React.useState(new Map());
   const [genres, setGenres] = React.useState(new Map());
   const [semanticAvailable, setSemanticAvailable] = React.useState(false);
+  const [semanticInfo, setSemanticInfo] = React.useState({});
   const [semanticRun, setSemanticRun] = React.useState(null);
 
   const [view, setView] = React.useState({ kind: "albums" });
@@ -136,6 +137,7 @@ export default function ArtworkExplorer({
       setSemantic(new Map(semCache));
       setGenres(new Map(genreCache));
       setSemanticAvailable(!!status.semanticAvailable);
+      setSemanticInfo(status);
 
       // Colour/mood analysis is free and fast, so it always runs on its own.
       if (supportsVibeAnalysis()) {
@@ -180,7 +182,13 @@ export default function ArtworkExplorer({
       covers: index.covers,
       cache,
       backendBase,
-      onProgress: (p) => setSemanticRun(p),
+      batchSize: semanticInfo.maxBatch || 4,
+      onProgress: (p) => {
+        setSemanticRun(p);
+        // Surface partial results as they land so the gallery becomes
+        // searchable during a long run rather than only at the end.
+        setSemantic(new Map(cache));
+      },
       cancelRef: cancelRef.current,
     });
     setSemantic(new Map(cache));
@@ -353,12 +361,20 @@ export default function ArtworkExplorer({
     return !!(s && s.embedding);
   };
 
-  const analyzedCount = React.useMemo(() => {
-    let n = 0;
+  // Two different counts, deliberately:
+  //  taggedCount   — has a Gemini record, i.e. the PAID vision pass is done.
+  //                  Drives "how many still need analyzing".
+  //  analyzedCount — also has an embedding, i.e. usable for meaning-based
+  //                  search and find-similar. Embedding can fail independently.
+  const { taggedCount, analyzedCount } = React.useMemo(() => {
+    let tagged = 0;
+    let embedded = 0;
     semantic.forEach((s) => {
-      if (s && s.embedding) n += 1;
+      if (!s) return;
+      tagged += 1;
+      if (s.embedding) embedded += 1;
     });
-    return n;
+    return { taggedCount: tagged, analyzedCount: embedded };
   }, [semantic]);
 
   const clearSearch = () => {
@@ -440,7 +456,7 @@ export default function ArtworkExplorer({
             value={(progress.done / Math.max(1, progress.total)) * 100}
           />
           <Typography variant="caption" color="textSecondary">
-            Analyzing colour &amp; mood {progress.done}/{progress.total}
+            Reading colours {progress.done}/{progress.total}
           </Typography>
         </Box>
       )}
@@ -484,7 +500,7 @@ export default function ArtworkExplorer({
           <Tooltip
             title={
               analyzedCount === 0
-                ? "Run 'Analyze artwork' first to enable meaning-based search"
+                ? "Add smart tags first to enable meaning-based search"
                 : "Rank by meaning rather than keywords"
             }
           >
@@ -588,6 +604,8 @@ export default function ArtworkExplorer({
           semanticRun={semanticRun}
           onRunSemantic={runSemantic}
           coverCount={index.covers.size}
+          analyzedCount={taggedCount}
+          rpm={semanticInfo.rpm}
         />
       ) : (
         <>
@@ -674,7 +692,19 @@ function AlbumsView({
   semanticRun,
   onRunSemantic,
   coverCount,
+  analyzedCount,
+  rpm,
 }) {
+  const remaining = Math.max(0, coverCount - analyzedCount);
+  // Honest ETA: at the free tier's 15/min a full library is hours, and it's
+  // better to say so up front than to let a run silently crawl.
+  const estimate = React.useMemo(() => {
+    if (!rpm || remaining <= 0) return "";
+    const mins = Math.ceil(remaining / rpm);
+    if (mins < 60) return `${mins} min`;
+    const hrs = (mins / 60).toFixed(1).replace(/\.0$/, "");
+    return `${hrs} hr`;
+  }, [rpm, remaining]);
   return (
     <Box>
       {semanticAvailable && (
@@ -686,11 +716,12 @@ function AlbumsView({
             borderRadius: 8,
           }}
         >
-          <Typography variant="subtitle2">Smart tags &amp; semantic search</Typography>
+          <Typography variant="subtitle2">Smart tags &amp; content search</Typography>
           <Typography variant="caption" color="textSecondary" style={{ display: "block" }}>
-            Reads what's actually in each cover so you can search by content
-            ("foggy neon city") and find visually similar art. Runs once per
-            unique cover ({coverCount}) and is cached permanently.
+            Colour and mood are read automatically for every cover, free. This is
+            the separate paid step: it reads what's actually IN each cover so you
+            can search by content ("foggy neon city") and find similar art. Runs
+            once per cover and is cached permanently.
           </Typography>
           {semanticRun && !semanticRun.finished ? (
             <Box style={{ marginTop: 8 }}>
@@ -699,22 +730,52 @@ function AlbumsView({
                 value={(semanticRun.done / Math.max(1, semanticRun.total)) * 100}
               />
               <Typography variant="caption">
-                {semanticRun.done}/{semanticRun.total}
-                {semanticRun.rateLimited ? " · rate limited, paused" : ""}
+                Adding smart tags {semanticRun.done}/{semanticRun.total}
+                {semanticRun.waitingSec
+                  ? ` · rate limit reached, resuming in ${semanticRun.waitingSec}s`
+                  : ""}
               </Typography>
             </Box>
           ) : (
-            <Button
-              size="small"
-              variant="outlined"
-              color="primary"
-              style={{ marginTop: 8 }}
-              onClick={onRunSemantic}
-            >
-              {semanticRun && semanticRun.finished
-                ? `Done — ${semanticRun.analyzed} analyzed. Run again`
-                : "Analyze artwork"}
-            </Button>
+            <Box style={{ marginTop: 8 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                color="primary"
+                onClick={onRunSemantic}
+                disabled={remaining === 0}
+              >
+                {remaining === 0
+                  ? "All covers tagged"
+                  : analyzedCount > 0
+                  ? `Add smart tags to ${remaining} remaining`
+                  : `Add smart tags (${coverCount} covers)`}
+              </Button>
+              {/* Reflects what's actually stored, not just this session's run —
+                  a reload used to reset the button to its untouched state even
+                  when the whole library was already tagged. */}
+              <Typography
+                variant="caption"
+                color="textSecondary"
+                style={{ display: "block", marginTop: 4 }}
+              >
+                {analyzedCount} of {coverCount} covers tagged
+                {rpm && remaining > 0
+                  ? ` · ~${estimate} at ${rpm}/min`
+                  : ""}
+              </Typography>
+              {rpm > 0 && rpm <= 15 && remaining > 0 && (
+                <Typography
+                  variant="caption"
+                  color="error"
+                  style={{ display: "block", marginTop: 2 }}
+                >
+                  Your Gemini project is on the free tier ({rpm} requests/min).
+                  Enabling billing removes the wait — it stays fractions of a
+                  cent per cover.
+                </Typography>
+              )}
+            </Box>
           )}
         </Box>
       )}

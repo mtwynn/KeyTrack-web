@@ -13,9 +13,12 @@ import { ARTWORK_STORE, idbGetAll, idbSetMany } from "./crateStore";
 
 export const SEMANTIC_VERSION = 1;
 
-const VISION_BATCH = 6; // backend caps at 8; stay under it
+// The backend paces every Gemini call against its RPM quota, so the client's
+// job is simply not to pile on. Concurrency 1 keeps one request in flight;
+// batch size comes from /artwork/status so it always matches what the server
+// can pace through inside Heroku's 30s request limit.
+const DEFAULT_VISION_BATCH = 4;
 const EMBED_BATCH = 64;
-const CONCURRENCY = 3;
 
 export const semKey = (albumId) => `sem:${albumId}`;
 
@@ -79,6 +82,7 @@ export async function runSemanticAnalysis({
   onProgress,
   cancelRef,
   limit = Infinity,
+  batchSize = DEFAULT_VISION_BATCH,
 }) {
   const pending = [...covers.values()]
     .filter((c) => {
@@ -92,89 +96,129 @@ export async function runSemanticAnalysis({
     .slice(0, limit === Infinity ? undefined : limit);
 
   const total = pending.length;
-  const result = { analyzed: 0, failed: 0, rateLimited: false, total };
+  const result = { analyzed: 0, failed: 0, rateLimited: false, total, done: 0 };
   if (!total) return result;
 
-  // Split into backend-sized batches, then run a few batches in parallel.
+  const size = Math.max(1, batchSize);
   const batches = [];
-  for (let i = 0; i < pending.length; i += VISION_BATCH) {
-    batches.push(pending.slice(i, i + VISION_BATCH));
+  for (let i = 0; i < pending.length; i += size) {
+    batches.push(pending.slice(i, i + size));
   }
 
-  let cursor = 0;
   let done = 0;
   const writeBuffer = [];
   const newlyDescribed = [];
 
-  const worker = async () => {
-    while (cursor < batches.length) {
-      if (cancelRef && cancelRef.current) return;
-      if (result.rateLimited) return; // stop the whole run, don't burn quota
-      const batch = batches[cursor++];
-      try {
-        const res = await fetch(`${backendBase}/artwork/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            images: batch.map((c) => ({
-              albumId: c.albumId,
-              // 300px is enough for Gemini to read the scene and costs far
-              // fewer input tokens than 640.
-              url: c.url300 || c.url640,
-            })),
-          }),
-        });
+  // Sequential batches. The previous version ran three in parallel with six
+  // images each — 18 concurrent calls against a 15/min free-tier quota, which
+  // rate-limited almost immediately.
+  for (const batch of batches) {
+    if (cancelRef && cancelRef.current) break;
 
-        if (res.status === 503) {
-          result.rateLimited = true; // not configured — stop trying
-          return;
-        }
-        const body = await res.json();
-        if (body.rateLimited) result.rateLimited = true;
-
-        (body.results || []).forEach((r) => {
-          if (!r || !r.albumId) return;
-          if (r.ok) {
-            const rec = {
-              v: SEMANTIC_VERSION,
-              description: r.description || "",
-              subjects: r.subjects || [],
-              topics: r.topics || [],
-              style: r.style || [],
-              mood: r.mood || [],
-              medium: r.medium || "",
-              hasFace: !!r.hasFace,
-              hasText: !!r.hasText,
-            };
-            cache.set(r.albumId, rec);
-            writeBuffer.push([semKey(r.albumId), rec]);
-            if (rec.description) {
-              newlyDescribed.push({ albumId: r.albumId, text: semanticText(rec) });
-            }
-            result.analyzed += 1;
-          } else {
-            if (r.status === 429) result.rateLimited = true;
-            result.failed += 1;
-          }
-        });
-      } catch (e) {
-        result.failed += batch.length;
-      }
+    let res;
+    try {
+      res = await fetch(`${backendBase}/artwork/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          images: batch.map((c) => ({
+            albumId: c.albumId,
+            // 300px is enough for Gemini to read the scene and costs far fewer
+            // input tokens than 640.
+            url: c.url300 || c.url640,
+          })),
+        }),
+      });
+    } catch (e) {
+      result.failed += batch.length;
       done += batch.length;
+      continue;
+    }
+
+    if (res.status === 503) {
+      result.rateLimited = true; // not configured — stop trying
+      break;
+    }
+
+    let body;
+    try {
+      body = await res.json();
+    } catch (e) {
+      result.failed += batch.length;
+      done += batch.length;
+      continue;
+    }
+
+    (body.results || []).forEach((r) => {
+      if (!r || !r.albumId) return;
+      if (r.ok) {
+        const rec = {
+          v: SEMANTIC_VERSION,
+          description: r.description || "",
+          subjects: r.subjects || [],
+          topics: r.topics || [],
+          style: r.style || [],
+          mood: r.mood || [],
+          medium: r.medium || "",
+          hasFace: !!r.hasFace,
+          hasText: !!r.hasText,
+        };
+        cache.set(r.albumId, rec);
+        writeBuffer.push([semKey(r.albumId), rec]);
+        if (rec.description) {
+          newlyDescribed.push({ albumId: r.albumId, text: semanticText(rec) });
+        }
+        result.analyzed += 1;
+      } else if (r.status !== 429) {
+        // A 429'd image was never analyzed, so it stays pending rather than
+        // counting as a failure — the next pass picks it up.
+        result.failed += 1;
+      }
+    });
+
+    done += batch.length;
+    result.done = Math.min(done, total);
+
+    // Persist as we go so a refresh mid-run never loses completed work.
+    if (writeBuffer.length >= 20) {
+      await idbSetMany(writeBuffer.splice(0), ARTWORK_STORE);
+    }
+
+    if (body.rateLimited) {
+      // Gemini tells us exactly how long to wait, so pause and resume instead
+      // of aborting the whole run.
+      const waitSec = body.retryAfterSec || 30;
+      result.rateLimited = true;
       if (onProgress) {
-        onProgress({ done: Math.min(done, total), total, rateLimited: result.rateLimited });
+        onProgress({ ...result, waitingSec: waitSec });
+      }
+      const until = Date.now() + waitSec * 1000;
+      while (Date.now() < until) {
+        if (cancelRef && cancelRef.current) break;
+        await new Promise((r) => setTimeout(r, 500));
+        if (onProgress) {
+          onProgress({
+            ...result,
+            waitingSec: Math.max(0, Math.ceil((until - Date.now()) / 1000)),
+          });
+        }
+      }
+      result.rateLimited = false;
+      // Re-queue the images this batch couldn't get through.
+      const missed = batch.filter((c) => !cache.get(c.albumId));
+      if (missed.length) {
+        batches.push(missed);
+        done -= missed.length;
       }
     }
-  };
 
-  await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker)
-  );
+    if (onProgress) onProgress({ ...result, waitingSec: 0 });
+  }
 
   if (writeBuffer.length) await idbSetMany(writeBuffer, ARTWORK_STORE);
 
   // Embed descriptions so free-text search works over meaning, not keywords.
-  if (newlyDescribed.length && !result.rateLimited) {
+  if (newlyDescribed.length) {
     await embedRecords(newlyDescribed, cache, backendBase, cancelRef);
   }
 

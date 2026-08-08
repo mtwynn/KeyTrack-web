@@ -756,8 +756,34 @@ const GEMINI_EMBED_MODEL = 'gemini-embedding-001';
 // Matryoshka truncation: 768 dims keeps semantic quality while making the
 // client-side vector store ~4x smaller than the 3072 default.
 const EMBED_DIMS = 768;
-// Heroku kills a request at 30s, so a batch must comfortably finish inside it.
-const MAX_BATCH = 8;
+
+// Gemini enforces requests-per-minute PER PROJECT PER MODEL, and the free tier
+// is only 15/min (confirmed from a live 429: quotaValue 15 for
+// gemini-3.5-flash-lite). Firing a batch in parallel blows straight through
+// that, so every call goes through one global pacer. Raise GEMINI_RPM once
+// billing is enabled — that's the single knob that makes a full library run
+// take minutes instead of hours.
+const GEMINI_RPM = Math.max(1, Number(process.env.GEMINI_RPM || 15));
+// 5% headroom: the server's minute and Google's don't line up exactly, and
+// landing right on the boundary is what produces sporadic 429s.
+const GEMINI_MIN_GAP_MS = Math.ceil((60000 / GEMINI_RPM) * 1.05);
+
+let geminiNextSlot = 0;
+function geminiSlot() {
+  const now = Date.now();
+  const slot = Math.max(now, geminiNextSlot);
+  geminiNextSlot = slot + GEMINI_MIN_GAP_MS;
+  const wait = slot - now;
+  return wait > 0 ? new Promise((r) => setTimeout(r, wait)) : Promise.resolve();
+}
+
+// Heroku kills a request at 30s, so the batch must fit inside that INCLUDING
+// the pacing gaps. At 15 RPM each image costs ~4.2s of waiting plus ~2s of
+// work, so a fixed batch of 8 would time out; derive it instead.
+const MAX_BATCH = Math.max(
+  1,
+  Math.min(8, Math.floor(24000 / (GEMINI_MIN_GAP_MS + 2000)))
+);
 
 const VISION_PROMPT = [
   'You are cataloguing album cover artwork for a musician building a visual',
@@ -795,6 +821,7 @@ if (!geminiConfigured()) {
 }
 
 async function geminiJson(url, payload) {
+  await geminiSlot();
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -805,6 +832,22 @@ async function geminiJson(url, payload) {
     const err = new Error((body && body.error && body.error.message) || 'gemini_error');
     err.status = res.status;
     err.body = body;
+    // Gemini reports exactly how long to wait in a RetryInfo detail. Honouring
+    // it beats guessing at a backoff, and lets the client show a real countdown
+    // instead of failing the run.
+    const details = (body && body.error && body.error.details) || [];
+    const retryInfo = details.find(
+      (d) => d && d['@type'] && d['@type'].includes('RetryInfo')
+    );
+    if (retryInfo && retryInfo.retryDelay) {
+      err.retryAfterSec = Math.ceil(parseFloat(retryInfo.retryDelay)) || 30;
+    }
+    const quota = details.find(
+      (d) => d && d['@type'] && d['@type'].includes('QuotaFailure')
+    );
+    if (quota && quota.violations && quota.violations[0]) {
+      err.quotaValue = Number(quota.violations[0].quotaValue) || null;
+    }
     throw err;
   }
   return body;
@@ -873,7 +916,9 @@ async function analyzeOneImage(url) {
       return JSON.parse(part.text);
     } catch (e) {
       lastErr = e;
-      const retryable = !e.status || e.status >= 500;
+      // Never retry a 429 here — quota is not transient, and each extra call
+      // pushes the reset window further out. Bubble it up so the caller pauses.
+      const retryable = e.status !== 429 && (!e.status || e.status >= 500);
       if (!retryable || attempt === 2) throw e;
       await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
     }
@@ -894,29 +939,42 @@ app.post('/artwork/analyze', async (req, res) => {
     return res.status(400).send({ error: 'batch_too_large', max: MAX_BATCH });
   }
 
-  const results = await Promise.all(
-    images.map(async (img) => {
-      if (!img || !img.albumId || !img.url) {
-        return { albumId: img && img.albumId, ok: false, error: 'bad_request' };
-      }
-      try {
-        const data = await analyzeOneImage(img.url);
-        return { albumId: img.albumId, ok: true, ...data };
-      } catch (e) {
-        return {
-          albumId: img.albumId,
-          ok: false,
-          error: e.message || 'analyze_failed',
-          status: e.status,
-        };
-      }
-    })
-  );
+  // Sequential, NOT Promise.all: the pacer is what keeps us under the RPM
+  // quota, and firing a batch in parallel just queues them all behind it while
+  // risking a burst. Per-image failures are reported inline so one bad cover
+  // never wastes the whole request.
+  const results = [];
+  let retryAfterSec = 0;
+  for (const img of images) {
+    if (!img || !img.albumId || !img.url) {
+      results.push({ albumId: img && img.albumId, ok: false, error: 'bad_request' });
+      continue;
+    }
+    // Once quota is hit, stop immediately — every further call is a guaranteed
+    // 429 that only pushes the reset further out.
+    if (retryAfterSec) {
+      results.push({ albumId: img.albumId, ok: false, error: 'rate_limited', status: 429 });
+      continue;
+    }
+    try {
+      const data = await analyzeOneImage(img.url);
+      results.push({ albumId: img.albumId, ok: true, ...data });
+    } catch (e) {
+      if (e.status === 429) retryAfterSec = e.retryAfterSec || 30;
+      results.push({
+        albumId: img.albumId,
+        ok: false,
+        error: e.message || 'analyze_failed',
+        status: e.status,
+      });
+    }
+  }
 
-  // Surface a quota/rate-limit hit so the client can back off instead of
-  // burning through the rest of the library against a closed door.
-  const rateLimited = results.some((r) => r.status === 429);
-  res.send({ results, rateLimited });
+  res.send({
+    results,
+    rateLimited: retryAfterSec > 0,
+    retryAfterSec,
+  });
 });
 
 // POST { texts: [...] } -> { embeddings: [[...]] }
@@ -954,7 +1012,14 @@ app.post('/artwork/embed', async (req, res) => {
 // Lets the client show semantic features as available/unavailable without
 // having to fire a real request and interpret the failure.
 app.get('/artwork/status', (req, res) => {
-  res.send({ semanticAvailable: geminiConfigured(), visionModel: GEMINI_VISION_MODEL });
+  res.send({
+    semanticAvailable: geminiConfigured(),
+    visionModel: GEMINI_VISION_MODEL,
+    // The client sizes its batches from these so it never sends more than one
+    // request can pace through inside Heroku's 30s limit.
+    maxBatch: MAX_BATCH,
+    rpm: GEMINI_RPM,
+  });
 });
 
 console.log('Listening on 8888');

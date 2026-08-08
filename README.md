@@ -226,8 +226,16 @@ GEMINI_API_KEY=your_gemini_api_key
 
 In production set it as a Heroku config var. The key stays server-side — it must
 never reach the React bundle, which is world-readable. Each unique cover is
-analyzed once and cached permanently, so the cost is one-time (a few dollars for
-a large library; the free tier works but caps at ~1,000 requests/day).
+analyzed once and cached permanently, so the cost is one-time.
+
+**Mind the rate limit.** Gemini's free tier allows **15 requests per minute**,
+so a large library takes hours. The backend paces every call to stay under
+`GEMINI_RPM` (default 15) rather than collecting 429s — raise it once billing is
+enabled:
+
+```bash
+GEMINI_RPM=15    # free tier; raise to match your paid quota
+```
 
 ---
 
