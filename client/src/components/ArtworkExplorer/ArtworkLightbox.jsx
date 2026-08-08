@@ -98,6 +98,8 @@ export default function ArtworkLightbox({
   semantic,
   genresFor,
   onFindSimilar,
+  canFindSimilar,
+  semanticAvailable,
   onSaveToBoard,
   onRemoveFromBoard,
   savedBoardNames,
@@ -231,12 +233,20 @@ export default function ArtworkLightbox({
                 <ZoomOutMap fontSize="small" />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Find visually similar artwork">
+            <Tooltip
+              title={
+                canFindSimilar
+                  ? "Find visually similar artwork"
+                  : semanticAvailable
+                  ? "Run 'Analyze artwork' first — this cover hasn't been analyzed yet"
+                  : "Needs a Gemini API key on the backend"
+              }
+            >
               <span>
                 <IconButton
                   size="small"
                   onClick={() => onFindSimilar(tile)}
-                  disabled={!onFindSimilar}
+                  disabled={!canFindSimilar}
                 >
                   <FindReplace fontSize="small" />
                 </IconButton>

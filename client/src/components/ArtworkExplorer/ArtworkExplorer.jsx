@@ -277,6 +277,8 @@ export default function ArtworkExplorer({
     }
 
     // Semantic ranking replaces sorting — the order IS the relevance.
+    // A score of -1 means the cover has no embedding yet, so it's excluded
+    // rather than dumped at the bottom of an otherwise meaningful ranking.
     if (semanticRanking) {
       const scored = out
         .map((t) => {
@@ -341,6 +343,23 @@ export default function ArtworkExplorer({
     setLightbox(null);
     setView({ kind: "all" });
   };
+
+  // Only covers that have been through the semantic pass carry an embedding, so
+  // find-similar is per-cover, not just per-app. Without this the button looked
+  // enabled and silently did nothing on an unanalyzed cover.
+  const canFindSimilar = (tile) => {
+    if (!semanticAvailable || !tile) return false;
+    const s = semantic.get(tile.albumId);
+    return !!(s && s.embedding);
+  };
+
+  const analyzedCount = React.useMemo(() => {
+    let n = 0;
+    semantic.forEach((s) => {
+      if (s && s.embedding) n += 1;
+    });
+    return n;
+  }, [semantic]);
 
   const clearSearch = () => {
     setQuery("");
@@ -462,14 +481,20 @@ export default function ArtworkExplorer({
           }}
         />
         {semanticAvailable && (
-          <Tooltip title="Rank by meaning rather than keywords">
+          <Tooltip
+            title={
+              analyzedCount === 0
+                ? "Run 'Analyze artwork' first to enable meaning-based search"
+                : "Rank by meaning rather than keywords"
+            }
+          >
             <span>
               <Button
                 size="small"
                 variant={semanticRanking ? "contained" : "outlined"}
                 color="primary"
                 onClick={runSemanticSearch}
-                disabled={!query.trim()}
+                disabled={!query.trim() || analyzedCount === 0}
               >
                 Smart search
               </Button>
@@ -537,7 +562,9 @@ export default function ArtworkExplorer({
 
       <Typography variant="caption" color="textSecondary" style={{ display: "block", marginTop: 8 }}>
         {tiles.length} cover{tiles.length === 1 ? "" : "s"}
-        {semanticRanking ? " · ranked by similarity" : ""}
+        {semanticRanking
+          ? ` · ranked by similarity across ${analyzedCount} analyzed`
+          : ""}
       </Typography>
     </Box>
   );
@@ -609,7 +636,9 @@ export default function ArtworkExplorer({
           onNavigate={(d) =>
             setLightbox((i) => Math.max(0, Math.min(tiles.length - 1, i + d)))
           }
-          onFindSimilar={semanticAvailable ? findSimilar : null}
+          onFindSimilar={findSimilar}
+          canFindSimilar={canFindSimilar(tiles[lightbox])}
+          semanticAvailable={semanticAvailable}
           onSaveToBoard={saveToBoard}
           onRemoveFromBoard={
             view.kind === "board"
