@@ -747,7 +747,11 @@ app.get(
 // ---------------------------------------------------------------------------
 const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_VISION_MODEL = process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite';
+// Auto-updating alias rather than a pinned version: Google retires specific
+// versions for new API keys (2.5-flash-lite already 404s for accounts created
+// after its cutoff), and a hard-coded model silently breaks the whole feature.
+// The alias currently resolves to gemini-3.5-flash-lite.
+const GEMINI_VISION_MODEL = process.env.GEMINI_VISION_MODEL || 'gemini-flash-lite-latest';
 const GEMINI_EMBED_MODEL = 'gemini-embedding-001';
 // Matryoshka truncation: 768 dims keeps semantic quality while making the
 // client-side vector store ~4x smaller than the 3072 default.
@@ -827,34 +831,54 @@ async function fetchImageBase64(url) {
 
 async function analyzeOneImage(url) {
   const img = await fetchImageBase64(url);
-  const body = await geminiJson(
-    `${GEMINI_BASE}/${GEMINI_VISION_MODEL}:generateContent?key=${GEMINI_KEY}`,
-    {
-      contents: [
-        {
-          parts: [
-            { text: VISION_PROMPT },
-            { inline_data: { mime_type: img.mime, data: img.data } },
-          ],
-        },
-      ],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: VISION_SCHEMA,
-        temperature: 0.1,
+  const payload = {
+    contents: [
+      {
+        parts: [
+          { text: VISION_PROMPT },
+          { inline_data: { mime_type: img.mime, data: img.data } },
+        ],
       },
+    ],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: VISION_SCHEMA,
+      temperature: 0.1,
+    },
+  };
+
+  // Gemini intermittently answers a perfectly valid JPEG with 503 "Unable to
+  // process input image". It's transient — the identical request succeeds on a
+  // retry — so treating the first failure as permanent would leave random holes
+  // in the library. 429 is NOT retried here: that's quota, and the caller stops
+  // the whole run instead of hammering.
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const body = await geminiJson(
+        `${GEMINI_BASE}/${GEMINI_VISION_MODEL}:generateContent?key=${GEMINI_KEY}`,
+        payload
+      );
+      const parts =
+        (body &&
+          body.candidates &&
+          body.candidates[0] &&
+          body.candidates[0].content &&
+          body.candidates[0].content.parts) ||
+        [];
+      // Thinking-capable models can return reasoning parts alongside the
+      // answer, so take the first part that actually carries text, not [0].
+      const part = parts.find((p) => p && typeof p.text === 'string' && p.text.trim());
+      if (!part) throw new Error('gemini_empty_response');
+      return JSON.parse(part.text);
+    } catch (e) {
+      lastErr = e;
+      const retryable = !e.status || e.status >= 500;
+      if (!retryable || attempt === 2) throw e;
+      await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
     }
-  );
-  const text =
-    body &&
-    body.candidates &&
-    body.candidates[0] &&
-    body.candidates[0].content &&
-    body.candidates[0].content.parts &&
-    body.candidates[0].content.parts[0] &&
-    body.candidates[0].content.parts[0].text;
-  if (!text) throw new Error('gemini_empty_response');
-  return JSON.parse(text);
+  }
+  throw lastErr;
 }
 
 // POST { images: [{ albumId, url }] } -> { results: [{ albumId, ok, ...tags }] }
