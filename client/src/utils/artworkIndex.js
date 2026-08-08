@@ -89,27 +89,46 @@ function usableTrack(item) {
   );
 }
 
-function tileFromItem(item, playlistId, playlistName) {
-  const t = item.track;
+// A tile is one ALBUM COVER, not one track. Every track on an album shares the
+// same artwork, so a per-track tile filled the gallery with duplicates — a
+// 12-track EP appeared 12 times. Tracks are folded into the cover instead, and
+// kept on the tile so search still matches on track names.
+function coverFromTrack(t, scopeId) {
   const imgs = pickImages(t.album.images);
   if (!imgs) return null;
   return {
-    // Unique per (playlist, track) so React keys stay stable when the same
-    // track appears in several playlists.
-    id: `${playlistId}:${t.id}`,
-    trackId: t.id,
-    trackName: t.name || "",
+    // Scoped so the same album can key stably in a playlist view and in the
+    // global view without colliding.
+    id: `${scopeId}:${t.album.id}`,
     albumId: t.album.id,
     albumName: t.album.name || "",
     artistNames: (t.artists || []).map((a) => a.name),
     artistIds: (t.artists || []).map((a) => a.id),
     releaseDate: t.album.release_date || "",
     releaseYear: (t.album.release_date || "").slice(0, 4),
-    playlistId,
-    playlistName,
-    uri: t.uri,
+    // The artwork represents the album, so this opens the album rather than an
+    // arbitrary one of its tracks.
+    uri: t.album.uri || `spotify:album:${t.album.id}`,
+    trackNames: [t.name || ""],
+    trackCount: 1,
+    playlistNames: [],
     ...imgs,
   };
+}
+
+// Fold a track into an existing cover: accumulate the track and widen the
+// artist list (a compilation's tracks can each credit different artists).
+function mergeTrackIntoCover(cover, t) {
+  cover.trackCount += 1;
+  if (cover.trackNames.length < 50) cover.trackNames.push(t.name || "");
+  (t.artists || []).forEach((a) => {
+    if (a && a.name && !cover.artistNames.includes(a.name)) {
+      cover.artistNames.push(a.name);
+    }
+    if (a && a.id && !cover.artistIds.includes(a.id)) {
+      cover.artistIds.push(a.id);
+    }
+  });
 }
 
 // Read one crate's tracks from the cache PLLibrary already populates. Returns
@@ -306,42 +325,71 @@ export async function buildArtworkIndex({
   );
 
   // Phase 3 — assemble, in the original crate order so the UI is stable.
+  // Covers are deduped TWICE, at different scopes: within a playlist (so an EP
+  // shows once in that crate) and globally (so an album saved to five
+  // playlists shows once in All artwork).
+  const globalTiles = new Map();
+
   loaded.forEach(({ src, items }) => {
-    const crateTiles = [];
+    const crateCovers = new Map();
+
     (items || []).forEach((item) => {
       if (!usableTrack(item)) return;
-      const tile = tileFromItem(item, src.id, src.name);
-      if (!tile) return;
-      crateTiles.push(tile);
-      tiles.push(tile);
+      const t = item.track;
+
+      const existing = crateCovers.get(t.album.id);
+      if (existing) {
+        mergeTrackIntoCover(existing, t);
+      } else {
+        const tile = coverFromTrack(t, src.id);
+        if (!tile) return;
+        tile.playlistNames = [src.name];
+        crateCovers.set(t.album.id, tile);
+      }
+
+      const global = globalTiles.get(t.album.id);
+      if (global) {
+        mergeTrackIntoCover(global, t);
+        if (!global.playlistNames.includes(src.name)) {
+          global.playlistNames.push(src.name);
+        }
+      } else {
+        const gt = coverFromTrack(t, "all");
+        if (gt) {
+          gt.playlistNames = [src.name];
+          globalTiles.set(t.album.id, gt);
+        }
+      }
 
       // Analysis unit: one entry per unique album cover.
-      if (!covers.has(tile.albumId)) {
-        covers.set(tile.albumId, {
-          albumId: tile.albumId,
-          albumName: tile.albumName,
-          artistNames: tile.artistNames,
-          artistIds: tile.artistIds,
-          url640: tile.url640,
-          url300: tile.url300,
+      if (!covers.has(t.album.id)) {
+        const imgs = pickImages(t.album.images);
+        covers.set(t.album.id, {
+          albumId: t.album.id,
+          albumName: t.album.name || "",
+          artistNames: (t.artists || []).map((a) => a.name),
+          artistIds: (t.artists || []).map((a) => a.id),
+          url640: imgs.url640,
+          url300: imgs.url300,
           trackCount: 1,
         });
       } else {
-        covers.get(tile.albumId).trackCount += 1;
+        covers.get(t.album.id).trackCount += 1;
       }
     });
 
+    const crateTiles = [...crateCovers.values()];
     albums.push({
       id: src.id,
       name: src.name,
       tiles: crateTiles,
-      // Cover mosaic uses the first four DISTINCT covers, so a playlist full of
-      // one album doesn't render four identical thumbnails.
-      mosaic: [...new Set(crateTiles.map((t) => t.url300))].slice(0, 4),
-      trackCount: crateTiles.length,
-      uniqueCovers: new Set(crateTiles.map((t) => t.albumId)).size,
+      mosaic: crateTiles.slice(0, 4).map((t) => t.url300),
+      trackCount: crateTiles.reduce((n, t) => n + t.trackCount, 0),
+      uniqueCovers: crateTiles.length,
     });
   });
+
+  tiles.push(...globalTiles.values());
 
   // Empty crates would render as dead tiles in the Albums grid.
   const index = {

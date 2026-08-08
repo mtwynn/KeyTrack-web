@@ -72,7 +72,7 @@ export function addToBoard(boardId, tile) {
             albumId: tile.albumId,
             albumName: tile.albumName,
             artistNames: tile.artistNames,
-            trackName: tile.trackName,
+            trackCount: tile.trackCount,
             url300: tile.url300,
             url640: tile.url640,
             uri: tile.uri,

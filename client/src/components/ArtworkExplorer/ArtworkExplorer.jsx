@@ -72,6 +72,7 @@ const SORTS = [
   { key: "release", label: "Release date" },
   { key: "album", label: "Album name" },
   { key: "artist", label: "Artist" },
+  { key: "tracks", label: "Tracks you saved" },
 ];
 
 export default function ArtworkExplorer({
@@ -210,14 +211,14 @@ export default function ArtworkExplorer({
       // Board entries are self-contained; adapt them to the tile shape.
       return board.items.map((i) => ({
         id: `board:${i.albumId}`,
-        trackId: i.albumId,
-        trackName: i.trackName || "",
         albumId: i.albumId,
         albumName: i.albumName || "",
         artistNames: i.artistNames || [],
         artistIds: [],
         releaseYear: "",
-        playlistName: board.name,
+        trackNames: [],
+        trackCount: i.trackCount || 0,
+        playlistNames: [board.name],
         uri: i.uri,
         url300: i.url300,
         url640: i.url640,
@@ -245,10 +246,10 @@ export default function ArtworkExplorer({
       out = out.filter((t) => {
         const s = semantic.get(t.albumId);
         const hay = [
-          t.trackName,
+          (t.trackNames || []).join(" "),
           t.albumName,
           t.artistNames.join(" "),
-          t.playlistName,
+          (t.playlistNames || []).join(" "),
           s ? s.description : "",
           s ? (s.subjects || []).join(" ") : "",
           s ? (s.topics || []).join(" ") : "",
@@ -305,6 +306,8 @@ export default function ArtworkExplorer({
       sorted.sort((a, b) =>
         (a.artistNames[0] || "").localeCompare(b.artistNames[0] || "")
       );
+    } else if (sort === "tracks") {
+      sorted.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0));
     }
     return sorted;
   }, [
@@ -533,7 +536,7 @@ export default function ArtworkExplorer({
       </Box>
 
       <Typography variant="caption" color="textSecondary" style={{ display: "block", marginTop: 8 }}>
-        {tiles.length} artwork{tiles.length === 1 ? "" : "s"}
+        {tiles.length} cover{tiles.length === 1 ? "" : "s"}
         {semanticRanking ? " · ranked by similarity" : ""}
       </Typography>
     </Box>

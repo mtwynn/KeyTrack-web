@@ -193,10 +193,26 @@ export default function ArtworkLightbox({
             {tile.artistNames.join(", ")}
           </Typography>
           <Typography variant="caption" color="textSecondary">
-            {tile.trackName}
-            {tile.releaseYear ? ` · ${tile.releaseYear}` : ""} · from{" "}
-            {tile.playlistName}
+            {tile.releaseYear ? `${tile.releaseYear} · ` : ""}
+            {tile.trackCount || 0} track{tile.trackCount === 1 ? "" : "s"} saved
+            {tile.playlistNames && tile.playlistNames.length
+              ? ` · ${tile.playlistNames.slice(0, 3).join(", ")}${
+                  tile.playlistNames.length > 3
+                    ? ` +${tile.playlistNames.length - 3}`
+                    : ""
+                }`
+              : ""}
           </Typography>
+          {tile.trackNames && tile.trackNames.length > 0 && (
+            <Typography
+              variant="caption"
+              color="textSecondary"
+              style={{ display: "block", marginTop: 4, fontStyle: "italic" }}
+            >
+              {tile.trackNames.slice(0, 4).join(" · ")}
+              {tile.trackNames.length > 4 ? " …" : ""}
+            </Typography>
+          )}
 
           <Box style={{ marginTop: 8, display: "flex", gap: 8 }}>
             <Tooltip title="Open in Spotify">

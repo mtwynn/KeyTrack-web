@@ -195,7 +195,7 @@ describe('buildArtworkIndex caching', () => {
     expect(idbGet).toHaveBeenCalled();
   });
 
-  it('keeps one tile per track but one cover entry per album', async () => {
+  it('collapses tracks from the same album into one cover', async () => {
     idbGet.mockResolvedValue({
       __v: 'snapA',
       data: { items: [track('t1', 'alb1'), track('t2', 'alb1'), track('t3', 'alb2')] },
@@ -206,9 +206,48 @@ describe('buildArtworkIndex caching', () => {
       playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
       includeLiked: false,
     });
-    expect(res.tiles).toHaveLength(3); // per track
-    expect(res.covers.size).toBe(2); // per album — what we pay to analyze
-    expect(res.covers.get('alb1').trackCount).toBe(2);
+    // Three tracks, two albums -> two tiles, not three. This is the whole point:
+    // every track on an EP shares one cover, so per-track tiles were duplicates.
+    expect(res.tiles).toHaveLength(2);
+    expect(res.covers.size).toBe(2);
+    const alb1 = res.tiles.find((t) => t.albumId === 'alb1');
+    expect(alb1.trackCount).toBe(2);
+    expect(alb1.trackNames).toEqual(['Track t1', 'Track t2']);
+  });
+
+  it('shows an album saved to several playlists only once globally', async () => {
+    idbGet.mockImplementation(() =>
+      Promise.resolve({ __v: 'snapA', data: { items: [track('t1', 'alb1')] } })
+    );
+    const res = await buildArtworkIndex({
+      spotifyWebApi: makeApi(),
+      spotifyRetry: passthru,
+      playlists: [
+        { id: 'p1', name: 'One', snapshot_id: 'snapA' },
+        { id: 'p2', name: 'Two', snapshot_id: 'snapA' },
+      ],
+      includeLiked: false,
+    });
+    expect(res.tiles).toHaveLength(1);
+    expect(res.tiles[0].playlistNames).toEqual(['One', 'Two']);
+    // ...but each playlist view still lists it.
+    expect(res.albums).toHaveLength(2);
+    expect(res.albums[0].tiles).toHaveLength(1);
+  });
+
+  it('reports album counts, not track counts, per crate', async () => {
+    idbGet.mockResolvedValue({
+      __v: 'snapA',
+      data: { items: [track('t1', 'alb1'), track('t2', 'alb1'), track('t3', 'alb2')] },
+    });
+    const res = await buildArtworkIndex({
+      spotifyWebApi: makeApi(),
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    expect(res.albums[0].uniqueCovers).toBe(2);
+    expect(res.albums[0].trackCount).toBe(3);
   });
 
   it('skips episodes, local files and removed tracks', async () => {

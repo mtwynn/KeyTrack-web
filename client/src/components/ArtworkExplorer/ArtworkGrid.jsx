@@ -131,7 +131,9 @@ const ArtworkTile = React.memo(function ArtworkTile({
     <button
       type="button"
       onClick={onOpen}
-      title={`${tile.trackName} — ${tile.artistNames.join(", ")}`}
+      title={`${tile.albumName} — ${tile.artistNames.join(", ")}${
+        tile.trackCount > 1 ? ` (${tile.trackCount} tracks)` : ""
+      }`}
       style={{
         width: size,
         height: size,
