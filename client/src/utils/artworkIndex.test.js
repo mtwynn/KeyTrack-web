@@ -1,4 +1,16 @@
-import { pickImages, imageWidth } from './artworkIndex';
+import {
+  pickImages,
+  imageWidth,
+  indexSignature,
+  clearArtworkIndexMemo,
+  buildArtworkIndex,
+} from './artworkIndex';
+import { idbGet, idbSet } from './crateStore';
+
+jest.mock('./crateStore', () => ({
+  idbGet: jest.fn(),
+  idbSet: jest.fn(() => Promise.resolve()),
+}));
 
 // Spotify's real CDN path prefixes encode the size, which is our fallback when
 // the width field comes back null.
@@ -71,5 +83,170 @@ describe('pickImages', () => {
     expect(pickImages([])).toBeNull();
     expect(pickImages(null)).toBeNull();
     expect(pickImages([{ width: 640 }])).toBeNull();
+  });
+});
+
+// --- caching behaviour: the reason opening the view was slow every time ---
+
+const track = (id, albumId) => ({
+  track: {
+    id,
+    type: 'track',
+    is_local: false,
+    name: `Track ${id}`,
+    uri: `spotify:track:${id}`,
+    artists: [{ id: `art_${albumId}`, name: 'Artist' }],
+    album: {
+      id: albumId,
+      name: `Album ${albumId}`,
+      release_date: '2024-01-01',
+      images: [{ url: U640, width: 640 }, { url: U300, width: 300 }],
+    },
+  },
+});
+
+const makeApi = () => ({
+  getPlaylistTracks: jest.fn(() =>
+    Promise.resolve({ items: [track('t1', 'alb1')], next: null })
+  ),
+  getMySavedTracks: jest.fn(() =>
+    Promise.resolve({ items: [], total: 0, next: null })
+  ),
+});
+const passthru = (fn) => fn();
+
+describe('buildArtworkIndex caching', () => {
+  beforeEach(() => {
+    clearArtworkIndexMemo();
+    idbGet.mockReset();
+    idbSet.mockReset();
+    idbSet.mockResolvedValue(undefined);
+  });
+
+  it('writes a freshly fetched crate back to the cache', async () => {
+    idbGet.mockResolvedValue(null); // nothing cached
+    const api = makeApi();
+    await buildArtworkIndex({
+      spotifyWebApi: api,
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    expect(api.getPlaylistTracks).toHaveBeenCalledTimes(1);
+    // The write-back is what stops it re-fetching on every future open.
+    const write = idbSet.mock.calls.find((c) => c[0] === 'sp:p1');
+    expect(write).toBeTruthy();
+    expect(write[1].__v).toBe('snapA');
+    expect(write[1].data.items).toHaveLength(1);
+  });
+
+  it('does not hit the network when the crate is cached at the same snapshot', async () => {
+    idbGet.mockResolvedValue({ __v: 'snapA', data: { items: [track('t1', 'alb1')] } });
+    const api = makeApi();
+    await buildArtworkIndex({
+      spotifyWebApi: api,
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    expect(api.getPlaylistTracks).not.toHaveBeenCalled();
+  });
+
+  it('refetches when the playlist was edited (snapshot changed)', async () => {
+    idbGet.mockResolvedValue({ __v: 'OLD', data: { items: [track('t1', 'alb1')] } });
+    const api = makeApi();
+    await buildArtworkIndex({
+      spotifyWebApi: api,
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'NEW' }],
+      includeLiked: false,
+    });
+    expect(api.getPlaylistTracks).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the session memo on reopen instead of rebuilding', async () => {
+    idbGet.mockResolvedValue({ __v: 'snapA', data: { items: [track('t1', 'alb1')] } });
+    const api = makeApi();
+    const args = {
+      spotifyWebApi: api,
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    };
+    const first = await buildArtworkIndex(args);
+    idbGet.mockClear();
+    const second = await buildArtworkIndex(args);
+    expect(second).toBe(first); // same object, no work redone
+    expect(idbGet).not.toHaveBeenCalled();
+  });
+
+  it('force rebuilds past the memo', async () => {
+    idbGet.mockResolvedValue({ __v: 'snapA', data: { items: [track('t1', 'alb1')] } });
+    const api = makeApi();
+    const args = {
+      spotifyWebApi: api,
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    };
+    await buildArtworkIndex(args);
+    idbGet.mockClear();
+    await buildArtworkIndex({ ...args, force: true });
+    expect(idbGet).toHaveBeenCalled();
+  });
+
+  it('keeps one tile per track but one cover entry per album', async () => {
+    idbGet.mockResolvedValue({
+      __v: 'snapA',
+      data: { items: [track('t1', 'alb1'), track('t2', 'alb1'), track('t3', 'alb2')] },
+    });
+    const res = await buildArtworkIndex({
+      spotifyWebApi: makeApi(),
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    expect(res.tiles).toHaveLength(3); // per track
+    expect(res.covers.size).toBe(2); // per album — what we pay to analyze
+    expect(res.covers.get('alb1').trackCount).toBe(2);
+  });
+
+  it('skips episodes, local files and removed tracks', async () => {
+    idbGet.mockResolvedValue({
+      __v: 'snapA',
+      data: {
+        items: [
+          track('t1', 'alb1'),
+          { track: null },
+          { track: { id: 'e1', type: 'episode', album: { id: 'x', images: [{ url: U640, width: 640 }] } } },
+          { track: { id: 'l1', is_local: true, album: { id: 'y', images: [{ url: U640, width: 640 }] } } },
+          { track: { id: 'n1', type: 'track', album: { id: 'z', images: [] } } },
+        ],
+      },
+    });
+    const res = await buildArtworkIndex({
+      spotifyWebApi: makeApi(),
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    expect(res.tiles).toHaveLength(1);
+  });
+});
+
+describe('indexSignature', () => {
+  it('changes when a playlist is edited', () => {
+    const a = indexSignature([{ id: 'p1', snapshot_id: 'x' }], false);
+    const b = indexSignature([{ id: 'p1', snapshot_id: 'y' }], false);
+    expect(a).not.toBe(b);
+  });
+
+  it('changes when a playlist is added', () => {
+    const a = indexSignature([{ id: 'p1', snapshot_id: 'x' }], false);
+    const b = indexSignature(
+      [{ id: 'p1', snapshot_id: 'x' }, { id: 'p2', snapshot_id: 'z' }],
+      false
+    );
+    expect(a).not.toBe(b);
   });
 });

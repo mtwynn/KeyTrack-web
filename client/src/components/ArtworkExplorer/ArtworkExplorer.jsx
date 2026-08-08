@@ -36,7 +36,7 @@ import {
 
 import ArtworkGrid from "./ArtworkGrid";
 import ArtworkLightbox from "./ArtworkLightbox";
-import { buildArtworkIndex, uniqueArtistIds } from "../../utils/artworkIndex";
+import { buildArtworkIndex, clearArtworkIndexMemo, uniqueArtistIds } from "../../utils/artworkIndex";
 import {
   loadVibeCache,
   runVibeAnalysis,
@@ -101,6 +101,7 @@ export default function ArtworkExplorer({
 
   const [boards, setBoards] = React.useState(loadBoards);
   const [boardPicker, setBoardPicker] = React.useState(null);
+  const [forceRebuild, setForceRebuild] = React.useState(0);
 
   const cancelRef = React.useRef({ current: false });
 
@@ -116,6 +117,7 @@ export default function ArtworkExplorer({
         playlists,
         onProgress: (p) => alive && setProgress({ kind: "index", ...p }),
         cancelRef: cancel,
+        force: forceRebuild,
       });
       if (!alive) return;
       setIndex(idx);
@@ -166,7 +168,7 @@ export default function ArtworkExplorer({
       cancel.current = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [forceRebuild]);
 
   // --- semantic pass (explicit, because it costs money) -------------------
   const runSemantic = async () => {
@@ -357,16 +359,13 @@ export default function ArtworkExplorer({
 
   // --- render -------------------------------------------------------------
   if (phase !== "ready" || !index) {
+    const p = progress;
+    const count = p && p.total ? ` ${p.done}/${p.total}` : "";
     return (
       <Box style={{ padding: 48, textAlign: "center" }}>
         <CircularProgress />
         <Typography variant="body2" style={{ marginTop: 16 }}>
-          {progress && progress.kind === "index"
-            ? `Reading crates… ${progress.done}/${progress.total} — ${progress.name}`
-            : "Building your artwork library…"}
-        </Typography>
-        <Typography variant="caption" color="textSecondary">
-          Uses the crate cache, so this costs no extra Spotify calls.
+          Loading albums{count}
         </Typography>
       </Box>
     );
@@ -394,6 +393,19 @@ export default function ArtworkExplorer({
             View all artwork
           </Button>
         )}
+        {view.kind === "albums" && (
+          <Tooltip title="Re-read playlists from Spotify (normally unnecessary — edited playlists refresh on their own)">
+            <Button
+              size="small"
+              onClick={() => {
+                clearArtworkIndexMemo();
+                setForceRebuild((n) => n + 1);
+              }}
+            >
+              Refresh
+            </Button>
+          </Tooltip>
+        )}
         <Button size="small" onClick={onExit}>
           Close
         </Button>
@@ -406,7 +418,7 @@ export default function ArtworkExplorer({
             value={(progress.done / Math.max(1, progress.total)) * 100}
           />
           <Typography variant="caption" color="textSecondary">
-            Analyzing colour &amp; mood… {progress.done}/{progress.total}
+            Analyzing colour &amp; mood {progress.done}/{progress.total}
           </Typography>
         </Box>
       )}

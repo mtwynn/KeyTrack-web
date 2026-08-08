@@ -13,11 +13,27 @@
 //            analyzing per-album instead of per-track cuts vision-API spend
 //            (and worker time) by ~3x with no visible difference.
 
-import { idbGet } from "./crateStore";
-import { throttleSlot } from "./spotifyLimiter";
+import { idbGet, idbSet } from "./crateStore";
 
 export const LIKED_SONGS_ID = "__liked__";
 export const LIKED_SONGS_NAME = "Liked Songs";
+
+// Session-level memo of the assembled index, so reopening the view is instant.
+// Keyed by every crate's snapshot_id, so any playlist edit rebuilds naturally.
+let memo = null;
+
+export function indexSignature(playlists, includeLiked) {
+  return (
+    (includeLiked ? "L|" : "") +
+    (playlists || [])
+      .map((p) => `${p.id}@${p.snapshot_id || ""}`)
+      .join(",")
+  );
+}
+
+export function clearArtworkIndexMemo() {
+  memo = null;
+}
 
 // Spotify returns up to three square sizes: 640, 300, 64. 640 is the ceiling —
 // there is no higher-resolution artwork available through the API.
@@ -107,13 +123,31 @@ async function cachedItems(playlistId, snapshotId) {
   return rec.data.items || null;
 }
 
+// Write a freshly-fetched crate back into the SAME cache PLLibrary reads, so a
+// crate is only ever pulled over the network once. Without this, any crate you
+// hadn't opened in the Library was re-fetched on every single visit.
+//
+// The shape must stay compatible with PLLibrary's `{ items, features }`, and we
+// must not clobber audio features it may already have stored.
+async function cacheItems(playlistId, snapshotId, items) {
+  if (!snapshotId) return; // nothing safe to version by
+  const existing = await idbGet(`sp:${playlistId}`);
+  const features =
+    existing && existing.data && existing.__v === snapshotId
+      ? existing.data.features || []
+      : [];
+  await idbSet(`sp:${playlistId}`, {
+    __v: snapshotId,
+    data: { items, features },
+  });
+}
+
 async function fetchPlaylistItems(spotifyWebApi, spotifyRetry, playlistId) {
   const items = [];
   let offset = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const off = offset;
-    await throttleSlot();
     const res = await spotifyRetry(() =>
       spotifyWebApi.getPlaylistTracks(playlistId, { limit: 100, offset: off })
     );
@@ -124,20 +158,40 @@ async function fetchPlaylistItems(spotifyWebApi, spotifyRetry, playlistId) {
   return items;
 }
 
-async function fetchLikedSongs(spotifyWebApi, spotifyRetry) {
-  const items = [];
-  let offset = 0;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
+const LIKED_CACHE_KEY = "sp:__liked__";
+
+// Liked Songs has no snapshot_id, so it used to be re-paginated in full on every
+// open — with a few thousand saved tracks that's dozens of sequential requests
+// and by far the slowest thing here.
+//
+// Instead, probe just the first page: `total` plus the newest `added_at` change
+// whenever you save or unsave anything, which makes them a reliable version
+// token. Unchanged means ONE request instead of N.
+async function loadLikedSongs(spotifyWebApi, spotifyRetry) {
+  const first = await spotifyRetry(() =>
+    spotifyWebApi.getMySavedTracks({ limit: 50, offset: 0 })
+  );
+  const newest = (first.items && first.items[0] && first.items[0].added_at) || "";
+  const version = `${first.total}:${newest}`;
+
+  const cached = await idbGet(LIKED_CACHE_KEY);
+  if (cached && cached.__v === version && cached.data && cached.data.items) {
+    return cached.data.items;
+  }
+
+  const items = [...(first.items || [])];
+  let offset = 50;
+  while (offset < (first.total || 0)) {
     const off = offset;
-    await throttleSlot();
     const res = await spotifyRetry(() =>
       spotifyWebApi.getMySavedTracks({ limit: 50, offset: off })
     );
     items.push(...(res.items || []));
-    if (!res.next) break;
+    if (!res.items || !res.items.length) break;
     offset += 50;
   }
+
+  await idbSet(LIKED_CACHE_KEY, { __v: version, data: { items, features: [] } });
   return items;
 }
 
@@ -147,8 +201,9 @@ async function fetchLikedSongs(spotifyWebApi, spotifyRetry) {
  * @param {object}   opts.spotifyWebApi  spotify-web-api-js instance
  * @param {function} opts.spotifyRetry   PLLibrary's 429-aware retry wrapper
  * @param {Array}    opts.playlists      raw playlist objects (App's `pllibrary`)
- * @param {function} opts.onProgress     ({ done, total, name }) per crate
+ * @param {function} opts.onProgress     ({ phase, done, total, name })
  * @param {object}   opts.cancelRef      { current: bool } to abort mid-run
+ * @param {boolean}  opts.force          rebuild even if the session memo hits
  * @returns {{ albums: Array, tiles: Array, covers: Map }}
  */
 export async function buildArtworkIndex({
@@ -158,7 +213,14 @@ export async function buildArtworkIndex({
   includeLiked = true,
   onProgress,
   cancelRef,
+  force = false,
 }) {
+  const signature = indexSignature(playlists, includeLiked);
+  // Closing Artwork Explorer unmounts it, so without this the entire index was
+  // rebuilt every time you reopened it in the same session. The signature
+  // covers every crate's snapshot_id, so an edited playlist still invalidates.
+  if (!force && memo && memo.signature === signature) return memo.index;
+
   const sources = [
     ...(includeLiked
       ? [{ id: LIKED_SONGS_ID, name: LIKED_SONGS_NAME, snapshot_id: null }]
@@ -173,35 +235,78 @@ export async function buildArtworkIndex({
   const albums = [];
   const tiles = [];
   const covers = new Map();
-  let done = 0;
 
-  for (const src of sources) {
-    if (cancelRef && cancelRef.current) break;
-    if (onProgress) onProgress({ done, total: sources.length, name: src.name });
+  // Phase 1 — read every crate from IndexedDB IN PARALLEL. These were awaited
+  // one at a time before, so 181 crates meant 181 sequential transactions even
+  // when every one was a cache hit. They're independent reads; fire them all.
+  if (onProgress) {
+    onProgress({ phase: "cache", done: 0, total: sources.length, name: "" });
+  }
+  const loaded = await Promise.all(
+    sources.map(async (src) => {
+      if (src.id === LIKED_SONGS_ID) return { src, items: null, miss: true };
+      try {
+        return { src, items: await cachedItems(src.id, src.snapshot_id) };
+      } catch (e) {
+        return { src, items: null };
+      }
+    })
+  );
+  loaded.forEach((r) => {
+    if (!r.items) r.miss = true;
+  });
 
-    let items = null;
-    try {
-      if (src.id === LIKED_SONGS_ID) {
-        // Liked Songs has no snapshot_id, so it can't be safely cache-keyed by
-        // version — always read it fresh.
-        items = await fetchLikedSongs(spotifyWebApi, spotifyRetry);
-      } else {
-        items = await cachedItems(src.id, src.snapshot_id);
-        if (!items) {
-          items = await fetchPlaylistItems(
+  // Phase 2 — only the misses touch the network. Everything is globally paced
+  // by spotifyRetry/throttleSlot, so a little concurrency here just keeps the
+  // pipe full rather than raising the request rate.
+  const misses = loaded.filter((r) => r.miss);
+  let fetched = 0;
+  if (misses.length && onProgress) {
+    onProgress({ phase: "fetch", done: 0, total: misses.length, name: "" });
+  }
+
+  const FETCH_CONCURRENCY = 4;
+  let cursor = 0;
+  const fetchWorker = async () => {
+    while (cursor < misses.length) {
+      if (cancelRef && cancelRef.current) return;
+      const rec = misses[cursor++];
+      try {
+        if (rec.src.id === LIKED_SONGS_ID) {
+          rec.items = await loadLikedSongs(spotifyWebApi, spotifyRetry);
+        } else {
+          rec.items = await fetchPlaylistItems(
             spotifyWebApi,
             spotifyRetry,
-            src.id
+            rec.src.id
           );
+          // Write back so this crate is a cache hit next time — and for the
+          // Library too, since it's the same cache.
+          await cacheItems(rec.src.id, rec.src.snapshot_id, rec.items);
         }
+      } catch (e) {
+        // A single unreadable crate (deleted, region-locked, permissions) must
+        // not abort the whole index.
+        console.warn("Artwork: skipped crate", rec.src.name, e && e.message);
+        rec.items = null;
       }
-    } catch (e) {
-      // A single unreadable crate (deleted, region-locked, permissions) must
-      // not abort the whole index.
-      console.warn("Artwork: skipped crate", src.name, e && e.message);
-      items = null;
+      fetched += 1;
+      if (onProgress) {
+        onProgress({
+          phase: "fetch",
+          done: fetched,
+          total: misses.length,
+          name: rec.src.name,
+        });
+      }
     }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(FETCH_CONCURRENCY, misses.length) }, fetchWorker)
+  );
 
+  // Phase 3 — assemble, in the original crate order so the UI is stable.
+  loaded.forEach(({ src, items }) => {
     const crateTiles = [];
     (items || []).forEach((item) => {
       if (!usableTrack(item)) return;
@@ -236,13 +341,16 @@ export async function buildArtworkIndex({
       trackCount: crateTiles.length,
       uniqueCovers: new Set(crateTiles.map((t) => t.albumId)).size,
     });
-
-    done += 1;
-    if (onProgress) onProgress({ done, total: sources.length, name: src.name });
-  }
+  });
 
   // Empty crates would render as dead tiles in the Albums grid.
-  return { albums: albums.filter((a) => a.trackCount > 0), tiles, covers };
+  const index = {
+    albums: albums.filter((a) => a.trackCount > 0),
+    tiles,
+    covers,
+  };
+  memo = { signature, index };
+  return index;
 }
 
 // Unique artist ids across the index, for the genre enrichment pass.
