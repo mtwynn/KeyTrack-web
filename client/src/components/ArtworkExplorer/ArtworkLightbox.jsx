@@ -22,6 +22,7 @@ import {
   DeleteOutline,
   FindReplace,
   OpenInNew,
+  ZoomOutMap,
 } from "@material-ui/icons";
 
 function PaletteStrip({ palette }) {
@@ -121,7 +122,7 @@ export default function ArtworkLightbox({
   const genres = genresFor ? genresFor(tile) : [];
 
   return (
-    <Dialog open fullWidth maxWidth="lg" onClose={onClose}>
+    <Dialog open fullWidth maxWidth="xl" onClose={onClose}>
       <Box style={{ display: "flex", flexWrap: "wrap", position: "relative" }}>
         <IconButton
           onClick={onClose}
@@ -134,13 +135,19 @@ export default function ArtworkLightbox({
         {/* Image side */}
         <Box
           style={{
-            flex: "1 1 420px",
+            flex: "1 1 560px",
             background: "#000",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             position: "relative",
-            minHeight: 380,
+            // A fixed pane height gives the image something to fill. Without
+            // it the <img> only ever gets its natural size, which is why a
+            // 640px cover used to sit tiny in the middle of a huge black box.
+            height: "min(82vh, 860px)",
+            minHeight: 360,
+            padding: 8,
+            boxSizing: "border-box",
           }}
         >
           <IconButton
@@ -154,10 +161,12 @@ export default function ArtworkLightbox({
             src={tile.url640}
             alt={tile.albumName}
             style={{
-              maxWidth: "100%",
-              maxHeight: "78vh",
-              display: "block",
+              // width/height 100% + contain scales UP to fill the pane while
+              // preserving the square aspect; max-* alone never upscales.
+              width: "100%",
+              height: "100%",
               objectFit: "contain",
+              display: "block",
             }}
           />
           <IconButton
@@ -170,7 +179,15 @@ export default function ArtworkLightbox({
         </Box>
 
         {/* Metadata side */}
-        <Box style={{ flex: "1 1 320px", padding: 20, maxWidth: 460 }}>
+        <Box
+          style={{
+            flex: "1 1 340px",
+            padding: 20,
+            maxWidth: 440,
+            maxHeight: "min(82vh, 860px)",
+            overflowY: "auto",
+          }}
+        >
           <Typography variant="h6">{tile.albumName}</Typography>
           <Typography variant="body2" color="textSecondary">
             {tile.artistNames.join(", ")}
@@ -188,6 +205,14 @@ export default function ArtworkLightbox({
                 onClick={() => window.open(tile.uri, "_blank")}
               >
                 <OpenInNew fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Open the full-size image file (640×640 — Spotify's maximum)">
+              <IconButton
+                size="small"
+                onClick={() => window.open(tile.url640, "_blank", "noopener")}
+              >
+                <ZoomOutMap fontSize="small" />
               </IconButton>
             </Tooltip>
             <Tooltip title="Find visually similar artwork">

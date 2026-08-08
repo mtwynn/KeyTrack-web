@@ -21,14 +21,40 @@ export const LIKED_SONGS_NAME = "Liked Songs";
 
 // Spotify returns up to three square sizes: 640, 300, 64. 640 is the ceiling —
 // there is no higher-resolution artwork available through the API.
-function pickImages(images) {
+//
+// Width can come back null on some responses, which would collapse the sort and
+// silently hand the grid (or worse, the lightbox) a 64px thumbnail. When widths
+// are missing we fall back to Spotify's own CDN path prefix, which encodes the
+// size, and finally to array order (Spotify lists largest first).
+const SIZE_BY_PREFIX = [
+  ["ab67616d0000b273", 640],
+  ["ab67616d00001e02", 300],
+  ["ab67616d00004851", 64],
+];
+
+export function imageWidth(img) {
+  if (img && typeof img.width === "number" && img.width > 0) return img.width;
+  const url = (img && img.url) || "";
+  const hit = SIZE_BY_PREFIX.find(([prefix]) => url.includes(prefix));
+  return hit ? hit[1] : 0;
+}
+
+export function pickImages(images) {
   if (!images || !images.length) return null;
-  const sorted = [...images].sort((a, b) => (b.width || 0) - (a.width || 0));
-  const large = sorted[0];
+  const known = images.filter((i) => i && i.url);
+  if (!known.length) return null;
+
+  const sorted = [...known].sort((a, b) => imageWidth(b) - imageWidth(a));
+  const largest = sorted[0];
+  // `find` walks widest -> narrowest, so this takes the LARGEST image that
+  // still fits under the cap, never the smallest available.
+  const atMost = (cap) =>
+    (sorted.find((i) => imageWidth(i) <= cap) || largest).url;
+
   return {
-    url640: large.url,
-    url300: (sorted.find((i) => (i.width || 0) <= 400) || large).url,
-    url64: (sorted.find((i) => (i.width || 0) <= 100) || large).url,
+    url640: largest.url,
+    url300: atMost(400),
+    url64: atMost(100),
   };
 }
 
