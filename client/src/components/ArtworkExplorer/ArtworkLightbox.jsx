@@ -238,7 +238,7 @@ export default function ArtworkLightbox({
                 canFindSimilar
                   ? "Find visually similar artwork"
                   : semanticAvailable
-                  ? "Run 'Analyze artwork' first — this cover hasn't been analyzed yet"
+                  ? "Add smart tags first — this cover hasn't been tagged yet"
                   : "Needs a Gemini API key on the backend"
               }
             >
