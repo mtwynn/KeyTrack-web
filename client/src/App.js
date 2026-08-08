@@ -58,6 +58,7 @@ import {
   Star,
   Tune,
   VisibilityOff,
+  PhotoLibrary,
   VolumeDown,
   VolumeOff,
   VolumeUp,
@@ -71,6 +72,8 @@ import SetBuilder from './components/PLLibrary/SetBuilder';
 import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
 import SpotifyIcon from './components/SpotifyIcon';
+import ArtworkExplorer from './components/ArtworkExplorer/ArtworkExplorer';
+import { spotifyRetry } from './utils/spotifyLimiter';
 import { scWidgetSrc, scTrackUrl, loadScWidgetApi } from './utils/soundcloudCrates';
 import { ScAnalysisProvider } from './components/SoundCloud/ScAnalysis';
 import { LOADER_STYLES } from './components/PLLibrary/LoaderArt';
@@ -352,6 +355,9 @@ class App extends React.Component {
       navDrawerOpen: false,
       loadingPlaylists: false,
       showHiddenCrates: false,
+      // Artwork Explorer: browse every cover in the library as a visual
+      // reference board. Lazily mounted — it does real work on open.
+      showArtwork: false,
       // Library view filter driven by the "Favorites" sidebar item.
       favoritesOnly: false,
       // KeyTrack setting: hide likely DJ sets/mixes (>~6min) from SoundCloud
@@ -415,6 +421,7 @@ class App extends React.Component {
     this.exitHidden = this.exitHidden.bind(this);
     this.openLibrary = this.openLibrary.bind(this);
     this.openFavorites = this.openFavorites.bind(this);
+    this.openArtworkExplorer = this.openArtworkExplorer.bind(this);
     this.updatePlayer = this.updatePlayer.bind(this);
     this.playSoundcloudTrack = this.playSoundcloudTrack.bind(this);
     this.refreshAccessToken = this.refreshAccessToken.bind(this);
@@ -701,11 +708,27 @@ class App extends React.Component {
     this.setState({
       showHiddenCrates: true,
       favoritesOnly: false,
+      showArtwork: false,
     });
   }
 
   exitHidden() {
     this.setState({ showHiddenCrates: false });
+  }
+
+  // Sidebar "Artwork Explorer". Needs the playlist list, so it loads the
+  // library first exactly like Favorites/Hidden do.
+  async openArtworkExplorer() {
+    this.setState({ drawerOpen: false, navDrawerOpen: false });
+    if (!this.state.pllibrary) {
+      await this.getUserPlaylists();
+    }
+    this.setState({
+      showArtwork: true,
+      showPlaylists: false,
+      showHiddenCrates: false,
+      favoritesOnly: false,
+    });
   }
 
   // --- SoundCloud connection ---
@@ -824,6 +847,7 @@ class App extends React.Component {
       showPlaylists: true,
       favoritesOnly: false,
       showHiddenCrates: false,
+      showArtwork: false,
     });
   }
 
@@ -837,6 +861,7 @@ class App extends React.Component {
       showPlaylists: true,
       favoritesOnly: true,
       showHiddenCrates: false,
+      showArtwork: false,
     });
   }
 
@@ -1111,6 +1136,13 @@ class App extends React.Component {
         onClick: this.openHiddenCrates,
         active: this.state.showHiddenCrates,
       },
+      {
+        key: 'artwork',
+        icon: <PhotoLibrary />,
+        label: 'Artwork Explorer',
+        onClick: this.openArtworkExplorer,
+        active: this.state.showArtwork,
+      },
     ];
 
     // Shared between the persistent desktop sidebar and the mobile nav drawer.
@@ -1274,7 +1306,15 @@ class App extends React.Component {
           </Drawer>
 
           <Box style={{ flex: 1, minWidth: 0 }}>
-            {this.state.showPlaylists ? (
+            {this.state.showArtwork ? (
+              <ArtworkExplorer
+                spotifyWebApi={spotifyWebApi}
+                spotifyRetry={spotifyRetry}
+                playlists={this.state.pllibrary || []}
+                backendBase={backendBase}
+                onExit={() => this.setState({ showArtwork: false })}
+              />
+            ) : this.state.showPlaylists ? (
               <FadeIn transitionDuration={400}>
                 <PLLibrary
                   token={this.state.access_token}

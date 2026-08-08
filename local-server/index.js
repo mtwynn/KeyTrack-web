@@ -131,7 +131,21 @@ const app = express();
 app
   .use(express.static(__dirname + '/public'))
   .use(cors())
+  .use(express.json({ limit: '1mb' }))
   .use(cookieParser());
+
+// express.json()'s default error path renders an HTML stack trace, which leaks
+// absolute server paths. These are JSON APIs, so answer malformed bodies with
+// JSON and nothing else.
+app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.parse.failed') {
+    return res.status(400).send({ error: 'invalid_json' });
+  }
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).send({ error: 'payload_too_large' });
+  }
+  return next(err);
+});
 
 app.get('/spotify/login', function (req, res) {
   if (spotifyCredentialsMissing()) {
@@ -715,6 +729,209 @@ app.get(
     );
   })
 );
+
+// ---------------------------------------------------------------------------
+// Artwork Explorer — Gemini vision tagging + text embeddings
+//
+// Tier 2 of the artwork "vibe" engine. Tier 1 (colour/mood maths) runs entirely
+// in the browser for free; this adds what pixels alone can't give you: what the
+// image is OF. Gemini returns structured tags/topics/style/mood plus a short
+// description, and that description is then embedded so the client can do
+// semantic free-text search ("dreamy pastel portrait") and find-similar.
+//
+// The API key lives HERE, never in the React bundle — anything shipped to the
+// client is world-readable. Set GEMINI_API_KEY as a Heroku config var.
+//
+// Analysis is keyed by album on the client, so each unique cover is only ever
+// sent once; repeat listens and duplicate tracks cost nothing.
+// ---------------------------------------------------------------------------
+const GEMINI_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const GEMINI_VISION_MODEL = process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash-lite';
+const GEMINI_EMBED_MODEL = 'gemini-embedding-001';
+// Matryoshka truncation: 768 dims keeps semantic quality while making the
+// client-side vector store ~4x smaller than the 3072 default.
+const EMBED_DIMS = 768;
+// Heroku kills a request at 30s, so a batch must comfortably finish inside it.
+const MAX_BATCH = 8;
+
+const VISION_PROMPT = [
+  'You are cataloguing album cover artwork for a musician building a visual',
+  'reference library. Describe ONLY what is visible in the image.',
+  'Return strict JSON. Be specific and concrete: prefer "neon-lit rainy street"',
+  'over "cool image". Do not mention the album, artist, or any text you cannot',
+  'clearly read.',
+].join(' ');
+
+// Structured output — guarantees parseable JSON instead of prose we'd have to
+// regex, and keeps the tag vocabulary consistent across the whole library.
+const VISION_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    description: { type: 'STRING' },
+    subjects: { type: 'ARRAY', items: { type: 'STRING' } },
+    topics: { type: 'ARRAY', items: { type: 'STRING' } },
+    style: { type: 'ARRAY', items: { type: 'STRING' } },
+    mood: { type: 'ARRAY', items: { type: 'STRING' } },
+    hasFace: { type: 'BOOLEAN' },
+    hasText: { type: 'BOOLEAN' },
+    medium: { type: 'STRING' },
+  },
+  required: ['description', 'subjects', 'topics', 'style', 'mood', 'medium'],
+};
+
+const geminiConfigured = () => !!GEMINI_KEY;
+const GEMINI_HELP =
+  'Gemini is not configured. Set GEMINI_API_KEY (from https://aistudio.google.com/apikey) ' +
+  'on this server and restart. Artwork Explorer still works without it — colour/mood ' +
+  'analysis runs in the browser — but semantic tags and search are disabled.';
+
+if (!geminiConfigured()) {
+  console.warn('[keytrack] NOTE: ' + GEMINI_HELP);
+}
+
+async function geminiJson(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = new Error((body && body.error && body.error.message) || 'gemini_error');
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  return body;
+}
+
+// Fetch the cover and inline it as base64. Only Spotify's CDN is allowed —
+// otherwise this endpoint would be an open proxy that fetches arbitrary URLs
+// on our behalf (SSRF).
+const ALLOWED_IMAGE_HOSTS = /(^|\.)(scdn\.co|spotifycdn\.com)$/;
+
+async function fetchImageBase64(url) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'https:' || !ALLOWED_IMAGE_HOSTS.test(parsed.hostname)) {
+    throw new Error('image_host_not_allowed');
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('image_fetch_failed');
+  const buf = Buffer.from(await res.arrayBuffer());
+  return {
+    mime: res.headers.get('content-type') || 'image/jpeg',
+    data: buf.toString('base64'),
+  };
+}
+
+async function analyzeOneImage(url) {
+  const img = await fetchImageBase64(url);
+  const body = await geminiJson(
+    `${GEMINI_BASE}/${GEMINI_VISION_MODEL}:generateContent?key=${GEMINI_KEY}`,
+    {
+      contents: [
+        {
+          parts: [
+            { text: VISION_PROMPT },
+            { inline_data: { mime_type: img.mime, data: img.data } },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: VISION_SCHEMA,
+        temperature: 0.1,
+      },
+    }
+  );
+  const text =
+    body &&
+    body.candidates &&
+    body.candidates[0] &&
+    body.candidates[0].content &&
+    body.candidates[0].content.parts &&
+    body.candidates[0].content.parts[0] &&
+    body.candidates[0].content.parts[0].text;
+  if (!text) throw new Error('gemini_empty_response');
+  return JSON.parse(text);
+}
+
+// POST { images: [{ albumId, url }] } -> { results: [{ albumId, ok, ...tags }] }
+// Per-image failures are reported inline rather than failing the batch, so one
+// bad cover never wastes the whole request.
+app.post('/artwork/analyze', async (req, res) => {
+  if (!geminiConfigured()) {
+    return res.status(503).send({ error: 'gemini_not_configured', error_description: GEMINI_HELP });
+  }
+  const images = Array.isArray(req.body && req.body.images) ? req.body.images : [];
+  if (!images.length) return res.status(400).send({ error: 'images_required' });
+  if (images.length > MAX_BATCH) {
+    return res.status(400).send({ error: 'batch_too_large', max: MAX_BATCH });
+  }
+
+  const results = await Promise.all(
+    images.map(async (img) => {
+      if (!img || !img.albumId || !img.url) {
+        return { albumId: img && img.albumId, ok: false, error: 'bad_request' };
+      }
+      try {
+        const data = await analyzeOneImage(img.url);
+        return { albumId: img.albumId, ok: true, ...data };
+      } catch (e) {
+        return {
+          albumId: img.albumId,
+          ok: false,
+          error: e.message || 'analyze_failed',
+          status: e.status,
+        };
+      }
+    })
+  );
+
+  // Surface a quota/rate-limit hit so the client can back off instead of
+  // burning through the rest of the library against a closed door.
+  const rateLimited = results.some((r) => r.status === 429);
+  res.send({ results, rateLimited });
+});
+
+// POST { texts: [...] } -> { embeddings: [[...]] }
+// Embeds Gemini's descriptions so the client can rank by meaning.
+app.post('/artwork/embed', async (req, res) => {
+  if (!geminiConfigured()) {
+    return res.status(503).send({ error: 'gemini_not_configured', error_description: GEMINI_HELP });
+  }
+  const texts = Array.isArray(req.body && req.body.texts) ? req.body.texts : [];
+  if (!texts.length) return res.status(400).send({ error: 'texts_required' });
+  if (texts.length > 100) return res.status(400).send({ error: 'batch_too_large', max: 100 });
+
+  try {
+    const body = await geminiJson(
+      `${GEMINI_BASE}/${GEMINI_EMBED_MODEL}:batchEmbedContents?key=${GEMINI_KEY}`,
+      {
+        requests: texts.map((t) => ({
+          model: `models/${GEMINI_EMBED_MODEL}`,
+          content: { parts: [{ text: String(t).slice(0, 4000) }] },
+          outputDimensionality: EMBED_DIMS,
+        })),
+      }
+    );
+    res.send({
+      embeddings: (body.embeddings || []).map((e) => e.values || []),
+      dims: EMBED_DIMS,
+    });
+  } catch (e) {
+    res
+      .status(e.status || 500)
+      .send({ error: e.message || 'embed_failed' });
+  }
+});
+
+// Lets the client show semantic features as available/unavailable without
+// having to fire a real request and interpret the failure.
+app.get('/artwork/status', (req, res) => {
+  res.send({ semanticAvailable: geminiConfigured(), visionModel: GEMINI_VISION_MODEL });
+});
 
 console.log('Listening on 8888');
 app.listen(process.env.PORT || 8888);
