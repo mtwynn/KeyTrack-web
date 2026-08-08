@@ -110,6 +110,16 @@ Listen to **both sources in the browser** from the same bottom bar: Spotify trac
 
 ---
 
+### 🖼️ Dig through your artwork, not just your music
+
+**Artwork Explorer** turns every cover in your library into a visual reference board — for when you're making art for your own release and want to see what the music you love actually *looks* like. Each playlist becomes an **album** of its covers, or flatten **every playlist at once** and browse the lot. Open any piece full-view to read its **colour palette and copy the hex codes straight out**.
+
+Search it like you'd describe it. KeyTrack analyzes each cover's **colour and mood** — dark, neon, pastel, monochrome, minimal, high-contrast — right in your browser, for free. Add a Gemini key and it also reads **what's actually in the picture**, so you can search *"foggy neon city at night"*, filter by **genre**, or point at a cover you love and ask for **more like this**. Collect the keepers onto **mood boards**, one per release.
+
+It costs nothing extra to run: covers come from the crate cache the library already keeps, and each unique cover is analyzed once and remembered.
+
+---
+
 ## 🤖 How this app was built
 
 Any work that I did with Claude will have a `🤖 Generated with Claude Code` footer on its pull requests. All the features on this app from a product perspective are my own ideas or ideas that I have evolved from using similar DJ and music software, or pain points that I wanted to solve for myself as a DJ and artist.
@@ -198,6 +208,26 @@ npm start                   # serves on http://localhost:3000
 1. Open `http://localhost:3000`
 2. Click **Log in with Spotify** (the **Key Calculator** works without logging in)
 3. Open your **Library**, dig through crates by key / BPM / energy, build sets, and play tracks in-browser
+4. Open **Artwork Explorer** to browse your covers as a visual reference board
+
+---
+
+### Optional — semantic artwork search
+
+Artwork Explorer's colour/mood analysis runs free in the browser with no setup.
+To also search covers by **content** ("foggy neon city at night") and use
+find-similar, add a [Gemini API key](https://aistudio.google.com/apikey) to the
+backend:
+
+```bash
+# local-server/.env
+GEMINI_API_KEY=your_gemini_api_key
+```
+
+In production set it as a Heroku config var. The key stays server-side — it must
+never reach the React bundle, which is world-readable. Each unique cover is
+analyzed once and cached permanently, so the cost is one-time (a few dollars for
+a large library; the free tier works but caps at ~1,000 requests/day).
 
 ---
 

@@ -1,5 +1,31 @@
 const changelog = [
   {
+    version: "1.27.0",
+    date: "08/08/26",
+    changes: [
+      {
+        type: "feature",
+        desc: "Artwork Explorer: browse every cover in your library as a visual reference board. Each playlist opens as an album of its covers, or flatten every playlist into one view. Full-view shows the artwork large with its colour palette — click any swatch to copy the hex.",
+      },
+      {
+        type: "feature",
+        desc: "Covers are analyzed for colour and mood right in your browser, so you can filter by vibe — dark, neon, pastel, monochrome, minimal, high-contrast, warm, cool — and sort by brightness, hue or saturation.",
+      },
+      {
+        type: "feature",
+        desc: "Search your artwork by what's actually in it (\"foggy neon city at night\") and point at any cover to find visually similar ones. Also filter by genre, pulled from each artist.",
+      },
+      {
+        type: "feature",
+        desc: "Save covers to named mood boards to collect references for a specific release.",
+      },
+      {
+        type: "improvement",
+        desc: "One tile per album rather than per track, so a 12-track EP shows its cover once instead of twelve times, and an album saved to several playlists appears once in the flattened view.",
+      },
+    ],
+  },
+  {
     version: "1.26.0",
     date: "06/10/26",
     changes: [

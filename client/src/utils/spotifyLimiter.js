@@ -49,3 +49,37 @@ export function throttleSlot() {
   const wait = slot - now;
   return wait > 0 ? new Promise((r) => setTimeout(r, wait)) : Promise.resolve();
 }
+
+// Standalone retry wrapper combining the pacer, the breaker and 429 backoff.
+// PLLibrary has its own copy that also drives a "rate limited" banner in
+// component state; this one is for callers outside React state (Artwork
+// Explorer), so the shared breaker still protects every request either way.
+export async function spotifyRetry(fn, attempts = 3) {
+  const cd = breakerWaitMs();
+  if (cd > 0) await new Promise((r) => setTimeout(r, cd));
+
+  for (let i = 0; ; i++) {
+    try {
+      await throttleSlot();
+      const res = await fn();
+      noteSuccess();
+      return res;
+    } catch (e) {
+      const status = (e && e.status) || (e && e.response && e.response.status);
+      if (status === 429) {
+        note429();
+        if (i >= attempts) throw e;
+        // Spotify often omits Retry-After, so fall back to exponential backoff.
+        const retryAfter = Number(
+          (e && e.headers && e.headers['retry-after']) ||
+            (e && e.response && e.response.headers && e.response.headers['retry-after']) ||
+            0
+        );
+        const wait = retryAfter > 0 ? retryAfter * 1000 : Math.min(30000, 1000 * 2 ** i);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
