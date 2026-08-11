@@ -845,7 +845,12 @@ let PLLibrary = (props) => {
       const items = await fetchAllTracks(uid);
       const features = await fetchFeatures(items.map((t) => t.track.id));
       return { items, features };
-    });
+    }).then((data) => ({
+      // Sanitize on the way out so every consumer sees the same guaranteed
+      // shape, whether the data came from the network or off disk.
+      items: (data.items || []).filter((it) => it && it.track && it.track.id),
+      features: data.features || [],
+    }));
 
   // A SoundCloud crate's full track list, cached by uid. Playlists persist
   // (keyed by track-count); likes/reposts stay in-memory only (their counts grow
@@ -958,7 +963,11 @@ let PLLibrary = (props) => {
           c.raw && c.raw.snapshot_id
         );
         feats.forEach((f) => f && featById.set(f.id, f));
+        // Guard against a cache entry that predates the current filtering (or
+        // any future producer that isn't as careful): a removed track comes
+        // back as `{ track: null }` and would throw on `.id` here.
         items.forEach((item) => {
+          if (!item || !item.track || !item.track.id) return;
           if (seenSp.has(item.track.id)) return;
           seenSp.add(item.track.id);
           spotifyItems.push(item);

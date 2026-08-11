@@ -4,12 +4,17 @@ import {
   indexSignature,
   clearArtworkIndexMemo,
   buildArtworkIndex,
+  repairArtworkCacheDamage,
 } from './artworkIndex';
-import { idbGet, idbSet } from './crateStore';
+import { idbGet, idbSet, idbGetAll, idbDelete } from './crateStore';
 
 jest.mock('./crateStore', () => ({
+  CRATE_STORE: 'crates',
+  ARTWORK_STORE: 'artwork',
   idbGet: jest.fn(),
   idbSet: jest.fn(() => Promise.resolve()),
+  idbGetAll: jest.fn(() => Promise.resolve(new Map())),
+  idbDelete: jest.fn(() => Promise.resolve()),
 }));
 
 // Spotify's real CDN path prefixes encode the size, which is our fallback when
@@ -133,8 +138,9 @@ describe('buildArtworkIndex caching', () => {
       includeLiked: false,
     });
     expect(api.getPlaylistTracks).toHaveBeenCalledTimes(1);
-    // The write-back is what stops it re-fetching on every future open.
-    const write = idbSet.mock.calls.find((c) => c[0] === 'sp:p1');
+    // The write-back is what stops it re-fetching on every future open. It goes
+    // to artwork's OWN namespace — writing `sp:` corrupted PLLibrary's cache.
+    const write = idbSet.mock.calls.find((c) => c[0] === 'art:p1');
     expect(write).toBeTruthy();
     expect(write[1].__v).toBe('snapA');
     expect(write[1].data.items).toHaveLength(1);
@@ -287,5 +293,169 @@ describe('indexSignature', () => {
       false
     );
     expect(a).not.toBe(b);
+  });
+});
+
+// --- regression: Artwork Explorer must not corrupt PLLibrary's crate cache ---
+
+describe('crate cache isolation', () => {
+  beforeEach(() => {
+    clearArtworkIndexMemo();
+    idbGet.mockReset();
+    idbSet.mockReset();
+    idbSet.mockResolvedValue(undefined);
+  });
+
+  it('never writes to the sp: namespace PLLibrary owns', async () => {
+    idbGet.mockResolvedValue(null);
+    await buildArtworkIndex({
+      spotifyWebApi: makeApi(),
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    const spWrites = idbSet.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].startsWith('sp:')
+    );
+    // Writing a featureless {items} into sp: crashed the Library on removed
+    // tracks AND starved it of audio features (the snapshot matched, so it
+    // reused our entry and never refetched).
+    expect(spWrites).toHaveLength(0);
+    expect(
+      idbSet.mock.calls.some((c) => c[0] === 'art:p1')
+    ).toBe(true);
+  });
+
+  it('strips removed tracks before they can reach any cache', async () => {
+    idbGet.mockResolvedValue(null);
+    const api = {
+      getPlaylistTracks: jest.fn(() =>
+        Promise.resolve({
+          items: [track('t1', 'alb1'), { track: null }, { track: { id: null } }],
+          next: null,
+        })
+      ),
+      getMySavedTracks: jest.fn(() => Promise.resolve({ items: [], total: 0 })),
+    };
+    await buildArtworkIndex({
+      spotifyWebApi: api,
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    const write = idbSet.mock.calls.find((c) => c[0] === 'art:p1');
+    expect(write[1].data.items).toHaveLength(1);
+    // This is the exact expression that threw in PLLibrary.
+    expect(() =>
+      write[1].data.items.forEach((it) => it.track.id)
+    ).not.toThrow();
+  });
+
+  it('still reads PLLibrary cache when it is warm', async () => {
+    idbGet.mockImplementation((key) =>
+      Promise.resolve(
+        key === 'sp:p1'
+          ? { __v: 'snapA', data: { items: [track('t1', 'alb1')], features: [] } }
+          : null
+      )
+    );
+    const api = makeApi();
+    const res = await buildArtworkIndex({
+      spotifyWebApi: api,
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    expect(api.getPlaylistTracks).not.toHaveBeenCalled();
+    expect(res.tiles).toHaveLength(1);
+  });
+
+  it('falls back to its own cache when PLLibrary has nothing', async () => {
+    idbGet.mockImplementation((key) =>
+      Promise.resolve(
+        key === 'art:p1'
+          ? { __v: 'snapA', data: { items: [track('t1', 'alb1')] } }
+          : null
+      )
+    );
+    const api = makeApi();
+    await buildArtworkIndex({
+      spotifyWebApi: api,
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    expect(api.getPlaylistTracks).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes a poisoned cache entry on read', async () => {
+    idbGet.mockImplementation((key) =>
+      Promise.resolve(
+        key === 'sp:p1'
+          ? {
+              __v: 'snapA',
+              data: { items: [track('t1', 'alb1'), { track: null }], features: [] },
+            }
+          : null
+      )
+    );
+    const res = await buildArtworkIndex({
+      spotifyWebApi: makeApi(),
+      spotifyRetry: passthru,
+      playlists: [{ id: 'p1', name: 'One', snapshot_id: 'snapA' }],
+      includeLiked: false,
+    });
+    expect(res.tiles).toHaveLength(1);
+  });
+});
+
+describe('repairArtworkCacheDamage', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    idbGetAll.mockReset();
+    idbDelete.mockReset();
+    idbDelete.mockResolvedValue(undefined);
+  });
+
+  const good = { __v: 's', data: { items: [track('t1', 'a1')], features: [{ id: 't1' }] } };
+  const noFeatures = { __v: 's', data: { items: [track('t1', 'a1')], features: [] } };
+  const nullTrack = {
+    __v: 's',
+    data: { items: [track('t1', 'a1'), { track: null }], features: [{ id: 't1' }] },
+  };
+
+  it('deletes entries poisoned by the earlier build, keeps healthy ones', async () => {
+    idbGetAll.mockResolvedValue(
+      new Map([
+        ['sp:good', good],
+        ['sp:nofeat', noFeatures],
+        ['sp:nulltrack', nullTrack],
+      ])
+    );
+    const n = await repairArtworkCacheDamage();
+    expect(n).toBe(2);
+    const deleted = idbDelete.mock.calls[0][0];
+    expect(deleted).toEqual(expect.arrayContaining(['sp:nofeat', 'sp:nulltrack']));
+    expect(deleted).not.toContain('sp:good');
+  });
+
+  it('leaves non-sp keys alone', async () => {
+    idbGetAll.mockResolvedValue(new Map([['art:p1', { __v: 's', data: { items: [] } }]]));
+    expect(await repairArtworkCacheDamage()).toBe(0);
+  });
+
+  it('runs only once', async () => {
+    idbGetAll.mockResolvedValue(new Map([['sp:nofeat', noFeatures]]));
+    expect(await repairArtworkCacheDamage()).toBe(1);
+    idbGetAll.mockClear();
+    expect(await repairArtworkCacheDamage()).toBe(0);
+    expect(idbGetAll).not.toHaveBeenCalled();
+  });
+
+  it('does not delete an empty crate (legitimately has no features)', async () => {
+    idbGetAll.mockResolvedValue(
+      new Map([['sp:empty', { __v: 's', data: { items: [], features: [] } }]])
+    );
+    expect(await repairArtworkCacheDamage()).toBe(0);
   });
 });
