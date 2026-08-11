@@ -13,7 +13,7 @@
 //            analyzing per-album instead of per-track cuts vision-API spend
 //            (and worker time) by ~3x with no visible difference.
 
-import { idbGet, idbSet } from "./crateStore";
+import { CRATE_STORE, idbDelete, idbGet, idbGetAll, idbSet } from "./crateStore";
 
 export const LIKED_SONGS_ID = "__liked__";
 export const LIKED_SONGS_NAME = "Liked Songs";
@@ -33,6 +33,47 @@ export function indexSignature(playlists, includeLiked) {
 
 export function clearArtworkIndexMemo() {
   memo = null;
+}
+
+// --- one-time repair ------------------------------------------------------
+// An earlier build had Artwork Explorer write into PLLibrary's `sp:` cache with
+// unfiltered items and no audio features. Those entries are still on disk for
+// anyone who ran it, and they cause two problems: the Library crashes reading
+// `item.track.id` on a removed track, and — because the snapshot token matches
+// — it happily reuses the entry and never fetches the missing audio features,
+// silently losing key/BPM for that crate.
+//
+// Deleting them makes the Library refetch cleanly. Runs once, then records a
+// flag so a healthy cache is never rescanned.
+const REPAIR_FLAG = "keytrack_artwork_cache_repair_v1";
+
+export async function repairArtworkCacheDamage() {
+  try {
+    if (window.localStorage.getItem(REPAIR_FLAG)) return 0;
+  } catch (e) {
+    return 0; // private mode — nothing persisted to repair
+  }
+
+  const all = await idbGetAll(CRATE_STORE);
+  const bad = [];
+  all.forEach((rec, key) => {
+    if (typeof key !== "string" || !key.startsWith("sp:")) return;
+    const data = rec && rec.data;
+    if (!data || !Array.isArray(data.items)) return;
+    const missingFeatures =
+      data.items.length > 0 &&
+      (!Array.isArray(data.features) || data.features.length === 0);
+    const hasNullTrack = data.items.some((it) => !it || !it.track || !it.track.id);
+    if (missingFeatures || hasNullTrack) bad.push(key);
+  });
+
+  if (bad.length) await idbDelete(bad, CRATE_STORE);
+  try {
+    window.localStorage.setItem(REPAIR_FLAG, String(Date.now()));
+  } catch (e) {
+    // ignore
+  }
+  return bad.length;
 }
 
 // Spotify returns up to three square sizes: 640, 300, 64. 640 is the ceiling —
@@ -131,15 +172,50 @@ function mergeTrackIntoCover(cover, t) {
   });
 }
 
-// Read one crate's tracks from the cache PLLibrary already populates. Returns
-// null when nothing valid is cached, so the caller can decide whether to fetch.
+// Artwork Explorer READS the crate cache PLLibrary populates (a free win when
+// you've already opened a crate) but writes to its OWN namespace.
+//
+// It must never write `sp:` itself. That cache's contract is
+// `{ items, features }` with audio features included and null tracks stripped;
+// artwork needs neither, so writing there both crashed the Library (it does
+// `item.track.id` on entries we hadn't filtered) and silently starved it of
+// audio features — `cachedCrate` reuses any entry whose snapshot matches, so a
+// crate we cached with `features: []` would never fetch its keys/BPM.
+const artKey = (playlistId) => `art:${playlistId}`;
+
+// Playlist items can be podcast episodes, removed tracks (`track: null`) or
+// local files. Strip them at the boundary so nothing downstream — ours or
+// anyone else's — has to defend against them.
+function usableItems(items) {
+  return (items || []).filter((it) => it && it.track && it.track.id);
+}
+
+// Read one crate's tracks, preferring whatever is already cached. Returns null
+// when nothing valid is cached, so the caller can decide whether to fetch.
 async function cachedItems(playlistId, snapshotId) {
-  const rec = await idbGet(`sp:${playlistId}`);
-  if (!rec || !rec.data) return null;
-  // Same freshness rule as PLLibrary: a snapshot_id mismatch means the playlist
-  // was edited, so the cache is stale.
-  if (snapshotId && rec.__v && rec.__v !== snapshotId) return null;
-  return rec.data.items || null;
+  // PLLibrary's cache first — it's richer and often already warm.
+  const shared = await idbGet(`sp:${playlistId}`);
+  if (shared && shared.data && shared.data.items) {
+    // Same freshness rule as PLLibrary: a snapshot_id mismatch means the
+    // playlist was edited, so the cache is stale.
+    if (!snapshotId || !shared.__v || shared.__v === snapshotId) {
+      return usableItems(shared.data.items);
+    }
+  }
+  const own = await idbGet(artKey(playlistId));
+  if (own && own.data && own.data.items) {
+    if (!snapshotId || !own.__v || own.__v === snapshotId) {
+      return usableItems(own.data.items);
+    }
+  }
+  return null;
+}
+
+// Persist a freshly-fetched crate in artwork's own namespace, so a crate is
+// only pulled over the network once.
+async function cacheItems(playlistId, snapshotId, items) {
+  if (!snapshotId) return; // nothing safe to version by
+  await idbSet(artKey(playlistId), { __v: snapshotId, data: { items } });
 }
 
 // Write a freshly-fetched crate back into the SAME cache PLLibrary reads, so a
@@ -148,19 +224,6 @@ async function cachedItems(playlistId, snapshotId) {
 //
 // The shape must stay compatible with PLLibrary's `{ items, features }`, and we
 // must not clobber audio features it may already have stored.
-async function cacheItems(playlistId, snapshotId, items) {
-  if (!snapshotId) return; // nothing safe to version by
-  const existing = await idbGet(`sp:${playlistId}`);
-  const features =
-    existing && existing.data && existing.__v === snapshotId
-      ? existing.data.features || []
-      : [];
-  await idbSet(`sp:${playlistId}`, {
-    __v: snapshotId,
-    data: { items, features },
-  });
-}
-
 async function fetchPlaylistItems(spotifyWebApi, spotifyRetry, playlistId) {
   const items = [];
   let offset = 0;
@@ -174,10 +237,14 @@ async function fetchPlaylistItems(spotifyWebApi, spotifyRetry, playlistId) {
     if (!res.next) break;
     offset += 100;
   }
-  return items;
+  return usableItems(items);
 }
 
-const LIKED_CACHE_KEY = "sp:__liked__";
+// Artwork's own key. PLLibrary uses `sp:__liked__` as an in-memory-only cache
+// (it passes a null version, so it never touches IndexedDB for this one), but
+// staying out of its namespace entirely means a future change there can't
+// collide with a featureless entry we wrote.
+const LIKED_CACHE_KEY = "art:__liked__";
 
 // Liked Songs has no snapshot_id, so it used to be re-paginated in full on every
 // open — with a few thousand saved tracks that's dozens of sequential requests
@@ -195,7 +262,7 @@ async function loadLikedSongs(spotifyWebApi, spotifyRetry) {
 
   const cached = await idbGet(LIKED_CACHE_KEY);
   if (cached && cached.__v === version && cached.data && cached.data.items) {
-    return cached.data.items;
+    return usableItems(cached.data.items);
   }
 
   const items = [...(first.items || [])];
@@ -210,8 +277,9 @@ async function loadLikedSongs(spotifyWebApi, spotifyRetry) {
     offset += 50;
   }
 
-  await idbSet(LIKED_CACHE_KEY, { __v: version, data: { items, features: [] } });
-  return items;
+  const usable = usableItems(items);
+  await idbSet(LIKED_CACHE_KEY, { __v: version, data: { items: usable } });
+  return usable;
 }
 
 /**

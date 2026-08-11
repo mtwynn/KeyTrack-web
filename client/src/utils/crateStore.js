@@ -101,6 +101,24 @@ export async function idbGetAll(store = ARTWORK_STORE) {
   return out;
 }
 
+export async function idbDelete(keys, store = CRATE_STORE) {
+  const list = Array.isArray(keys) ? keys : [keys];
+  if (!list.length) return;
+  try {
+    const db = await openDb();
+    await new Promise((resolve) => {
+      const tx = db.transaction(store, "readwrite");
+      const os = tx.objectStore(store);
+      list.forEach((k) => os.delete(k));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    });
+  } catch (e) {
+    // ignore
+  }
+}
+
 // Write many entries in ONE transaction. Analysis persists incrementally in
 // batches; a transaction per record would be an order of magnitude slower.
 export async function idbSetMany(entries, store = ARTWORK_STORE) {

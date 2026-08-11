@@ -73,6 +73,7 @@ import KeyCalculator from './utils/KeyCalculator';
 import SpotifyPlayer from 'react-spotify-web-playback';
 import SpotifyIcon from './components/SpotifyIcon';
 import ArtworkExplorer from './components/ArtworkExplorer/ArtworkExplorer';
+import { repairArtworkCacheDamage } from './utils/artworkIndex';
 import { spotifyRetry } from './utils/spotifyLimiter';
 import { scWidgetSrc, scTrackUrl, loadScWidgetApi } from './utils/soundcloudCrates';
 import { ScAnalysisProvider } from './components/SoundCloud/ScAnalysis';
@@ -456,6 +457,11 @@ class App extends React.Component {
   }
 
   componentDidMount() {
+    // Heal any crate-cache entries damaged by an earlier build before the
+    // Library can read them. One pass, then it flags itself and never reruns.
+    repairArtworkCacheDamage().then((n) => {
+      if (n) console.info(`[keytrack] repaired ${n} cached crate(s)`);
+    });
     if (this.state.spotify.loggedIn) {
       this.scheduleTokenRefresh();
     }
